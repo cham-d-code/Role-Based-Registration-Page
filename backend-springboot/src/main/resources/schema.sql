@@ -378,6 +378,34 @@ CREATE INDEX IF NOT EXISTS idx_dismissals_notice ON notice_dismissals(notice_id)
 CREATE INDEX IF NOT EXISTS idx_dismissals_user ON notice_dismissals(user_id);;
 
 -- ============================================
+-- 9. INTERVIEW LIVE SESSIONS
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS interview_sessions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    interview_id UUID NOT NULL REFERENCES interviews(id) ON DELETE CASCADE,
+    started_by UUID NOT NULL REFERENCES users(id),
+    started_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    ended_at TIMESTAMP,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
+);;
+
+CREATE INDEX IF NOT EXISTS idx_sessions_interview ON interview_sessions(interview_id);;
+CREATE INDEX IF NOT EXISTS idx_sessions_active ON interview_sessions(is_active);;
+
+CREATE TABLE IF NOT EXISTS session_participants (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id UUID NOT NULL REFERENCES interview_sessions(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users(id),
+    status VARCHAR(20) NOT NULL DEFAULT 'waiting',
+    requested_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(session_id, user_id)
+);;
+
+CREATE INDEX IF NOT EXISTS idx_session_participants_session ON session_participants(session_id);;
+CREATE INDEX IF NOT EXISTS idx_session_participants_user ON session_participants(user_id);;
+
+-- ============================================
 -- SAFE COLUMN MIGRATIONS
 -- ============================================
 ALTER TABLE IF EXISTS candidates ADD COLUMN IF NOT EXISTS candidate_id VARCHAR(50);;

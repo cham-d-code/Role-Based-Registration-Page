@@ -49,16 +49,25 @@ public class UserController {
 
     /**
      * GET /api/user/panel-members
-     * Returns all approved HOD and mentor users for the interview panel waiting list.
+     * Returns approved panel members for the interview waiting list.
+     * - Coordinator calls → HODs + mentors (excludes coordinator)
+     * - HOD calls → coordinators + mentors (excludes HOD)
      */
     @GetMapping("/panel-members")
-    public ResponseEntity<List<UserProfileResponse>> getPanelMembers() {
-        List<User> members = userRepository.findByStatusAndRoleIn(
-                UserStatus.approved,
-                List.of(UserRole.hod, UserRole.mentor)
-        );
+    public ResponseEntity<List<UserProfileResponse>> getPanelMembers(
+            @AuthenticationPrincipal UserDetails userDetails) {
+
+        User caller = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        List<UserRole> panelRoles = caller.getRole() == UserRole.coordinator
+                ? List.of(UserRole.hod, UserRole.mentor)
+                : List.of(UserRole.coordinator, UserRole.mentor);
+
+        List<User> members = userRepository.findByStatusAndRoleIn(UserStatus.approved, panelRoles);
 
         List<UserProfileResponse> response = members.stream()
+                .filter(u -> !u.getId().equals(caller.getId()))
                 .map(u -> UserProfileResponse.builder()
                         .id(u.getId().toString())
                         .fullName(u.getFullName())

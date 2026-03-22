@@ -267,28 +267,60 @@ export async function updateInterviewDate(interviewId: string, date: string): Pr
     });
 }
 
-// ─── Live Interview Session (localStorage-based signaling) ────────────────────
+// ─── Live Interview Session (backend-based) ───────────────────────────────────
 
-export interface ActiveInterviewSession {
-    id: string;
+export interface ParticipantInfo {
+    userId: string;
+    fullName: string;
+    role: string;
+    initials: string;
+}
+
+export interface SessionState {
+    sessionId: string;
+    interviewId: string;
     interviewNumber: string;
-    startedAt: string; // ISO timestamp
+    startedAt: string;
+    startedByName: string;
+    myStatus: 'active' | 'waiting' | 'removed' | null;
+    activeParticipants: ParticipantInfo[];
+    waitingParticipants: ParticipantInfo[];
 }
 
-/** Called by Coordinator when they click Start Interview */
-export function setActiveInterviewSession(id: string, interviewNumber: string): void {
-    const session: ActiveInterviewSession = { id, interviewNumber, startedAt: new Date().toISOString() };
-    localStorage.setItem('activeInterviewSession', JSON.stringify(session));
+/** Start a live interview session */
+export async function startInterviewSession(interviewId: string): Promise<SessionState> {
+    return fetchWithAuth(`${API_BASE_URL}/interviews/${interviewId}/session/start`, { method: 'POST' });
 }
 
-/** Returns the active session or null if no interview is live */
-export function getActiveInterviewSession(): ActiveInterviewSession | null {
-    const raw = localStorage.getItem('activeInterviewSession');
-    if (!raw) return null;
-    try { return JSON.parse(raw); } catch { return null; }
+/** End the active session */
+export async function endInterviewSession(interviewId: string): Promise<void> {
+    return fetchWithAuth(`${API_BASE_URL}/interviews/${interviewId}/session`, { method: 'DELETE' });
 }
 
-/** Called by Coordinator when they click End Session */
-export function clearActiveInterviewSession(): void {
-    localStorage.removeItem('activeInterviewSession');
+/** Get session state for a specific interview */
+export async function getInterviewSession(interviewId: string): Promise<SessionState> {
+    return fetchWithAuth(`${API_BASE_URL}/interviews/${interviewId}/session`);
+}
+
+/** Get any currently active session + my status (for polling) */
+export async function getActiveSession(): Promise<SessionState | null> {
+    const token = getAuthToken();
+    if (!token) return null;
+    const response = await fetch(`${API_BASE_URL}/interviews/active-session`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (response.status === 204 || response.status === 404) return null;
+    if (response.status === 401) { logout(); window.location.href = '/'; return null; }
+    if (!response.ok) return null;
+    return response.json();
+}
+
+/** Approve a waiting participant */
+export async function approveParticipant(interviewId: string, userId: string): Promise<void> {
+    return fetchWithAuth(`${API_BASE_URL}/interviews/${interviewId}/session/approve/${userId}`, { method: 'PUT' });
+}
+
+/** Remove an active participant */
+export async function removeParticipant(interviewId: string, userId: string): Promise<void> {
+    return fetchWithAuth(`${API_BASE_URL}/interviews/${interviewId}/session/remove/${userId}`, { method: 'PUT' });
 }

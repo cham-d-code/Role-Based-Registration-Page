@@ -38,7 +38,7 @@ import InterviewMarkingPage from './InterviewMarkingPage';
 import ResearchDetailsDialog from './ResearchDetailsDialog';
 import AddResearchDialog from './AddResearchDialog';
 import EditProfileDialog from './EditProfileDialog';
-import { getInterviews, getInterviewCandidates, getActiveInterviewSession, InterviewData, CandidateData, ActiveInterviewSession } from '../services/api';
+import { getInterviews, getInterviewCandidates, getActiveSession, InterviewData, CandidateData, SessionState } from '../services/api';
 import logo from 'figma:asset/39b6269214ec5f8a015cd1f1a1adaa157fd5d025.png';
 
 interface MentorProfileProps {
@@ -92,8 +92,7 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
   const [loadingInterviews, setLoadingInterviews] = useState(true);
 
   // Live session polling
-  const [liveSession, setLiveSession] = useState<ActiveInterviewSession | null>(null);
-  const [joiningInterview, setJoiningInterview] = useState<InterviewData | null>(null);
+  const [liveSession, setLiveSession] = useState<SessionState | null>(null);
 
   // Fetch profile on mount
   useEffect(() => {
@@ -146,9 +145,11 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
       .finally(() => setLoadingInterviews(false));
   }, []);
 
-  // Poll localStorage for live session every 5s
+  // Poll backend for live session every 5s
   useEffect(() => {
-    const check = () => setLiveSession(getActiveInterviewSession());
+    const check = async () => {
+      try { setLiveSession(await getActiveSession()); } catch { /* ignore */ }
+    };
     check();
     const interval = setInterval(check, 5000);
     return () => clearInterval(interval);
@@ -655,6 +656,35 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                   Interview Portal
                 </h2>
               </div>
+
+              {/* Live Session Status Banner */}
+              {liveSession && (
+                <Card className={`mb-6 rounded-xl p-4 border-0 ${liveSession.myStatus === 'active' ? 'bg-green-600' : liveSession.myStatus === 'waiting' ? 'bg-orange-500' : 'bg-red-500'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="bg-white rounded-full p-2">
+                      {liveSession.myStatus === 'active' ? (
+                        <svg className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.143 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" /></svg>
+                      ) : (
+                        <svg className="h-5 w-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-white font-bold text-base">
+                        {liveSession.myStatus === 'active'
+                          ? `You are in the live session — ${liveSession.interviewNumber}`
+                          : liveSession.myStatus === 'waiting'
+                          ? `Waiting for approval — ${liveSession.interviewNumber} is live`
+                          : `You have been removed from ${liveSession.interviewNumber}`}
+                      </p>
+                      <p className="text-white/80 text-sm">
+                        Started by {liveSession.startedByName}
+                        {liveSession.myStatus === 'waiting' && ' · Waiting for coordinator/HOD to allow you in'}
+                        {liveSession.myStatus === 'active' && ` · ${liveSession.activeParticipants.length} active participant(s)`}
+                      </p>
+                    </div>
+                  </div>
+                </Card>
+              )}
 
               {/* Upcoming Interviews Section - Show Details Inline */}
               {upcomingInterviews.map((interview) => (

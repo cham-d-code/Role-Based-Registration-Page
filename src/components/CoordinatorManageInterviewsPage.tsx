@@ -11,8 +11,9 @@ import { Input } from './ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import {
   getInterviews, getInterviewCandidates, createInterview, updateInterviewDate,
-  setActiveInterviewSession, clearActiveInterviewSession, getPanelMembers,
-  InterviewData, CandidateData
+  startInterviewSession, endInterviewSession, getInterviewSession,
+  approveParticipant, removeParticipant,
+  InterviewData, CandidateData, SessionState
 } from '../services/api';
 import InterviewMarkingPage from './InterviewMarkingPage';
 
@@ -20,17 +21,6 @@ interface CoordinatorManageInterviewsPageProps {
   onBack: () => void;
 }
 
-type PanelMember = { id: string; name: string; role: string; initials: string };
-
-function getInitials(name: string): string {
-  return name.split(' ').filter(w => w.length > 0).map(w => w[0].toUpperCase()).slice(0, 2).join('');
-}
-
-function roleLabel(role: string): string {
-  if (role === 'hod') return 'Head of Department';
-  if (role === 'mentor') return 'Senior Lecturer (Mentor)';
-  return role;
-}
 
 export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorManageInterviewsPageProps) {
   // ── Schedule Form ──────────────────────────────────────────────────────────
@@ -56,9 +46,7 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
 
   // ── Live Session State ─────────────────────────────────────────────────────
   const [liveInterviewId, setLiveInterviewId] = useState<string | null>(null);
-  const [panelMembers, setPanelMembers] = useState<PanelMember[]>([]);
-  const [waitingMembers, setWaitingMembers] = useState<PanelMember[]>([]);
-  const [activeParticipants, setActiveParticipants] = useState<PanelMember[]>([]);
+  const [sessionState, setSessionState] = useState<SessionState | null>(null);
 
   // ── InterviewMarkingPage navigation ───────────────────────────────────────
   const [markingInterview, setMarkingInterview] = useState<InterviewData | null>(null);
@@ -69,19 +57,22 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
   const candidatesMapRef = useRef(candidatesMap);
   candidatesMapRef.current = candidatesMap;
 
-  // ── Load interviews and panel members on mount ────────────────────────────
+  // ── Load interviews on mount ───────────────────────────────────────────────
+  useEffect(() => { fetchInterviews(); }, []);
+
+  // ── Poll session state every 5s while live ────────────────────────────────
   useEffect(() => {
-    fetchInterviews();
-    getPanelMembers().then(members => {
-      const mapped: PanelMember[] = members.map(m => ({
-        id: m.id,
-        name: m.fullName,
-        role: roleLabel(m.role),
-        initials: getInitials(m.fullName),
-      }));
-      setPanelMembers(mapped);
-    }).catch(e => console.error('Failed to load panel members', e));
-  }, []);
+    if (!liveInterviewId) return;
+    const poll = async () => {
+      try {
+        const state = await getInterviewSession(liveInterviewId);
+        setSessionState(state);
+      } catch { /* session ended */ }
+    };
+    poll();
+    const interval = setInterval(poll, 5000);
+    return () => clearInterval(interval);
+  }, [liveInterviewId]);
 
   async function fetchInterviews() {
     setLoadingInterviews(true);
@@ -150,49 +141,46 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
     }
   }
 
-  // ── Start Interview (Coordinator-only) ─────────────────────────────────────
-  function handleStartInterview(interview: InterviewData) {
-    setActiveInterviewSession(interview.id, interview.interviewNumber);
-    setLiveInterviewId(interview.id);
-    setWaitingMembers([...panelMembers]);
-    setActiveParticipants([]);
+  // ── Start Interview ────────────────────────────────────────────────────────
+  async function handleStartInterview(interview: InterviewData) {
+    try {
+      await loadCandidates(interview.id);
+      const state = await startInterviewSession(interview.id);
+      setLiveInterviewId(interview.id);
+      setSessionState(state);
+    } catch (e: any) {
+      alert(e.message || 'Failed to start interview session.');
+    }
   }
 
-  // ── End Session ───────────────────────────────────────────────────────────
-  function handleEndSession() {
-    clearActiveInterviewSession();
+  // ── End Session ────────────────────────────────────────────────────────────
+  async function handleEndSession() {
+    if (!liveInterviewId) return;
+    try { await endInterviewSession(liveInterviewId); } catch { /* ignore */ }
     setLiveInterviewId(null);
-    setWaitingMembers([]);
-    setActiveParticipants([]);
+    setSessionState(null);
   }
 
-  // ── Allow a member to join ─────────────────────────────────────────────────
-  function handleAllow(memberId: string) {
-    const member = waitingMembers.find(m => m.id === memberId);
-    if (!member) return;
-    setWaitingMembers(prev => prev.filter(m => m.id !== memberId));
-    setActiveParticipants(prev => [...prev, member]);
+  // ── Allow a waiting member ─────────────────────────────────────────────────
+  async function handleAllow(userId: string) {
+    if (!liveInterviewId) return;
+    await approveParticipant(liveInterviewId, userId);
+    const state = await getInterviewSession(liveInterviewId);
+    setSessionState(state);
   }
 
   // ── Remove a participant ───────────────────────────────────────────────────
-  function handleRemove(memberId: string) {
-    const member = activeParticipants.find(m => m.id === memberId);
-    if (!member) return;
-    setActiveParticipants(prev => prev.filter(m => m.id !== memberId));
-    setWaitingMembers(prev => [...prev, member]);
+  async function handleRemove(userId: string) {
+    if (!liveInterviewId) return;
+    await removeParticipant(liveInterviewId, userId);
+    const state = await getInterviewSession(liveInterviewId);
+    setSessionState(state);
   }
 
   function daysUntil(dateStr: string): number {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const target = new Date(dateStr);
     return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  }
-
-  function formatForPicker(date: Date): string {
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = String(date.getFullYear()).slice(-2);
-    return `${day}/${month}/${year}`;
   }
 
   function formatDate(dateStr: string): string {
@@ -405,27 +393,27 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
                         <div className="flex items-center gap-2 mb-3">
                           <Users className="h-5 w-5 text-orange-600" />
                           <h4 className="text-orange-700 font-semibold text-sm">
-                            Waiting to Join ({waitingMembers.length})
+                            Waiting to Join ({sessionState?.waitingParticipants?.length ?? 0})
                           </h4>
                         </div>
-                        {waitingMembers.length === 0 ? (
+                        {!sessionState?.waitingParticipants?.length ? (
                           <p className="text-orange-400 text-xs text-center py-4">No members waiting</p>
                         ) : (
                           <div className="space-y-2">
-                            {waitingMembers.map(member => (
-                              <div key={member.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-orange-200">
+                            {sessionState.waitingParticipants.map(member => (
+                              <div key={member.userId} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-orange-200">
                                 <div className="flex items-center gap-2">
                                   <div className="h-8 w-8 rounded-full bg-orange-200 flex items-center justify-center text-orange-700 text-xs font-bold">
                                     {member.initials}
                                   </div>
                                   <div>
-                                    <p className="text-[#222222] text-xs font-semibold">{member.name}</p>
+                                    <p className="text-[#222222] text-xs font-semibold">{member.fullName}</p>
                                     <p className="text-[#999999]" style={{ fontSize: '10px' }}>{member.role}</p>
                                   </div>
                                 </div>
                                 <Button
                                   size="sm"
-                                  onClick={() => handleAllow(member.id)}
+                                  onClick={() => handleAllow(member.userId)}
                                   className="bg-green-600 hover:bg-green-700 text-white h-7 px-3 text-xs"
                                 >
                                   <UserCheck className="h-3 w-3 mr-1" />
@@ -442,28 +430,28 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
                         <div className="flex items-center gap-2 mb-3">
                           <UserCheck className="h-5 w-5 text-green-600" />
                           <h4 className="text-green-700 font-semibold text-sm">
-                            Active Participants ({activeParticipants.length})
+                            Active Participants ({sessionState?.activeParticipants?.length ?? 0})
                           </h4>
                         </div>
-                        {activeParticipants.length === 0 ? (
+                        {!sessionState?.activeParticipants?.length ? (
                           <p className="text-green-400 text-xs text-center py-4">No participants yet — allow members from the waiting list</p>
                         ) : (
                           <div className="space-y-2">
-                            {activeParticipants.map(member => (
-                              <div key={member.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-green-200">
+                            {sessionState.activeParticipants.map(member => (
+                              <div key={member.userId} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-green-200">
                                 <div className="flex items-center gap-2">
                                   <div className="h-8 w-8 rounded-full bg-green-200 flex items-center justify-center text-green-700 text-xs font-bold">
                                     {member.initials}
                                   </div>
                                   <div>
-                                    <p className="text-[#222222] text-xs font-semibold">{member.name}</p>
+                                    <p className="text-[#222222] text-xs font-semibold">{member.fullName}</p>
                                     <p className="text-[#999999]" style={{ fontSize: '10px' }}>{member.role}</p>
                                   </div>
                                 </div>
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => handleRemove(member.id)}
+                                  onClick={() => handleRemove(member.userId)}
                                   className="border-red-300 text-red-500 hover:bg-red-50 h-7 px-3 text-xs"
                                 >
                                   <UserX className="h-3 w-3 mr-1" />
