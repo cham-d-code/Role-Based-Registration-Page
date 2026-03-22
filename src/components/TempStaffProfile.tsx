@@ -1,0 +1,971 @@
+import { useState, useEffect } from 'react';
+import { 
+  LayoutDashboard, 
+  FileText,
+  ClipboardList,
+  Calendar,
+  Award,
+  BellRing, 
+  User as UserIcon, 
+  Settings, 
+  LogOut,
+  Mail,
+  Phone,
+  MapPin,
+  Briefcase,
+  GraduationCap,
+  Edit,
+  ChevronDown,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Download,
+  Eye,
+  Plus,
+  UserCheck,
+  BookOpen
+} from 'lucide-react';
+import { Card } from './ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { Button } from './ui/button';
+import { Badge } from './ui/badge';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { Separator } from './ui/separator';
+import { Progress } from './ui/progress';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import SystemNotices from './SystemNotices';
+import ViewJobDescriptionDialog from './ViewJobDescriptionDialog';
+import LeaveApplicationDialog from './LeaveApplicationDialog';
+import AddTaskDialog from './AddTaskDialog';
+import EditProfileDialog from './EditProfileDialog';
+import logo from 'figma:asset/39b6269214ec5f8a015cd1f1a1adaa157fd5d025.png';
+
+interface TempStaffProfileProps {
+  onLogout?: () => void;
+}
+
+export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {}) {
+  const [activeMenu, setActiveMenu] = useState('dashboard');
+  const [showJdDialog, setShowJdDialog] = useState(false);
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [profileData, setProfileData] = useState({
+    name: 'Loading...',
+    email: '',
+    phone: '',
+    avatarUrl: '',
+    initials: '...'
+  });
+
+  // Fetch real profile data from backend on mount
+  useEffect(() => {
+    import('../services/api').then(api => {
+      api.getUserProfile()
+        .then(profile => {
+          const initials = profile.fullName
+            .split(' ')
+            .filter(Boolean)
+            .map((n: string) => n[0].toUpperCase())
+            .slice(0, 2)
+            .join('');
+          setProfileData({
+            name: profile.fullName,
+            email: profile.email,
+            phone: profile.mobile || '',
+            avatarUrl: profile.profileImageUrl || '',
+            initials
+          });
+        })
+        .catch(() => {
+          const local = api.getCurrentUser();
+          if (local) {
+            const initials = local.fullName
+              .split(' ')
+              .filter(Boolean)
+              .map((n: string) => n[0].toUpperCase())
+              .slice(0, 2)
+              .join('');
+            setProfileData(prev => ({ ...prev, name: local.fullName, email: local.email, initials }));
+          }
+        });
+    });
+  }, []);
+
+  // Sample data
+  const currentUser = {
+    name: 'K.M. Silva',
+    preferredSubjects: ['Marketing Management', 'Brand Management', 'Consumer Behavior']
+  };
+
+  const myJobDescription = {
+    staffId: 'STAFF001',
+    staffName: 'K.M. Silva',
+    tasks: [
+      { id: '1', description: 'Conduct tutorial sessions for Marketing Management (MKT 301)', type: 'academic' as const },
+      { id: '2', description: 'Prepare and grade assignments for Consumer Behavior course', type: 'academic' as const },
+      { id: '3', description: 'Assist with student registration and documentation', type: 'administrative' as const },
+      { id: '4', description: 'Support department events and workshops', type: 'administrative' as const }
+    ],
+    createdDate: 'Oct 15, 2025',
+    createdBy: 'Dr. Thilini Mahanama (Coordinator)'
+  };
+
+  const [leaveRequests, setLeaveRequests] = useState([
+    {
+      id: 'LV001',
+      startDate: '2025-10-25',
+      endDate: '2025-10-27',
+      reason: 'Personal matter',
+      substituteName: 'A.B. Perera',
+      status: 'approved' as const,
+      submittedDate: 'Oct 18, 2025',
+      approvedBy: 'Dr. Thilini Mahanama',
+      approvedDate: 'Oct 19, 2025'
+    }
+  ]);
+
+  const [weeklyTasks, setWeeklyTasks] = useState([
+    { title: 'Conduct Tutorial - Marketing Management', category: 'Teaching', day: 'Monday', timeFrom: '08:00', timeTo: '10:00', deadline: 'Oct 20, 2025', status: 'Pending' },
+    { title: 'Mark Assignment Papers (Batch A)', category: 'Marking', day: 'Tuesday', timeFrom: '14:00', timeTo: '16:00', deadline: 'Oct 21, 2025', status: 'Pending' },
+    { title: 'Prepare Lecture Notes - Week 6', category: 'Teaching', day: 'Wednesday', timeFrom: '10:00', timeTo: '12:00', deadline: 'Oct 22, 2025', status: 'Completed' },
+    { title: 'Submit Monthly Report to Coordinator', category: 'Administrative', day: 'Thursday', timeFrom: '09:00', timeTo: '11:00', deadline: 'Oct 25, 2025', status: 'Pending' },
+    { title: 'Attend Department Meeting', category: 'Administrative', day: 'Friday', timeFrom: '15:00', timeTo: '17:00', deadline: 'Oct 19, 2025', status: 'Completed' },
+  ]);
+
+  const [appliedResearch, setAppliedResearch] = useState<number[]>([]);
+
+  // Helper function to get category styling
+  const getCategoryStyle = (category: string) => {
+    const academicCategories = ['Teaching', 'Marking', 'Research', 'Academic'];
+    const administrativeCategories = ['Administrative', 'Meeting'];
+    
+    if (academicCategories.includes(category)) {
+      return {
+        className: 'bg-[#e6f7f6] text-[#4db4ac] border border-[#4db4ac]',
+        icon: BookOpen
+      };
+    } else if (administrativeCategories.includes(category)) {
+      return {
+        className: 'bg-[#fff8e6] text-[#f59e0b] border border-[#f59e0b]',
+        icon: Briefcase
+      };
+    } else {
+      return {
+        className: 'bg-[#f0f0f0] text-[#555555] border border-[#d0d0d0]',
+        icon: FileText
+      };
+    }
+  };
+
+  const handleLeaveSubmit = (leaveData: any) => {
+    const newLeave = {
+      id: `LV${String(leaveRequests.length + 1).padStart(3, '0')}`,
+      ...leaveData,
+      submittedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    };
+    setLeaveRequests([newLeave, ...leaveRequests]);
+    alert('Leave request submitted successfully!');
+  };
+
+  const handleTaskSubmit = (taskData: any) => {
+    const newTask = {
+      title: taskData.title,
+      category: taskData.category,
+      day: taskData.day,
+      timeFrom: taskData.timeFrom,
+      timeTo: taskData.timeTo,
+      deadline: '',
+      status: taskData.status
+    };
+    setWeeklyTasks([newTask, ...weeklyTasks]);
+  };
+
+  const handleResearchApply = (index: number) => {
+    if (!appliedResearch.includes(index)) {
+      setAppliedResearch([...appliedResearch, index]);
+    }
+  };
+
+  const handleProfileSave = (updatedProfile: any) => {
+    setProfileData({
+      ...profileData,
+      name: updatedProfile.name,
+      email: updatedProfile.email,
+      phone: updatedProfile.phone,
+      avatarUrl: updatedProfile.avatarUrl || profileData.avatarUrl
+    });
+    
+    if (updatedProfile.newPassword) {
+      alert('Password changed successfully!');
+    }
+    
+    alert('Profile updated successfully!');
+  };
+
+  const menuItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'tasks', label: 'My Tasks', icon: ClipboardList },
+    { id: 'leave', label: 'Leave Requests', icon: Calendar },
+    { id: 'research', label: 'Research Opportunities', icon: FileText },
+    { id: 'notifications', label: 'Notifications', icon: BellRing },
+    { id: 'profile', label: 'Profile', icon: UserIcon },
+  ];
+
+  const quickStats = [
+    { label: 'Tasks Completed Today', value: '12', color: '#4db4ac' },
+    { label: 'Pending Tasks Today', value: '3', color: '#f7a541' },
+    { label: 'Leave Days Remaining', value: '2', color: '#4db4ac' },
+    { label: 'Days to Contract End', value: '45', color: '#555555' },
+  ];
+
+  const researchOpportunities = [
+    { 
+      title: 'Consumer Behavior Study in Digital Marketing',
+      mentor: 'Dr. T. Mahanama',
+      description: 'Research on social media influence on purchasing decisions among Gen Z consumers.',
+      postedDate: 'Oct 15, 2025'
+    },
+    { 
+      title: 'Sustainable Supply Chain Management',
+      mentor: 'Dr. R. Fernando',
+      description: 'Investigating green logistics practices in Sri Lankan manufacturing sector.',
+      postedDate: 'Oct 12, 2025'
+    },
+  ];
+
+  const upcomingReminders = [
+    { task: 'Tutorial Session - Marketing 201', priority: 'urgent', date: 'Oct 20, 2025' },
+    { task: 'Assignment Marking Deadline', priority: 'urgent', date: 'Oct 21, 2025' },
+    { task: 'Mentor Meeting with Dr. Mahanama', priority: 'medium', date: 'Oct 23, 2025' },
+    { task: 'Research Proposal Submission', priority: 'medium', date: 'Oct 28, 2025' },
+    { task: 'Contract Renewal Discussion', priority: 'normal', date: 'Nov 15, 2025' },
+  ];
+
+  const recentActivities = [
+    { activity: 'Marked Task as Complete', detail: 'Prepare Lecture Notes - Week 6', time: '2:30 PM', date: 'Oct 18, 2025' },
+    { activity: 'Applied for Research Project', detail: 'Consumer Behavior Study', time: '11:00 AM', date: 'Oct 18, 2025' },
+    { activity: 'Requested Leave', detail: 'Medical Leave on Oct 30', time: '9:15 AM', date: 'Oct 17, 2025' },
+    { activity: 'Submitted Monthly Report', detail: 'September Activity Report', time: '4:00 PM', date: 'Oct 16, 2025' },
+    { activity: 'Attended Department Meeting', detail: 'Monthly Review Meeting', time: '10:00 AM', date: 'Oct 15, 2025' },
+  ];
+
+  const systemNotifications = [
+    {
+      title: 'System Maintenance Scheduled',
+      message: 'System maintenance on Oct 25, 2:00–4:00 AM.',
+      date: 'Oct 20'
+    },
+    {
+      title: 'New Research Project Posted',
+      message: 'Dr. Fernando posted a new research opportunity in Supply Chain.',
+      date: 'Oct 19'
+    },
+    {
+      title: 'Salary Report Available',
+      message: 'Your September salary report is now available for download.',
+      date: 'Oct 18'
+    },
+    {
+      title: 'Contract Renewal Reminder',
+      message: 'Your contract expires in 45 days. Please contact HR for renewal.',
+      date: 'Oct 15'
+    }
+  ];
+
+  return (
+    <div className="min-h-screen bg-white">
+      {/* Decorative Background Shapes */}
+      <div className="fixed top-0 left-0 w-96 h-96 bg-[#4db4ac] opacity-5 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 pointer-events-none" />
+      <div className="fixed bottom-0 right-0 w-96 h-96 bg-[#4db4ac] opacity-5 rounded-full blur-3xl translate-x-1/2 translate-y-1/2 pointer-events-none" />
+
+      {/* Top Header */}
+      <header className="fixed top-0 left-0 right-0 h-16 bg-[#4db4ac] shadow-md z-50 flex items-center justify-between px-6">
+        <div className="flex items-center gap-3">
+          <h1 className="text-white" style={{ fontWeight: 700, fontSize: '20px' }}>
+            Temporary Staff Coordination System
+          </h1>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-2 text-white hover:bg-[#3c9a93] px-3 py-2 rounded-lg transition-colors">
+                <Avatar className="h-8 w-8 border-2 border-white">
+                  <AvatarImage src="" alt="User" />
+                  <AvatarFallback className="bg-white text-[#4db4ac]">SP</AvatarFallback>
+                </Avatar>
+                <ChevronDown className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 bg-white">
+              <DropdownMenuItem className="cursor-pointer">
+                <UserIcon className="h-4 w-4 mr-2" />
+                Profile
+              </DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer">
+                <Settings className="h-4 w-4 mr-2" />
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="cursor-pointer text-red-600" onClick={onLogout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </header>
+
+      <div className="flex pt-16">
+        {/* Left Sidebar Navigation */}
+        <aside className="fixed left-0 top-16 bottom-0 w-64 bg-white shadow-lg overflow-y-auto border-r border-[#e0e0e0]">
+          <nav className="p-4 space-y-1">
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeMenu === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveMenu(item.id)}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+                    isActive
+                      ? 'bg-[#4db4ac] text-white shadow-md'
+                      : 'text-[#555555] hover:bg-[#f0f0f0]'
+                  }`}
+                >
+                  <Icon className="h-5 w-5" />
+                  <span style={{ fontSize: '14px', fontWeight: isActive ? 600 : 500 }}>
+                    {item.label}
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
+
+        {/* Main Content Area */}
+        <main className="flex-1 ml-64 mr-80 p-6 space-y-6 pb-20">
+          {/* Dashboard View */}
+          {activeMenu === 'dashboard' && (
+            <>
+              {/* Profile Card */}
+              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                <div className="flex items-start gap-6">
+                  <Avatar className="h-24 w-24 border-4 border-[#4db4ac]">
+                    <AvatarImage src={profileData.avatarUrl} alt={profileData.name} />
+                    <AvatarFallback className="bg-[#4db4ac] text-white" style={{ fontSize: '32px' }}>
+                      {profileData.initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  
+                  <div className="flex-1">
+                    <h2 className="text-[#222222] mb-1" style={{ fontWeight: 700, fontSize: '24px' }}>
+                      {profileData.name}
+                    </h2>
+                    <p className="text-[#4db4ac] mb-2" style={{ fontWeight: 600, fontSize: '16px' }}>
+                      Temporary Lecturer
+                    </p>
+                    <p className="text-[#555555] mb-3" style={{ fontSize: '14px' }}>
+                      Department of Industrial Management
+                    </p>
+                    
+                    <div className="flex items-center gap-2 mb-3">
+                      <UserCheck className="h-4 w-4 text-[#4db4ac]" />
+                      <span className="text-[#555555]" style={{ fontSize: '14px' }}>
+                        Mentor: 
+                      </span>
+                      <Badge className="bg-[#e6f7f6] text-[#4db4ac] border border-[#4db4ac]" style={{ fontSize: '12px' }}>
+                        Dr. T. Mahanama
+                      </Badge>
+                    </div>
+                    
+                    <div className="flex flex-col gap-2 mb-4">
+                      <div className="flex items-center gap-2 text-[#555555]" style={{ fontSize: '14px' }}>
+                        <Mail className="h-4 w-4 text-[#4db4ac]" />
+                        <span>{profileData.email}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[#555555]" style={{ fontSize: '14px' }}>
+                        <Phone className="h-4 w-4 text-[#4db4ac]" />
+                        <span>{profileData.phone}</span>
+                      </div>
+                    </div>
+
+                    <Button 
+                      className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg"
+                      onClick={() => setEditProfileOpen(true)}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Profile
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+
+              {/* FR16: System Notices - Below Profile Card */}
+              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <BellRing className="h-5 w-5 text-[#4db4ac]" />
+                  <h3 className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 700 }}>
+                    Important Notices
+                  </h3>
+                  <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '10px' }}>
+                    FR16
+                  </Badge>
+                </div>
+                <SystemNotices userRole="staff" />
+              </Card>
+
+              {/* Quick Stats Section */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {quickStats.map((stat, index) => (
+                  <Card 
+                    key={index} 
+                    className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-5 border-t-4"
+                    style={{ borderTopColor: stat.color }}
+                  >
+                    <p className="text-[#555555] mb-2" style={{ fontSize: '13px', fontWeight: 500 }}>
+                      {stat.label}
+                    </p>
+                    <p className="text-[#222222]" style={{ fontSize: '32px', fontWeight: 700 }}>
+                      {stat.value}
+                    </p>
+                  </Card>
+                ))}
+              </div>
+
+              {/* Recent Activities Section */}
+              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                <h3 className="text-[#222222] mb-4" style={{ fontWeight: 700, fontSize: '18px' }}>
+                  Recent Activities
+                </h3>
+                
+                <div className="space-y-1">
+                  {recentActivities.map((activity, index) => (
+                    <div 
+                      key={index} 
+                      className="flex items-start gap-4 p-3 rounded-lg hover:bg-[#f9f9f9] transition-colors border-l-4 border-[#4db4ac]"
+                    >
+                      <div className="flex-shrink-0 mt-1">
+                        <div className="h-8 w-8 rounded-full bg-[#e6f7f6] flex items-center justify-center">
+                          <CheckCircle className="h-4 w-4 text-[#4db4ac]" />
+                        </div>
+                      </div>
+                      <div className="flex-1 pb-4">
+                        <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 500 }}>
+                          {activity.activity}
+                        </p>
+                        <p className="text-[#555555] mt-1" style={{ fontSize: '13px' }}>
+                          {activity.detail}
+                        </p>
+                        <p className="text-[#999999] mt-1" style={{ fontSize: '12px' }}>
+                          {activity.time} • {activity.date}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </>
+          )}
+
+          {/* My Tasks View (FR13: View JD) */}
+          {activeMenu === 'tasks' && (
+            <>
+              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
+                      My Job Description
+                    </h3>
+                    <Badge className="bg-[#4db4ac] text-white">FR13</Badge>
+                  </div>
+                  <Button
+                    onClick={() => setShowJdDialog(true)}
+                    className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    View Full JD
+                  </Button>
+                </div>
+                <Separator className="mb-4" />
+
+                <div className="bg-[#e6f7f6] p-4 rounded-lg mb-4">
+                  <p className="text-[#555555]" style={{ fontSize: '13px' }}>
+                    Your assigned tasks and responsibilities as a temporary staff member
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <Card className="bg-white border border-[#4db4ac] p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <GraduationCap className="h-5 w-5 text-[#4db4ac]" />
+                      <h4 className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 600 }}>
+                        Academic Tasks
+                      </h4>
+                    </div>
+                    <p className="text-[#4db4ac]" style={{ fontSize: '32px', fontWeight: 700 }}>
+                      {myJobDescription.tasks.filter(t => t.type === 'academic').length}
+                    </p>
+                    <p className="text-[#555555]" style={{ fontSize: '13px' }}>
+                      Teaching & Research
+                    </p>
+                  </Card>
+
+                  <Card className="bg-white border border-[#f59e0b] p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Briefcase className="h-5 w-5 text-[#f59e0b]" />
+                      <h4 className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 600 }}>
+                        Administrative Tasks
+                      </h4>
+                    </div>
+                    <p className="text-[#f59e0b]" style={{ fontSize: '32px', fontWeight: 700 }}>
+                      {myJobDescription.tasks.filter(t => t.type === 'administrative').length}
+                    </p>
+                    <p className="text-[#555555]" style={{ fontSize: '13px' }}>
+                      Support & Documentation
+                    </p>
+                  </Card>
+                </div>
+              </Card>
+
+              {/* Weekly Task List Section */}
+              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '18px' }}>
+                    Weekly Task List
+                  </h3>
+                  <Button 
+                    onClick={() => setShowAddTaskDialog(true)}
+                    className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Task
+                  </Button>
+                </div>
+                <Separator className="mb-4" />
+                
+                <div className="space-y-3">
+                  {weeklyTasks.map((task, index) => (
+                    <Card key={index} className="border border-[#e0e0e0] p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <h4 className="text-[#222222] mb-1" style={{ fontSize: '15px', fontWeight: 600 }}>
+                            {task.title}
+                          </h4>
+                          <div className="flex items-center gap-3 mb-2 flex-wrap">
+                            {(() => {
+                              const categoryStyle = getCategoryStyle(task.category);
+                              const CategoryIcon = categoryStyle.icon;
+                              return (
+                                <Badge 
+                                  className={categoryStyle.className} 
+                                  style={{ fontSize: '11px' }}
+                                >
+                                  <CategoryIcon className="h-3 w-3 mr-1 inline" />
+                                  {task.category}
+                                </Badge>
+                              );
+                            })()}
+                            {task.day && (
+                              <div className="flex items-center gap-1 text-[#555555]" style={{ fontSize: '12px' }}>
+                                <Calendar className="h-3 w-3" />
+                                <span>{task.day}</span>
+                              </div>
+                            )}
+                            {task.timeFrom && task.timeTo && (
+                              <div className="flex items-center gap-1 text-[#555555]" style={{ fontSize: '12px' }}>
+                                <Clock className="h-3 w-3" />
+                                <span>{task.timeFrom} - {task.timeTo}</span>
+                              </div>
+                            )}
+                            {task.deadline && (
+                              <div className="flex items-center gap-1 text-[#999999]" style={{ fontSize: '12px' }}>
+                                <span>Due: {task.deadline}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <Badge 
+                          className={`${
+                            task.status === 'Completed' 
+                              ? 'bg-green-100 text-green-700 border-green-300' 
+                              : 'bg-orange-100 text-orange-700 border-orange-300'
+                          } border`}
+                          style={{ fontSize: '12px' }}
+                        >
+                          {task.status}
+                        </Badge>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </Card>
+            </>
+          )}
+
+          {/* Leave Requests View (FR18, FR19) */}
+          {activeMenu === 'leave' && (
+            <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
+                    Leave Requests
+                  </h3>
+                  <Badge className="bg-[#4db4ac] text-white">FR18</Badge>
+                  <Badge className="bg-[#4db4ac] text-white">FR19</Badge>
+                </div>
+                <Button
+                  onClick={() => setShowLeaveDialog(true)}
+                  className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Apply for Leave
+                </Button>
+              </div>
+              <Separator className="mb-4" />
+
+              <div className="space-y-4">
+                {leaveRequests.map((leave) => (
+                  <Card 
+                    key={leave.id} 
+                    className={`border-2 rounded-lg p-5 ${
+                      leave.status === 'pending' 
+                        ? 'border-orange-300 bg-orange-50' 
+                        : leave.status === 'approved'
+                        ? 'border-green-300 bg-green-50'
+                        : 'border-red-300 bg-red-50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h4 className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 600 }}>
+                            Leave Request #{leave.id}
+                          </h4>
+                          <Badge 
+                            className={`${
+                              leave.status === 'pending' 
+                                ? 'bg-orange-100 text-orange-700 border-orange-300' 
+                                : leave.status === 'approved'
+                                ? 'bg-green-100 text-green-700 border-green-300'
+                                : 'bg-red-100 text-red-700 border-red-300'
+                            } border`}
+                            style={{ fontSize: '10px' }}
+                          >
+                            {leave.status.toUpperCase()}
+                          </Badge>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 mb-3">
+                          <div>
+                            <p className="text-[#555555]" style={{ fontSize: '12px', fontWeight: 600 }}>
+                              Duration
+                            </p>
+                            <p className="text-[#222222]" style={{ fontSize: '14px' }}>
+                              {new Date(leave.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - {new Date(leave.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[#555555]" style={{ fontSize: '12px', fontWeight: 600 }}>
+                              Substitute Staff
+                            </p>
+                            <p className="text-[#222222]" style={{ fontSize: '14px' }}>
+                              {leave.substituteName}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mb-2">
+                          <p className="text-[#555555]" style={{ fontSize: '12px', fontWeight: 600 }}>
+                            Reason
+                          </p>
+                          <p className="text-[#222222]" style={{ fontSize: '14px' }}>
+                            {leave.reason}
+                          </p>
+                        </div>
+
+                        {leave.status === 'approved' && (
+                          <div className="bg-green-100 border border-green-300 rounded-lg px-3 py-2 mt-3">
+                            <p className="text-green-700" style={{ fontSize: '13px' }}>
+                              ✓ Approved by {leave.approvedBy} on {leave.approvedDate}
+                            </p>
+                          </div>
+                        )}
+
+                        <p className="text-[#999999] mt-2" style={{ fontSize: '12px' }}>
+                          Submitted: {leave.submittedDate}
+                        </p>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+
+                {leaveRequests.length === 0 && (
+                  <div className="text-center py-12 text-[#999999]">
+                    <Calendar className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                    <p style={{ fontSize: '14px' }}>No leave requests yet</p>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+
+          {/* Research Opportunities View */}
+          {activeMenu === 'research' && (
+            <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+              <h3 className="text-[#222222] mb-4" style={{ fontWeight: 700, fontSize: '18px' }}>
+                Research Opportunities
+              </h3>
+              <Separator className="mb-4" />
+              
+              <div className="space-y-4">
+                {researchOpportunities.map((research, index) => (
+                  <Card key={index} className="bg-white border border-[#e0e0e0] rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <div className="flex items-start justify-between gap-4 mb-2">
+                      <h5 className="text-[#222222] flex-1" style={{ fontSize: '15px', fontWeight: 600 }}>
+                        {research.title}
+                      </h5>
+                      <Badge className="bg-[#e6f7f6] text-[#4db4ac] border border-[#4db4ac]" style={{ fontSize: '11px' }}>
+                        {research.mentor}
+                      </Badge>
+                    </div>
+                    <p className="text-[#555555] mb-3" style={{ fontSize: '13px' }}>
+                      {research.description}
+                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[#999999]" style={{ fontSize: '12px' }}>
+                        Posted: {research.postedDate}
+                      </p>
+                      {appliedResearch.includes(index) ? (
+                        <Button 
+                          size="sm" 
+                          className="bg-green-600 text-white rounded-lg cursor-default"
+                          disabled
+                        >
+                          <CheckCircle className="h-4 w-4 mr-1" />
+                          Applied
+                        </Button>
+                      ) : (
+                        <Button 
+                          size="sm" 
+                          className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg"
+                          onClick={() => handleResearchApply(index)}
+                        >
+                          Apply
+                        </Button>
+                      )}
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Notifications View (FR16) */}
+          {activeMenu === 'notifications' && (
+            <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <BellRing className="h-6 w-6 text-[#4db4ac]" />
+                <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
+                  Notifications
+                </h3>
+                <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '10px' }}>
+                  FR16
+                </Badge>
+              </div>
+              <Separator className="mb-6" />
+              
+              <SystemNotices userRole="staff" />
+            </Card>
+          )}
+
+          {/* Profile View */}
+          {activeMenu === 'profile' && (
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
+                  My Profile
+                </h2>
+              </div>
+
+              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                <div className="flex items-start gap-6 mb-6">
+                  <Avatar className="h-32 w-32 border-4 border-[#4db4ac]">
+                    <AvatarImage src={profileData.avatarUrl} alt={profileData.name} />
+                    <AvatarFallback className="bg-[#4db4ac] text-white" style={{ fontSize: '40px' }}>
+                      {profileData.initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  
+                  <div className="flex-1">
+                    <h2 className="text-[#222222] mb-1" style={{ fontWeight: 700, fontSize: '28px' }}>
+                      {profileData.name}
+                    </h2>
+                    <p className="text-[#4db4ac] mb-2" style={{ fontWeight: 600, fontSize: '18px' }}>
+                      Temporary Staff
+                    </p>
+                    <p className="text-[#555555] mb-4" style={{ fontSize: '14px' }}>
+                      Department of Industrial Management
+                    </p>
+                  </div>
+                </div>
+
+                <Separator className="mb-6" />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="text-[#222222] mb-4" style={{ fontWeight: 600, fontSize: '16px' }}>
+                      Contact Information
+                    </h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 text-[#555555]" style={{ fontSize: '14px' }}>
+                        <Mail className="h-5 w-5 text-[#4db4ac]" />
+                        <span>{profileData.email}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-[#555555]" style={{ fontSize: '14px' }}>
+                        <Phone className="h-5 w-5 text-[#4db4ac]" />
+                        <span>{profileData.phone}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-[#222222] mb-4" style={{ fontWeight: 600, fontSize: '16px' }}>
+                      Work Statistics
+                    </h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[#555555]" style={{ fontSize: '14px' }}>Tasks Completed</span>
+                        <span className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>125</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[#555555]" style={{ fontSize: '14px' }}>Attendance Rate</span>
+                        <span className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>95%</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[#555555]" style={{ fontSize: '14px' }}>Modules Assigned</span>
+                        <span className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>3</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator className="my-6" />
+
+                <Button 
+                  className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg px-6 py-2"
+                  onClick={() => setEditProfileOpen(true)}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Profile
+                </Button>
+              </Card>
+            </>
+          )}
+        </main>
+
+        {/* Right Sidebar - Reminders */}
+        <aside className="fixed right-0 top-16 bottom-0 w-80 bg-white shadow-lg overflow-y-auto p-6">
+          <h3 className="text-[#222222] mb-4" style={{ fontWeight: 700, fontSize: '18px' }}>
+            Upcoming Tasks
+          </h3>
+          <Separator className="mb-4" />
+          
+          <div className="space-y-3">
+            {weeklyTasks
+              .filter(task => task.status !== 'Completed')
+              .slice(0, 5)
+              .map((task, index) => (
+              <Card 
+                key={index} 
+                className="bg-[#f9f9f9] border border-[#e0e0e0] rounded-lg p-4 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <p className="text-[#222222] flex-1" style={{ fontSize: '14px', fontWeight: 600 }}>
+                    {task.title}
+                  </p>
+                  <Badge 
+                    className="bg-[#e6f7f6] text-[#4db4ac] border-[#4db4ac] border flex-shrink-0"
+                    style={{ fontSize: '9px' }}
+                  >
+                    {task.category}
+                  </Badge>
+                </div>
+                
+                {task.day && (
+                  <div className="flex items-center gap-1 text-[#555555] mb-1" style={{ fontSize: '12px' }}>
+                    <Calendar className="h-3 w-3 text-[#4db4ac]" />
+                    <span>{task.day}</span>
+                  </div>
+                )}
+                
+                {task.timeFrom && task.timeTo && (
+                  <div className="flex items-center gap-1 text-[#555555] mb-1" style={{ fontSize: '12px' }}>
+                    <Clock className="h-3 w-3 text-[#4db4ac]" />
+                    <span>{task.timeFrom} - {task.timeTo}</span>
+                  </div>
+                )}
+                
+                {task.deadline && (
+                  <div className="flex items-center gap-1 text-[#999999] mt-2" style={{ fontSize: '11px' }}>
+                    <span>Due: {task.deadline}</span>
+                  </div>
+                )}
+              </Card>
+            ))}
+            
+            {weeklyTasks.filter(task => task.status !== 'Completed').length === 0 && (
+              <div className="text-center py-8 text-[#999999]">
+                <CheckCircle className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                <p style={{ fontSize: '13px' }}>All tasks completed!</p>
+              </div>
+            )}
+          </div>
+
+          <Button className="w-full mt-6 bg-white border-2 border-[#4db4ac] text-[#4db4ac] hover:bg-[#4db4ac] hover:text-white rounded-lg">
+            <ClipboardList className="h-4 w-4 mr-2" />
+            View All Tasks
+          </Button>
+        </aside>
+      </div>
+
+      {/* Footer */}
+      <footer className="fixed bottom-0 left-64 right-0 bg-white border-t border-[#e0e0e0] py-3 text-center z-40">
+        <p className="text-[#555555]" style={{ fontSize: '13px' }}>
+          University of Kelaniya | Temporary Staff Coordination System
+        </p>
+      </footer>
+
+      {/* View Job Description Dialog */}
+      <ViewJobDescriptionDialog
+        open={showJdDialog}
+        onOpenChange={setShowJdDialog}
+        jobDescription={myJobDescription}
+      />
+
+      {/* Leave Application Dialog */}
+      <LeaveApplicationDialog
+        open={showLeaveDialog}
+        onOpenChange={setShowLeaveDialog}
+        currentUserSubjects={currentUser.preferredSubjects}
+        onSubmit={handleLeaveSubmit}
+      />
+
+      {/* Add Task Dialog */}
+      <AddTaskDialog
+        open={showAddTaskDialog}
+        onOpenChange={setShowAddTaskDialog}
+        onSubmit={handleTaskSubmit}
+      />
+
+      {/* Edit Profile Dialog */}
+      <EditProfileDialog
+        open={editProfileOpen}
+        onOpenChange={setEditProfileOpen}
+        currentProfile={profileData}
+        onSave={handleProfileSave}
+      />
+    </div>
+  );
+}

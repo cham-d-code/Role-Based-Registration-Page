@@ -1,0 +1,71 @@
+package com.tempstaff.controller;
+
+import com.tempstaff.dto.response.UserProfileResponse;
+import com.tempstaff.entity.User;
+import com.tempstaff.entity.UserRole;
+import com.tempstaff.entity.UserStatus;
+import com.tempstaff.repository.UserRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@RestController
+@RequestMapping("/api/user")
+@RequiredArgsConstructor
+public class UserController {
+
+    private final UserRepository userRepository;
+
+    /**
+     * GET /api/user/me
+     * Returns the currently authenticated user's profile details.
+     * Requires a valid JWT Bearer token in the Authorization header.
+     */
+    @GetMapping("/me")
+    public ResponseEntity<UserProfileResponse> getMyProfile(
+            @AuthenticationPrincipal UserDetails userDetails) {
+
+        User user = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        UserProfileResponse profile = UserProfileResponse.builder()
+                .id(user.getId().toString())
+                .email(user.getEmail())
+                .fullName(user.getFullName())
+                .mobile(user.getMobile())
+                .role(user.getRole().name())
+                .status(user.getStatus().name())
+                .profileImageUrl(user.getProfileImageUrl())
+                .createdAt(user.getCreatedAt())
+                .build();
+
+        return ResponseEntity.ok(profile);
+    }
+
+    /**
+     * GET /api/user/panel-members
+     * Returns all approved HOD and mentor users for the interview panel waiting list.
+     */
+    @GetMapping("/panel-members")
+    public ResponseEntity<List<UserProfileResponse>> getPanelMembers() {
+        List<User> members = userRepository.findByStatusAndRoleIn(
+                UserStatus.approved,
+                List.of(UserRole.hod, UserRole.mentor)
+        );
+
+        List<UserProfileResponse> response = members.stream()
+                .map(u -> UserProfileResponse.builder()
+                        .id(u.getId().toString())
+                        .fullName(u.getFullName())
+                        .role(u.getRole().name())
+                        .build())
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(response);
+    }
+}

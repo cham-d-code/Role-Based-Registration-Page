@@ -1,0 +1,1251 @@
+import { useState, useEffect } from 'react';
+import { LayoutDashboard, Users, ClipboardCheck, FileText, BellRing, UserIcon, ChevronDown, Settings, LogOut, Mail, Phone, Calendar, Award, Eye, Check, X, AlertCircle, Clock, Download, Send, Archive, Edit, DollarSign, CheckCircle, Play, XCircle } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
+import { Button } from './ui/button';
+import { Card } from './ui/card';
+import { Badge } from './ui/badge';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { Separator } from './ui/separator';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import AttendanceSummaryDialog from './AttendanceSummaryDialog';
+import SalaryReportsDialog from './SalaryReportsDialog';
+import ArchivedStaffDialog from './ArchivedStaffDialog';
+import SystemNotices from './SystemNotices';
+import SendNoticeDialog from './SendNoticeDialog';
+import HodEndedInterviewApprovalPage from './HodEndedInterviewApprovalPage';
+import HodManageInterviewsPage from './HodManageInterviewsPage';
+import ViewJobDescriptionDialog from './ViewJobDescriptionDialog';
+import AttendanceAndSalariesPage from './AttendanceAndSalariesPage';
+import EditProfileDialog from './EditProfileDialog';
+
+interface HodProfileProps {
+  onLogout: () => void;
+}
+
+export default function HodProfile({ onLogout }: HodProfileProps) {
+  const [activeMenu, setActiveMenu] = useState('dashboard');
+  const [attendanceSummaryOpen, setAttendanceSummaryOpen] = useState(false);
+  const [salaryReportsOpen, setSalaryReportsOpen] = useState(false);
+  const [archivedStaffOpen, setArchivedStaffOpen] = useState(false);
+  const [sendNoticeOpen, setSendNoticeOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState<'dashboard' | 'approvalPage' | 'manageInterviews' | 'attendanceSalaries'>('dashboard');
+  const [selectedInterview, setSelectedInterview] = useState<any>(null);
+  const [viewJdOpen, setViewJdOpen] = useState(false);
+  const [selectedStaffForJd, setSelectedStaffForJd] = useState<any>(null);
+  const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [profileData, setProfileData] = useState({
+    name: 'Loading...',
+    email: '',
+    phone: '',
+    avatarUrl: '',
+    initials: '...'
+  });
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+
+  // Fetch real profile data from backend on mount
+  useEffect(() => {
+    import('../services/api').then(api => {
+      api.getUserProfile()
+        .then(profile => {
+          const initials = profile.fullName
+            .split(' ')
+            .filter(Boolean)
+            .map((n: string) => n[0].toUpperCase())
+            .slice(0, 2)
+            .join('');
+          setProfileData({
+            name: profile.fullName,
+            email: profile.email,
+            phone: profile.mobile || '',
+            avatarUrl: profile.profileImageUrl || '',
+            initials
+          });
+        })
+        .catch(() => {
+          // Fallback to localStorage
+          const local = api.getCurrentUser();
+          if (local) {
+            const initials = local.fullName
+              .split(' ')
+              .filter(Boolean)
+              .map((n: string) => n[0].toUpperCase())
+              .slice(0, 2)
+              .join('');
+            setProfileData(prev => ({ ...prev, name: local.fullName, email: local.email, initials }));
+          }
+        });
+    });
+  }, []);
+
+  // Temporary Staff with Mentors
+  const temporaryStaff = [
+    {
+      id: 'STAFF001',
+      name: 'Mr. Saman Perera',
+      email: 'saman.perera@kln.ac.lk',
+      phone: '+94 77 123 4567',
+      module: 'Marketing Management',
+      mentor: 'Dr. T. Mahanama',
+      contractExpiry: '2025-12-31',
+      status: 'Active',
+      jobDescription: {
+        staffId: 'STAFF001',
+        staffName: 'Mr. Saman Perera',
+        tasks: [
+          { id: '1', description: 'Conduct tutorial sessions for Marketing Management (MKT 301)', type: 'academic' as const },
+          { id: '2', description: 'Prepare and grade assignments for Consumer Behavior course', type: 'academic' as const },
+          { id: '3', description: 'Assist with student registration and documentation', type: 'administrative' as const },
+          { id: '4', description: 'Support department events and workshops', type: 'administrative' as const }
+        ],
+        createdDate: 'Oct 15, 2025',
+        createdBy: 'Dr. Thilini Mahanama (Coordinator)'
+      }
+    },
+    {
+      id: 'STAFF002',
+      name: 'Ms. Nisha Fernando',
+      email: 'nisha.fernando@kln.ac.lk',
+      phone: '+94 76 234 5678',
+      module: 'Human Resource Management',
+      mentor: 'Dr. R. Fernando',
+      contractExpiry: '2025-11-30',
+      status: 'Active',
+      jobDescription: {
+        staffId: 'STAFF002',
+        staffName: 'Ms. Nisha Fernando',
+        tasks: [
+          { id: '1', description: 'Conduct tutorial sessions for HR Management (HRM 402)', type: 'academic' as const },
+          { id: '2', description: 'Grade examination papers for Organizational Behavior', type: 'academic' as const },
+          { id: '3', description: 'Maintain student attendance records', type: 'administrative' as const },
+          { id: '4', description: 'Coordinate department meetings and seminars', type: 'administrative' as const }
+        ],
+        createdDate: 'Oct 14, 2025',
+        createdBy: 'Dr. Thilini Mahanama (Coordinator)'
+      }
+    },
+    {
+      id: 'STAFF003',
+      name: 'Mr. Kamal Silva',
+      email: 'kamal.silva@kln.ac.lk',
+      phone: '+94 75 345 6789',
+      module: 'Operations Management',
+      mentor: 'Dr. T. Mahanama',
+      contractExpiry: '2025-10-28',
+      status: 'Active',
+      jobDescription: {
+        staffId: 'STAFF003',
+        staffName: 'Mr. Kamal Silva',
+        tasks: [
+          { id: '1', description: 'Conduct lab sessions for Operations Management (OPS 303)', type: 'academic' as const },
+          { id: '2', description: 'Supervise student projects and presentations', type: 'academic' as const },
+          { id: '3', description: 'Prepare course materials and handouts', type: 'academic' as const },
+          { id: '4', description: 'Assist with department inventory management', type: 'administrative' as const }
+        ],
+        createdDate: 'Oct 10, 2025',
+        createdBy: 'Dr. Thilini Mahanama (Coordinator)'
+      }
+    },
+    {
+      id: 'STAFF004',
+      name: 'Ms. Priya Jayawardena',
+      email: 'priya.j@kln.ac.lk',
+      phone: '+94 74 456 7890',
+      module: 'Marketing Management',
+      mentor: 'Dr. S. Wijesinghe',
+      contractExpiry: '2026-01-15',
+      status: 'Active',
+      jobDescription: {
+        staffId: 'STAFF004',
+        staffName: 'Ms. Priya Jayawardena',
+        tasks: [
+          { id: '1', description: 'Conduct tutorial sessions for Digital Marketing (DM 401)', type: 'academic' as const },
+          { id: '2', description: 'Guide students in marketing research projects', type: 'academic' as const },
+          { id: '3', description: 'Update course content and learning materials', type: 'administrative' as const }
+        ],
+        createdDate: 'Oct 16, 2025',
+        createdBy: 'Dr. Thilini Mahanama (Coordinator)'
+      }
+    },
+    {
+      id: 'STAFF005',
+      name: 'Mr. Dilshan Perera',
+      email: 'dilshan.p@kln.ac.lk',
+      phone: '+94 73 567 8901',
+      module: 'Business Analytics',
+      mentor: 'Dr. R. Fernando',
+      contractExpiry: '2025-11-20',
+      status: 'Active',
+      jobDescription: {
+        staffId: 'STAFF005',
+        staffName: 'Mr. Dilshan Perera',
+        tasks: [
+          { id: '1', description: 'Conduct lab sessions for Business Analytics (BA 501)', type: 'academic' as const },
+          { id: '2', description: 'Assist students with data analysis projects', type: 'academic' as const },
+          { id: '3', description: 'Grade assignments and provide feedback', type: 'academic' as const },
+          { id: '4', description: 'Maintain lab equipment and software', type: 'administrative' as const },
+          { id: '5', description: 'Coordinate with IT department for technical support', type: 'administrative' as const }
+        ],
+        createdDate: 'Oct 12, 2025',
+        createdBy: 'Dr. Thilini Mahanama (Coordinator)'
+      }
+    }
+  ];
+
+  // Registration requests data
+  const [registrationRequests, setRegistrationRequests] = useState<any[]>([]);
+
+  // Fetch pending requests
+  useEffect(() => {
+    if (activeMenu === 'approve') {
+      import('../services/api').then(api => {
+        api.getPendingRegistrations()
+          .then(data => {
+            // Transform API data to match UI expected format if needed
+            // The API returns PendingUserResponse: { id, email, fullName, mobile, role, createdAt }
+            const formattedData = data.map(user => ({
+              id: user.id,
+              name: user.fullName,
+              email: user.email,
+              phone: user.mobile,
+              role: user.role,
+              submittedDate: new Date(user.createdAt).toLocaleDateString(),
+              status: 'pending'
+            }));
+            setRegistrationRequests(formattedData);
+          })
+          .catch(err => console.error("Failed to fetch pending registrations:", err));
+      });
+    }
+  }, [activeMenu]);
+
+  // Approve/Reject registration handlers
+  // Approve/Reject registration handlers
+  const handleApproveRequest = async (id: string) => {
+    try {
+      const api = await import('../services/api');
+      await api.approveUser(id);
+
+      setRegistrationRequests(prev =>
+        prev.map(req => req.id === id ? { ...req, status: 'approved' } : req)
+      );
+      alert('Registration request approved successfully!');
+
+      // Refresh list
+      const data = await api.getPendingRegistrations();
+      const formattedData = data.map(user => ({
+        id: user.id,
+        name: user.fullName,
+        email: user.email,
+        phone: user.mobile,
+        role: user.role,
+        submittedDate: new Date(user.createdAt).toLocaleDateString(),
+        status: 'pending'
+      }));
+      setRegistrationRequests(formattedData);
+
+    } catch (error: any) {
+      alert(`Approval failed: ${error.message}`);
+    }
+  };
+
+  const handleRejectRequest = async (id: string) => {
+    if (!confirm('Are you sure you want to reject this user?')) return;
+
+    try {
+      const api = await import('../services/api');
+      await api.rejectUser(id, 'Rejected by HOD');
+
+      setRegistrationRequests(prev =>
+        prev.filter(req => req.id !== id) // Remove from list
+      );
+      alert('Registration request rejected.');
+    } catch (error: any) {
+      alert(`Rejection failed: ${error.message}`);
+    }
+  };
+
+  // Interview data
+  const upcomingInterviews = [
+    {
+      id: 'int-1',
+      interviewNumber: 'Interview #3',
+      date: '2025-10-25',
+      status: 'upcoming' as const,
+      candidateCount: 18,
+      candidates: []
+    }
+  ];
+
+  const endedInterviews = [
+    {
+      id: 'int-2',
+      interviewNumber: 'Interview #2',
+      date: '2025-10-15',
+      status: 'ended' as const,
+      candidateCount: 15,
+      averageMarks: 72.5,
+      passedCandidates: 8,
+      candidates: [
+        {
+          id: 'c1',
+          name: 'A.B. Perera',
+          email: 'ab.perera@gmail.com',
+          phone: '+94 77 123 4567',
+          marks: { part1: 28, part2: 35, part3: 30, total: 93 },
+          shortlisted: true
+        },
+        {
+          id: 'c2',
+          name: 'C.D. Silva',
+          email: 'cd.silva@gmail.com',
+          phone: '+94 76 234 5678',
+          marks: { part1: 25, part2: 32, part3: 28, total: 85 },
+          shortlisted: true
+        },
+        {
+          id: 'c3',
+          name: 'E.F. Fernando',
+          email: 'ef.fernando@gmail.com',
+          phone: '+94 75 345 6789',
+          marks: { part1: 24, part2: 30, part3: 27, total: 81 },
+          shortlisted: true
+        },
+        {
+          id: 'c4',
+          name: 'G.H. Jayawardena',
+          email: 'gh.jay@gmail.com',
+          phone: '+94 74 456 7890',
+          marks: { part1: 23, part2: 29, part3: 26, total: 78 },
+          shortlisted: true
+        },
+        {
+          id: 'c5',
+          name: 'I.J. Karunaratne',
+          email: 'ij.karu@gmail.com',
+          phone: '+94 73 567 8901',
+          marks: { part1: 22, part2: 28, part3: 25, total: 75 },
+          shortlisted: true
+        },
+        {
+          id: 'c6',
+          name: 'K.L. Wijesinghe',
+          email: 'kl.wije@gmail.com',
+          phone: '+94 72 678 9012',
+          marks: { part1: 20, part2: 26, part3: 23, total: 69 },
+          shortlisted: false
+        },
+        {
+          id: 'c7',
+          name: 'M.N. Bandara',
+          email: 'mn.banda@gmail.com',
+          phone: '+94 71 789 0123',
+          marks: { part1: 19, part2: 25, part3: 22, total: 66 },
+          shortlisted: false
+        }
+      ]
+    },
+    {
+      id: 'int-3',
+      interviewNumber: 'Interview #1',
+      date: '2025-09-30',
+      status: 'ended' as const,
+      candidateCount: 20,
+      averageMarks: 68.3,
+      passedCandidates: 10,
+      candidates: []
+    }
+  ];
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setUploadedFile(file);
+      // Simulate importing candidates from Excel
+      alert(`File "${file.name}" uploaded successfully! Candidates imported into interview portal.`);
+    }
+  };
+
+  const handleProfileSave = (updatedProfile: any) => {
+    setProfileData({
+      ...profileData,
+      name: updatedProfile.name,
+      email: updatedProfile.email,
+      phone: updatedProfile.phone,
+      avatarUrl: updatedProfile.avatarUrl || profileData.avatarUrl
+    });
+
+    if (updatedProfile.newPassword) {
+      alert('Password changed successfully!');
+    }
+
+    alert('Profile updated successfully!');
+  };
+
+  const menuItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'manageInterviews', label: 'Manage Interviews', icon: Calendar },
+    { id: 'staff', label: 'Temporary Staff List', icon: Users },
+    { id: 'approve', label: 'Approve Registrations', icon: ClipboardCheck },
+    { id: 'interviews', label: 'Interview Reports', icon: FileText },
+    { id: 'attendance', label: 'Attendance & Salaries', icon: DollarSign },
+    { id: 'notifications', label: 'Notifications', icon: BellRing },
+    { id: 'profile', label: 'Profile', icon: UserIcon },
+  ];
+
+  const statsCards = [
+    { title: 'Total Temporary Staff', value: '42', color: '#4db4ac' },
+    { title: 'Pending Approvals', value: '8', color: '#4db4ac' },
+    { title: 'Active Mentors', value: '15', color: '#4db4ac' },
+    { title: 'Contracts Expiring Soon', value: '6', color: '#4db4ac' },
+  ];
+
+
+
+  const upcomingDeadlines = [
+    { task: 'Contract Renewal - A.B. Perera', priority: 'urgent', date: 'Oct 22, 2025' },
+    { task: 'Salary Approval - Monthly', priority: 'urgent', date: 'Oct 25, 2025' },
+    { task: 'Interview Report Submission', priority: 'medium', date: 'Oct 28, 2025' },
+    { task: 'Mentor Review Meeting', priority: 'normal', date: 'Nov 02, 2025' },
+    { task: 'Department Budget Review', priority: 'medium', date: 'Nov 05, 2025' },
+  ];
+
+  const recentActivities = [
+    { activity: 'Approved Temporary Staff Registration', performedBy: 'Dr. D. Wickramaarachchi', date: 'Oct 18, 2025 - 2:30 PM' },
+    { activity: 'Updated Mentor Assignment', performedBy: 'Dr. T. Mahanama', date: 'Oct 18, 2025 - 11:00 AM' },
+    { activity: 'Approved Interview Shortlist', performedBy: 'Dr. D. Wickramaarachchi', date: 'Oct 17, 2025 - 4:15 PM' },
+    { activity: 'Reviewed Salary Report', performedBy: 'Dr. D. Wickramaarachchi', date: 'Oct 17, 2025 - 10:30 AM' },
+    { activity: 'Sent Contract Renewal Reminder', performedBy: 'System', date: 'Oct 16, 2025 - 9:00 AM' },
+  ];
+
+  // Show Manage Interviews Page
+  if (currentPage === 'manageInterviews') {
+    return (
+      <HodManageInterviewsPage
+        onBack={() => {
+          setCurrentPage('dashboard');
+          setActiveMenu('dashboard');
+        }}
+      />
+    );
+  }
+
+  // Show Attendance and Salaries Page
+  if (currentPage === 'attendanceSalaries') {
+    return (
+      <AttendanceAndSalariesPage
+        onBack={() => {
+          setCurrentPage('dashboard');
+          setActiveMenu('dashboard');
+        }}
+      />
+    );
+  }
+
+  // Show Approval Page for Ended Interviews
+  if (currentPage === 'approvalPage' && selectedInterview) {
+    return (
+      <HodEndedInterviewApprovalPage
+        interview={selectedInterview}
+        onBack={() => {
+          setCurrentPage('dashboard');
+          setSelectedInterview(null);
+        }}
+      />
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-white">
+      {/* Top Header */}
+      <header className="fixed top-0 left-0 right-0 h-16 bg-[#4db4ac] shadow-md z-50 flex items-center justify-between px-6">
+        <div className="flex items-center gap-3">
+          <h1 className="text-white" style={{ fontWeight: 600, fontSize: '18px' }}>
+            Temporary Staff Coordination System
+          </h1>
+        </div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex items-center gap-2 text-white hover:bg-[#3c9a93] px-3 py-2 rounded-lg transition-colors">
+              <Avatar className="h-8 w-8 border-2 border-white">
+                <AvatarImage src="" alt="User" />
+                <AvatarFallback className="bg-white text-[#4db4ac]">DW</AvatarFallback>
+              </Avatar>
+              <ChevronDown className="h-4 w-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem>
+              <UserIcon className="mr-2 h-4 w-4" />
+              Profile
+            </DropdownMenuItem>
+            <DropdownMenuItem>
+              <Settings className="mr-2 h-4 w-4" />
+              Settings
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-red-600" onClick={onLogout}>
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </header>
+
+      <div className="flex pt-16">
+        {/* Left Sidebar */}
+        <aside className="fixed left-0 top-16 bottom-0 w-64 bg-white shadow-lg overflow-y-auto border-r border-[#e0e0e0]">
+          <nav className="p-4 space-y-1">
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeMenu === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    if (item.id === 'manageInterviews') {
+                      setCurrentPage('manageInterviews');
+                    } else if (item.id === 'attendance') {
+                      setCurrentPage('attendanceSalaries');
+                    } else {
+                      setActiveMenu(item.id);
+                    }
+                  }}
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${isActive
+                    ? 'bg-[#4db4ac] text-white'
+                    : 'text-[#555555] hover:bg-[#f0f0f0]'
+                    }`}
+                  style={{ fontSize: '14px', fontWeight: isActive ? 600 : 500 }}
+                >
+                  <Icon className="h-5 w-5" />
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
+
+        {/* Main Content Area */}
+        <main className="flex-1 ml-64 mr-80 p-6 space-y-6 pb-20">
+          {/* Profile Card - Only on Dashboard */}
+          {activeMenu === 'dashboard' && (
+            <>
+              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                <div className="flex items-start gap-6">
+                  <Avatar className="h-24 w-24 border-4 border-[#4db4ac]">
+                    <AvatarImage src={profileData.avatarUrl} alt={profileData.name} />
+                    <AvatarFallback className="bg-[#4db4ac] text-white" style={{ fontSize: '32px' }}>
+                      {profileData.initials}
+                    </AvatarFallback>
+                  </Avatar>
+
+                  <div className="flex-1">
+                    <h2 className="text-[#222222] mb-1" style={{ fontWeight: 700, fontSize: '24px' }}>
+                      {profileData.name}
+                    </h2>
+                    <p className="text-[#4db4ac] mb-2" style={{ fontWeight: 600, fontSize: '16px' }}>
+                      Head of Department
+                    </p>
+                    <p className="text-[#555555] mb-4" style={{ fontSize: '14px' }}>
+                      Department of Industrial Management
+                    </p>
+
+                    <div className="flex flex-col gap-2 mb-4">
+                      <div className="flex items-center gap-2 text-[#555555]" style={{ fontSize: '14px' }}>
+                        <Mail className="h-4 w-4 text-[#4db4ac]" />
+                        <span>{profileData.email}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[#555555]" style={{ fontSize: '14px' }}>
+                        <Phone className="h-4 w-4 text-[#4db4ac]" />
+                        <span>{profileData.phone}</span>
+                      </div>
+                    </div>
+
+                    <Button
+                      className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg px-4 py-2"
+                      onClick={() => setEditProfileOpen(true)}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Profile
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Department Statistics Section */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {statsCards.map((stat, index) => (
+                  <Card
+                    key={index}
+                    className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 border-t-4 overflow-hidden"
+                    style={{ borderTopColor: stat.color }}
+                  >
+                    <div className="p-5">
+                      <p className="text-[#555555] mb-2" style={{ fontSize: '13px', fontWeight: 500 }}>
+                        {stat.title}
+                      </p>
+                      <p className="text-[#222222]" style={{ fontSize: '32px', fontWeight: 700 }}>
+                        {stat.value}
+                      </p>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Temporary Staff List View */}
+          {activeMenu === 'staff' && (
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
+                  Temporary Staff List
+                </h2>
+                <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '12px' }}>
+                  {temporaryStaff.length} Active Staff
+                </Badge>
+              </div>
+
+              <div className="space-y-4">
+                {temporaryStaff.map((staff) => {
+                  const daysUntilExpiry = Math.ceil((new Date(staff.contractExpiry).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+                  const isExpiringSoon = daysUntilExpiry <= 30;
+
+                  return (
+                    <Card
+                      key={staff.id}
+                      className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6 hover:shadow-lg transition-shadow"
+                    >
+                      <div className="flex flex-col lg:flex-row gap-6">
+                        {/* Staff Info */}
+                        <div className="flex-1">
+                          <div className="flex items-start gap-4">
+                            <Avatar className="h-16 w-16 border-2 border-[#4db4ac]">
+                              <AvatarFallback className="bg-[#4db4ac] text-white" style={{ fontSize: '18px', fontWeight: 600 }}>
+                                {staff.name.split(' ').map(n => n[0]).join('')}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1">
+                              <h3 className="text-[#222222] mb-1" style={{ fontSize: '18px', fontWeight: 700 }}>
+                                {staff.name}
+                              </h3>
+
+                              <div className="flex flex-wrap gap-3 text-[#555555]" style={{ fontSize: '13px' }}>
+                                <div className="flex items-center gap-1">
+                                  <Mail className="h-3 w-3 text-[#4db4ac]" />
+                                  {staff.email}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <Phone className="h-3 w-3 text-[#4db4ac]" />
+                                  {staff.phone}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Staff Details */}
+                        <div className="lg:w-80 space-y-3">
+                          <div className="bg-[#f9f9f9] rounded-lg p-3">
+                            <p className="text-[#555555] mb-1" style={{ fontSize: '11px', fontWeight: 600 }}>
+                              Mentor Assigned
+                            </p>
+                            <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
+                              {staff.mentor}
+                            </p>
+                          </div>
+
+                          <div className="bg-[#f9f9f9] rounded-lg p-3">
+                            <p className="text-[#555555] mb-1" style={{ fontSize: '11px', fontWeight: 600 }}>
+                              Contract Expiry
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
+                                {new Date(staff.contractExpiry).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                })}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="bg-[#f9f9f9] rounded-lg p-3">
+                            <p className="text-[#555555] mb-1" style={{ fontSize: '11px', fontWeight: 600 }}>
+                              Days Remaining
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-4 w-4 text-[#4db4ac]" />
+                              <p
+                                className={`${isExpiringSoon ? 'text-red-600' : 'text-[#4db4ac]'}`}
+                                style={{ fontSize: '18px', fontWeight: 700 }}
+                              >
+                                {Math.abs(daysUntilExpiry)}
+                              </p>
+                              <span className="text-[#555555]" style={{ fontSize: '12px' }}>
+                                days
+                              </span>
+                            </div>
+                          </div>
+
+                          <Button
+                            onClick={() => {
+                              setSelectedStaffForJd(staff);
+                              setViewJdOpen(true);
+                            }}
+                            className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg w-full"
+                            style={{ fontSize: '12px' }}
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            View JD
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {/* Attendance & Salaries View */}
+          {activeMenu === 'attendance' && (
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
+                  Attendance & Salaries
+                </h2>
+              </div>
+
+              {/* Quick Access Cards for FR20, FR21, FR22 */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card
+                  className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-5 hover:shadow-lg transition-shadow cursor-pointer"
+                  onClick={() => setAttendanceSummaryOpen(true)}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="p-3 bg-[#e6f7f6] rounded-lg">
+                      <Calendar className="h-6 w-6 text-[#4db4ac]" />
+                    </div>
+                    <Badge className="bg-[#4db4ac] text-white">FR20</Badge>
+                  </div>
+                  <h3 className="text-[#222222] mb-2" style={{ fontSize: '16px', fontWeight: 600 }}>
+                    Attendance Summary
+                  </h3>
+                  <p className="text-[#555555]" style={{ fontSize: '13px', lineHeight: '1.5' }}>
+                    View and monitor attendance summaries and task completion of all temporary staff
+                  </p>
+                </Card>
+
+                <Card
+                  className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-5 hover:shadow-lg transition-shadow cursor-pointer"
+                  onClick={() => setSalaryReportsOpen(true)}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="p-3 bg-[#e6f7f6] rounded-lg">
+                      <DollarSign className="h-6 w-6 text-[#4db4ac]" />
+                    </div>
+                    <Badge className="bg-[#4db4ac] text-white">FR21</Badge>
+                  </div>
+                  <h3 className="text-[#222222] mb-2" style={{ fontSize: '16px', fontWeight: 600 }}>
+                    Salary Reports
+                  </h3>
+                  <p className="text-[#555555]" style={{ fontSize: '13px', lineHeight: '1.5' }}>
+                    Review and approve automatically generated salary reports for temporary staff
+                  </p>
+                </Card>
+
+                <Card
+                  className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-5 hover:shadow-lg transition-shadow cursor-pointer"
+                  onClick={() => setArchivedStaffOpen(true)}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="p-3 bg-[#e6f7f6] rounded-lg">
+                      <Archive className="h-6 w-6 text-[#4db4ac]" />
+                    </div>
+                    <Badge className="bg-[#4db4ac] text-white">FR22</Badge>
+                  </div>
+                  <h3 className="text-[#222222] mb-2" style={{ fontSize: '16px', fontWeight: 600 }}>
+                    Archived Staff Records
+                  </h3>
+                  <p className="text-[#555555]" style={{ fontSize: '13px', lineHeight: '1.5' }}>
+                    Access records and reports for staff with ended contracts
+                  </p>
+                </Card>
+              </div>
+            </>
+          )}
+
+          {/* Approve Registrations View */}
+          {activeMenu === 'approve' && (
+            <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
+                  Registration Requests
+                </h3>
+                <Badge className="bg-[#4db4ac] text-white">FR7</Badge>
+              </div>
+              <Separator className="mb-4" />
+
+              <div className="space-y-4">
+                {registrationRequests.map((request) => (
+                  <Card
+                    key={request.id}
+                    className={`border-2 rounded-lg p-5 ${request.status === 'pending'
+                      ? 'border-[#4db4ac] bg-[#f9f9f9]'
+                      : request.status === 'approved'
+                        ? 'border-green-300 bg-green-50'
+                        : 'border-red-300 bg-red-50'
+                      }`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h4 className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 600 }}>
+                            {request.name}
+                          </h4>
+                          <Badge
+                            className={`${request.status === 'pending'
+                              ? 'bg-orange-100 text-orange-700 border-orange-300'
+                              : request.status === 'approved'
+                                ? 'bg-green-100 text-green-700 border-green-300'
+                                : 'bg-red-100 text-red-700 border-red-300'
+                              } border`}
+                            style={{ fontSize: '10px' }}
+                          >
+                            {request.status.toUpperCase()}
+                          </Badge>
+                        </div>
+
+                        <div className="space-y-1 mb-3">
+                          <div className="flex items-center gap-2 text-[#555555]" style={{ fontSize: '13px' }}>
+                            <Mail className="h-4 w-4 text-[#4db4ac]" />
+                            <span>{request.email}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-[#555555]" style={{ fontSize: '13px' }}>
+                            <Phone className="h-4 w-4 text-[#4db4ac]" />
+                            <span>{request.phone}</span>
+                          </div>
+                        </div>
+
+
+
+                        <p className="text-[#999999]" style={{ fontSize: '12px' }}>
+                          Submitted: {request.submittedDate}
+                        </p>
+                      </div>
+
+                      {request.status === 'pending' && (
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => handleApproveRequest(request.id)}
+                            className="bg-green-600 hover:bg-green-700 text-white px-4"
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Approve
+                          </Button>
+                          <Button
+                            onClick={() => handleRejectRequest(request.id)}
+                            variant="outline"
+                            className="border-red-600 text-red-600 hover:bg-red-50 px-4"
+                          >
+                            <XCircle className="h-4 w-4 mr-1" />
+                            Reject
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                ))}
+
+                {registrationRequests.filter(r => r.status === 'pending').length === 0 && (
+                  <div className="text-center py-12 text-[#999999]">
+                    <p style={{ fontSize: '14px' }}>No pending registration requests</p>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+
+          {/* Interview Reports View */}
+          {activeMenu === 'interviews' && (
+            <div className="space-y-6">
+              {/* Upcoming Interviews Section */}
+              {upcomingInterviews.map((interview) => (
+                <Card key={interview.id} className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-6 w-6 text-[#4db4ac]" />
+                      <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
+                        {interview.interviewNumber} - Upcoming Interview
+                      </h3>
+                      <Badge className="bg-blue-100 text-blue-700 border-blue-300 border" style={{ fontSize: '12px' }}>
+                        UPCOMING
+                      </Badge>
+                    </div>
+                  </div>
+                  <Separator className="mb-4" />
+
+                  <div className="space-y-4">
+                    {/* Interview Date Management */}
+                    <Card className="border-2 border-[#4db4ac] rounded-lg p-4 bg-[#e6f7f6]">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Calendar className="h-5 w-5 text-[#4db4ac]" />
+                            <p className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 600 }}>
+                              Scheduled Date
+                            </p>
+                          </div>
+
+                          <p className="text-[#222222]" style={{ fontSize: '18px', fontWeight: 600 }}>
+                            {new Date(interview.date).toLocaleDateString('en-US', {
+                              month: 'long',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
+                          </p>
+                        </div>
+
+                        <Badge className="bg-blue-100 text-blue-700 border-blue-300 border px-4 py-2">
+                          Waiting for Coordinator
+                        </Badge>
+                      </div>
+                    </Card>
+
+                    {/* Candidate Statistics */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <Card className="border border-[#e0e0e0] rounded-lg p-4 bg-[#f9f9f9]">
+                        <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
+                          Total Candidates
+                        </p>
+                        <p className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
+                          {interview.candidateCount}
+                        </p>
+                      </Card>
+                      <Card className="border border-[#e0e0e0] rounded-lg p-4 bg-[#f9f9f9]">
+                        <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
+                          Interview Status
+                        </p>
+                        <Badge className="bg-blue-100 text-blue-700 border-blue-300 border" style={{ fontSize: '12px' }}>
+                          UPCOMING
+                        </Badge>
+                      </Card>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+
+              {/* Ended Interviews Section - Requiring Approval */}
+              {endedInterviews.map((interview) => (
+                <Card key={interview.id} className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-6 w-6 text-[#4db4ac]" />
+                      <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
+                        {interview.interviewNumber} - Ended Interview
+                      </h3>
+                      <Badge className="bg-yellow-100 text-yellow-700 border-yellow-300 border" style={{ fontSize: '12px' }}>
+                        PENDING APPROVAL
+                      </Badge>
+                    </div>
+                  </div>
+                  <Separator className="mb-4" />
+
+                  <div className="space-y-4">
+                    {/* Interview Summary Card */}
+                    <Card className="border border-[#e0e0e0] rounded-lg p-4 bg-[#f9f9f9]">
+                      <div className="grid grid-cols-4 gap-4">
+                        <div>
+                          <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
+                            Interview Date
+                          </p>
+                          <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
+                            {new Date(interview.date).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
+                            Total Candidates
+                          </p>
+                          <p className="text-[#222222]" style={{ fontSize: '18px', fontWeight: 700 }}>
+                            {interview.candidateCount}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
+                            Average Marks
+                          </p>
+                          <p className="text-[#222222]" style={{ fontSize: '18px', fontWeight: 700 }}>
+                            {interview.averageMarks?.toFixed(1)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
+                            Shortlisted
+                          </p>
+                          <p className="text-[#222222]" style={{ fontSize: '18px', fontWeight: 700 }}>
+                            {interview.passedCandidates}
+                          </p>
+                        </div>
+                      </div>
+                    </Card>
+
+                    {/* Approval Actions */}
+                    <div className="bg-[#fff8e1] border-2 border-[#ffd54f] rounded-lg p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-[#222222] mb-1" style={{ fontSize: '14px', fontWeight: 600 }}>
+                            Approval Required
+                          </p>
+                          <p className="text-[#555555]" style={{ fontSize: '13px' }}>
+                            Review the interview results and approve the shortlisted candidates
+                          </p>
+                        </div>
+                        <Button
+                          onClick={() => {
+                            setSelectedInterview(interview);
+                            setCurrentPage('approvalPage');
+                          }}
+                          className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Review & Approve
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {activeMenu === 'dashboard' && (
+            <>
+              {/* System Notices FR16 */}
+              <SystemNotices userRole="hod" />
+
+              {/* Recent Activities Section */}
+              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                <h3 className="text-[#222222] mb-4" style={{ fontWeight: 700, fontSize: '18px' }}>
+                  Recent System Activities
+                </h3>
+
+                <div className="space-y-1">
+                  {recentActivities.map((activity, index) => (
+                    <div
+                      key={index}
+                      className="flex items-start gap-4 p-3 rounded-lg hover:bg-[#f9f9f9] transition-colors border-l-4 border-[#4db4ac]"
+                    >
+                      <div className="flex-shrink-0 mt-1">
+                        <div className="h-8 w-8 rounded-full bg-[#e6f7f6] flex items-center justify-center">
+                          <CheckCircle className="h-4 w-4 text-[#4db4ac]" />
+                        </div>
+                      </div>
+                      <div className="flex-1 pb-4">
+                        <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 500 }}>
+                          {activity.activity}
+                        </p>
+                        <p className="text-[#555555] mt-1" style={{ fontSize: '13px' }}>
+                          Performed by {activity.performedBy}
+                        </p>
+                        <p className="text-[#999999] mt-1" style={{ fontSize: '12px' }}>
+                          {activity.date}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            </>
+          )}
+
+          {/* Notifications View */}
+          {activeMenu === 'notifications' && (
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
+                  Important Notices
+                </h2>
+                <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '12px' }}>
+                  System Notifications
+                </Badge>
+              </div>
+
+              <SystemNotices userRole="hod" />
+            </>
+          )}
+
+          {/* Profile View */}
+          {activeMenu === 'profile' && (
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
+                  My Profile
+                </h2>
+              </div>
+
+              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                <div className="flex items-start gap-6 mb-6">
+                  <Avatar className="h-32 w-32 border-4 border-[#4db4ac]">
+                    <AvatarImage src={profileData.avatarUrl} alt={profileData.name} />
+                    <AvatarFallback className="bg-[#4db4ac] text-white" style={{ fontSize: '40px' }}>
+                      {profileData.initials}
+                    </AvatarFallback>
+                  </Avatar>
+
+                  <div className="flex-1">
+                    <h2 className="text-[#222222] mb-1" style={{ fontWeight: 700, fontSize: '28px' }}>
+                      {profileData.name}
+                    </h2>
+                    <p className="text-[#4db4ac] mb-2" style={{ fontWeight: 600, fontSize: '18px' }}>
+                      Head of Department
+                    </p>
+                    <p className="text-[#555555] mb-4" style={{ fontSize: '14px' }}>
+                      Department of Industrial Management
+                    </p>
+                  </div>
+                </div>
+
+                <Separator className="mb-6" />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="text-[#222222] mb-4" style={{ fontWeight: 600, fontSize: '16px' }}>
+                      Contact Information
+                    </h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3 text-[#555555]" style={{ fontSize: '14px' }}>
+                        <Mail className="h-5 w-5 text-[#4db4ac]" />
+                        <span>{profileData.email}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-[#555555]" style={{ fontSize: '14px' }}>
+                        <Phone className="h-5 w-5 text-[#4db4ac]" />
+                        <span>{profileData.phone}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h3 className="text-[#222222] mb-4" style={{ fontWeight: 600, fontSize: '16px' }}>
+                      Department Statistics
+                    </h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[#555555]" style={{ fontSize: '14px' }}>Total Staff</span>
+                        <span className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>42</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[#555555]" style={{ fontSize: '14px' }}>Active Mentorships</span>
+                        <span className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>15</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[#555555]" style={{ fontSize: '14px' }}>Pending Approvals</span>
+                        <span className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>8</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator className="my-6" />
+
+                <Button
+                  className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg px-6 py-2"
+                  onClick={() => setEditProfileOpen(true)}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Profile
+                </Button>
+              </Card>
+            </>
+          )}
+        </main>
+
+        {/* Right Sidebar - Upcoming Deadlines */}
+        <aside className="fixed right-0 top-16 bottom-0 w-80 bg-white shadow-lg overflow-y-auto p-6">
+          <h3 className="text-[#222222] mb-4" style={{ fontWeight: 700, fontSize: '18px' }}>
+            Upcoming Deadlines
+          </h3>
+          <Separator className="mb-4" />
+
+          <div className="space-y-3">
+            {upcomingDeadlines.map((deadline, index) => (
+              <Card
+                key={index}
+                className="bg-[#f9f9f9] border border-[#e0e0e0] rounded-lg p-4 hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <p className="text-[#222222] flex-1" style={{ fontSize: '14px', fontWeight: 600 }}>
+                    {deadline.task}
+                  </p>
+                  <Badge
+                    className={`${deadline.priority === 'urgent'
+                      ? 'bg-red-100 text-red-700 border-red-300'
+                      : deadline.priority === 'medium'
+                        ? 'bg-orange-100 text-orange-700 border-orange-300'
+                        : 'bg-blue-100 text-blue-700 border-blue-300'
+                      } border`}
+                    style={{ fontSize: '10px' }}
+                  >
+                    {deadline.priority.toUpperCase()}
+                  </Badge>
+                </div>
+                <p className="text-[#999999]" style={{ fontSize: '12px' }}>
+                  Due: {deadline.date}
+                </p>
+              </Card>
+            ))}
+          </div>
+
+          <Button className="w-full mt-6 bg-white border-2 border-[#4db4ac] text-[#4db4ac] hover:bg-[#4db4ac] hover:text-white rounded-lg">
+            <BellRing className="h-4 w-4 mr-2" />
+            View All Reminders
+          </Button>
+        </aside>
+      </div>
+
+      {/* Footer */}
+      <footer className="fixed bottom-0 left-64 right-80 bg-white border-t border-[#e0e0e0] py-3 px-6 text-center">
+        <p className="text-[#555555]" style={{ fontSize: '12px' }}>
+          University of Kelaniya | Temporary Staff Coordination System
+        </p>
+      </footer>
+
+      {/* Dialogs */}
+      <AttendanceSummaryDialog
+        open={attendanceSummaryOpen}
+        onOpenChange={setAttendanceSummaryOpen}
+        userRole="hod"
+      />
+      <SalaryReportsDialog
+        open={salaryReportsOpen}
+        onOpenChange={setSalaryReportsOpen}
+        userRole="hod"
+      />
+      <ArchivedStaffDialog
+        open={archivedStaffOpen}
+        onOpenChange={setArchivedStaffOpen}
+      />
+      <SendNoticeDialog
+        open={sendNoticeOpen}
+        onOpenChange={setSendNoticeOpen}
+        userRole="hod"
+      />
+      <ViewJobDescriptionDialog
+        open={viewJdOpen}
+        onOpenChange={setViewJdOpen}
+        jobDescription={selectedStaffForJd?.jobDescription || null}
+      />
+      <EditProfileDialog
+        open={editProfileOpen}
+        onOpenChange={setEditProfileOpen}
+        currentProfile={profileData}
+        onSave={handleProfileSave}
+      />
+    </div>
+  );
+}
