@@ -25,6 +25,8 @@ export interface RegisterData {
     mobile?: string;
     role: string;
     preferredSubjects?: string[];
+    contractStartDate?: string;
+    contractEndDate?: string;
 }
 
 export interface AuthResponse {
@@ -199,6 +201,19 @@ export async function getPanelMembers(): Promise<{ id: string; fullName: string;
     return fetchWithAuth(`${API_BASE_URL}/user/panel-members`);
 }
 
+// Get all approved temporary staff members
+export async function getApprovedStaff(): Promise<{
+    id: string;
+    fullName: string;
+    email: string;
+    mobile?: string;
+    contractStartDate?: string;
+    contractEndDate?: string;
+    preferredSubjects?: string[];
+}[]> {
+    return fetchWithAuth(`${API_BASE_URL}/user/staff`);
+}
+
 // ─── Interview APIs ───────────────────────────────────────────────
 
 export interface InterviewData {
@@ -323,4 +338,96 @@ export async function approveParticipant(interviewId: string, userId: string): P
 /** Remove an active participant */
 export async function removeParticipant(interviewId: string, userId: string): Promise<void> {
     return fetchWithAuth(`${API_BASE_URL}/interviews/${interviewId}/session/remove/${userId}`, { method: 'PUT' });
+}
+
+/** Coordinator/HOD voluntarily leaves the session (their marks excluded from report average) */
+export async function leaveSession(interviewId: string): Promise<void> {
+    return fetchWithAuth(`${API_BASE_URL}/interviews/${interviewId}/session/leave`, { method: 'PUT' });
+}
+
+// ─── Marking Scheme ───────────────────────────────────────────────────────────
+
+export interface MarkingCriterionData {
+    id: string;
+    name: string;
+    maxMarks: number;
+    displayOrder: number;
+}
+
+export interface MarkingSchemeData {
+    schemeId: string;
+    interviewId: string;
+    createdByName: string;
+    criteria: MarkingCriterionData[];
+    totalMaxMarks: number;
+}
+
+/** Coordinator saves the marking scheme for an interview */
+export async function saveMarkingScheme(
+    interviewId: string,
+    criteria: { name: string; maxMarks: number }[]
+): Promise<MarkingSchemeData> {
+    return fetchWithAuth(`${API_BASE_URL}/interviews/${interviewId}/marking-scheme`, {
+        method: 'POST',
+        body: JSON.stringify({ criteria }),
+    });
+}
+
+/** Get marking scheme for an interview (returns null if none set) */
+export async function getMarkingScheme(interviewId: string): Promise<MarkingSchemeData | null> {
+    const token = getAuthToken();
+    if (!token) return null;
+    const response = await fetch(`${API_BASE_URL}/interviews/${interviewId}/marking-scheme`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (response.status === 204 || response.status === 404) return null;
+    if (!response.ok) return null;
+    return response.json();
+}
+
+/** Panel member submits marks for a candidate */
+export async function submitMarks(
+    interviewId: string,
+    candidateId: string,
+    marks: { criterionId: string; marksGiven: number }[],
+    comments?: string
+): Promise<void> {
+    return fetchWithAuth(`${API_BASE_URL}/interviews/${interviewId}/marks/${candidateId}`, {
+        method: 'POST',
+        body: JSON.stringify({ marks, comments: comments ?? null }),
+    });
+}
+
+// ─── Interview Report ─────────────────────────────────────────────────────────
+
+export interface MarkerResult {
+    markerId: string;
+    markerName: string;
+    markerRole: string;
+    marksByCriterion: Record<string, number>;
+    total: number;
+    comments?: string;
+}
+
+export interface CandidateReport {
+    candidateId: string;
+    candidateName: string;
+    candidateEmail: string;
+    markerResults: MarkerResult[];
+    averageTotal: number;
+    maxTotal: number;
+}
+
+export interface InterviewReport {
+    interviewId: string;
+    interviewNumber: string;
+    sessionId: string;
+    criteria: MarkingCriterionData[];
+    totalMaxMarks: number;
+    candidates: CandidateReport[];
+}
+
+/** HOD fetches full interview report */
+export async function getInterviewReport(interviewId: string): Promise<InterviewReport> {
+    return fetchWithAuth(`${API_BASE_URL}/interviews/${interviewId}/report`);
 }

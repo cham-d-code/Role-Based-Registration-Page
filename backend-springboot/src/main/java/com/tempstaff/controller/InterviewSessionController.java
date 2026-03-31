@@ -63,6 +63,16 @@ public class InterviewSessionController {
         return ResponseEntity.ok().build();
     }
 
+    /** Caller voluntarily leaves the session (marks excluded from report average) */
+    @PutMapping("/{interviewId}/session/leave")
+    public ResponseEntity<Void> leaveSession(
+            @PathVariable UUID interviewId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        User caller = getUser(userDetails);
+        sessionService.leaveSession(interviewId, caller.getId());
+        return ResponseEntity.ok().build();
+    }
+
     /**
      * Get any currently active session + my status (used for polling by all roles).
      * Returns 204 No Content if no session is active.

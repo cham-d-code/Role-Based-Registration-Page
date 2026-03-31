@@ -4,7 +4,10 @@ import com.tempstaff.dto.response.UserProfileResponse;
 import com.tempstaff.entity.User;
 import com.tempstaff.entity.UserRole;
 import com.tempstaff.entity.UserStatus;
+import com.tempstaff.entity.UserSubject;
+import com.tempstaff.repository.ModuleRepository;
 import com.tempstaff.repository.UserRepository;
+import com.tempstaff.repository.UserSubjectRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -20,6 +23,8 @@ import java.util.stream.Collectors;
 public class UserController {
 
     private final UserRepository userRepository;
+    private final UserSubjectRepository userSubjectRepository;
+    private final ModuleRepository moduleRepository;
 
     /**
      * GET /api/user/me
@@ -42,9 +47,48 @@ public class UserController {
                 .status(user.getStatus().name())
                 .profileImageUrl(user.getProfileImageUrl())
                 .createdAt(user.getCreatedAt())
+                .contractStartDate(user.getContractStartDate())
+                .contractEndDate(user.getContractEndDate())
                 .build();
 
         return ResponseEntity.ok(profile);
+    }
+
+    /**
+     * GET /api/user/staff
+     * Returns all approved temporary staff members.
+     */
+    @GetMapping("/staff")
+    public ResponseEntity<List<UserProfileResponse>> getApprovedStaff() {
+
+        List<User> staffUsers = userRepository.findByStatusAndRoleIn(
+                UserStatus.approved, List.of(UserRole.staff));
+
+        List<UserProfileResponse> response = staffUsers.stream()
+                .map(u -> {
+                    List<String> preferredSubjects = userSubjectRepository
+                            .findByUserIdAndIsPreferred(u.getId(), true)
+                            .stream()
+                            .map(UserSubject::getModuleId)
+                            .map(moduleId -> moduleRepository.findById(moduleId)
+                                    .map(m -> m.getName())
+                                    .orElse(null))
+                            .filter(name -> name != null)
+                            .collect(Collectors.toList());
+
+                    return UserProfileResponse.builder()
+                            .id(u.getId().toString())
+                            .fullName(u.getFullName())
+                            .email(u.getEmail())
+                            .mobile(u.getMobile())
+                            .contractStartDate(u.getContractStartDate())
+                            .contractEndDate(u.getContractEndDate())
+                            .preferredSubjects(preferredSubjects)
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(response);
     }
 
     /**

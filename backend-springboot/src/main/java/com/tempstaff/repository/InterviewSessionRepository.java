@@ -11,4 +11,5 @@ import java.util.UUID;
 public interface InterviewSessionRepository extends JpaRepository<InterviewSession, UUID> {
     Optional<InterviewSession> findByInterviewIdAndActiveTrue(UUID interviewId);
     Optional<InterviewSession> findFirstByActiveTrue();
+    Optional<InterviewSession> findTopByInterviewIdOrderByStartedAtDesc(UUID interviewId);
 }

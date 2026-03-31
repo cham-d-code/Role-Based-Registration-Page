@@ -7,14 +7,11 @@ import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { 
-  ArrowLeft, 
-  FileText, 
-  Save,
-  Calendar as CalendarIcon,
-  ChevronDown,
-  User
+import {
+  ArrowLeft, FileText, Save, Calendar as CalendarIcon, User,
+  Plus, Trash2, CheckCircle, ClipboardList, Edit, Loader2,
 } from 'lucide-react';
+import { saveMarkingScheme, submitMarks, MarkingSchemeData } from '../services/api';
 
 interface Candidate {
   id: string;
@@ -24,287 +21,461 @@ interface Candidate {
   cvUrl?: string;
 }
 
-interface InterviewMarkingPageProps {
-  interview: {
-    id: string;
-    interviewNumber: string;
-    date: string;
-  };
-  candidates: Candidate[];
-  onBack: () => void;
+interface Criterion {
+  id: string;       // backend UUID once saved, or temp string during creation
+  name: string;
+  maxMarks: number;
 }
 
-export default function InterviewMarkingPage({ interview, candidates, onBack }: InterviewMarkingPageProps) {
-  const [selectedCandidateId, setSelectedCandidateId] = useState<string>('');
-  const [marks, setMarks] = useState({
-    part1: '',
-    part2: '',
-    part3: '',
-  });
+interface InterviewMarkingPageProps {
+  interview: { id: string; interviewNumber: string; date: string };
+  candidates: Candidate[];
+  onBack: () => void;
+  /** If provided (mentor/HOD joining), skip scheme creation and use this scheme */
+  existingScheme?: MarkingSchemeData;
+}
+
+let _tempId = 1;
+function tempId() { return `tmp-${_tempId++}`; }
+
+export default function InterviewMarkingPage({
+  interview, candidates, onBack, existingScheme,
+}: InterviewMarkingPageProps) {
+
+  // ── Scheme setup (coordinator only when no existingScheme) ─────────────────
+  const [criteria, setCriteria] = useState<Criterion[]>(
+    existingScheme
+      ? existingScheme.criteria.map(c => ({ id: c.id, name: c.name, maxMarks: c.maxMarks }))
+      : [{ id: tempId(), name: '', maxMarks: 0 }]
+  );
+  const [schemeFinalized, setSchemeFinalized] = useState(!!existingScheme);
+  const [savingScheme, setSavingScheme] = useState(false);
+  const [schemeError, setSchemeError] = useState('');
+
+  // ── Marking state ──────────────────────────────────────────────────────────
+  const [selectedCandidateId, setSelectedCandidateId] = useState('');
+  const [marks, setMarks] = useState<Record<string, string>>({});
   const [additionalComments, setAdditionalComments] = useState('');
+  const [savingMarks, setSavingMarks] = useState(false);
+  const [savedResults, setSavedResults] = useState<
+    { candidateId: string; name: string; total: number; max: number }[]
+  >([]);
 
   const selectedCandidate = candidates.find(c => c.id === selectedCandidateId);
-  const totalMarks = (parseInt(marks.part1 || '0') + parseInt(marks.part2 || '0') + parseInt(marks.part3 || '0'));
+  const maxTotal = criteria.reduce((s, c) => s + (c.maxMarks || 0), 0);
+  const currentTotal = criteria.reduce((s, c) => s + (parseInt(marks[c.id] || '0') || 0), 0);
 
-  const handleAssignMarks = () => {
-    if (!selectedCandidateId) {
-      alert('Please select a candidate');
-      return;
+  const isReadonlyScheme = !!existingScheme; // mentor/HOD can't edit scheme
+
+  // ── Scheme helpers ─────────────────────────────────────────────────────────
+  function addCriterion() {
+    setCriteria(prev => [...prev, { id: tempId(), name: '', maxMarks: 0 }]);
+  }
+  function removeCriterion(id: string) {
+    setCriteria(prev => prev.filter(c => c.id !== id));
+  }
+  function updateCriterion(id: string, field: 'name' | 'maxMarks', value: string) {
+    setCriteria(prev => prev.map(c =>
+      c.id === id
+        ? { ...c, [field]: field === 'maxMarks' ? Math.max(0, parseInt(value) || 0) : value }
+        : c
+    ));
+  }
+
+  async function finalizeScheme() {
+    if (criteria.length === 0) { setSchemeError('Add at least one criterion.'); return; }
+    for (const c of criteria) {
+      if (!c.name.trim()) { setSchemeError('Every criterion must have a name.'); return; }
+      if (c.maxMarks <= 0) { setSchemeError(`"${c.name}" must have max marks > 0.`); return; }
     }
-    if (!marks.part1 || !marks.part2 || !marks.part3) {
-      alert('Please enter all marks');
-      return;
+    setSavingScheme(true);
+    setSchemeError('');
+    try {
+      const saved = await saveMarkingScheme(
+        interview.id,
+        criteria.map(c => ({ name: c.name, maxMarks: c.maxMarks }))
+      );
+      // Replace temp ids with real backend ids
+      setCriteria(saved.criteria.map(c => ({ id: c.id, name: c.name, maxMarks: c.maxMarks })));
+      setSchemeFinalized(true);
+      setMarks({});
+      setSelectedCandidateId('');
+    } catch (e: any) {
+      setSchemeError(e.message || 'Failed to save scheme.');
+    } finally {
+      setSavingScheme(false);
     }
+  }
 
-    alert(`Marks assigned successfully!\nCandidate: ${selectedCandidate?.name}\nTotal: ${totalMarks}\nComments: ${additionalComments || 'None'}`);
-    
-    // Reset form
-    setMarks({ part1: '', part2: '', part3: '' });
-    setAdditionalComments('');
-    setSelectedCandidateId('');
-  };
+  // ── Marks helpers ──────────────────────────────────────────────────────────
+  async function handleAssignMarks() {
+    if (!selectedCandidateId) { alert('Please select a candidate.'); return; }
+    for (const c of criteria) {
+      const val = parseInt(marks[c.id] || '');
+      if (isNaN(val)) { alert(`Please enter marks for "${c.name}".`); return; }
+      if (val < 0 || val > c.maxMarks) {
+        alert(`Marks for "${c.name}" must be 0–${c.maxMarks}.`); return;
+      }
+    }
+    setSavingMarks(true);
+    try {
+      await submitMarks(
+        interview.id,
+        selectedCandidateId,
+        criteria.map(c => ({ criterionId: c.id, marksGiven: parseInt(marks[c.id]) })),
+        additionalComments
+      );
+      setSavedResults(prev => {
+        const idx = prev.findIndex(r => r.candidateId === selectedCandidateId);
+        const entry = { candidateId: selectedCandidateId, name: selectedCandidate!.name, total: currentTotal, max: maxTotal };
+        return idx >= 0 ? prev.map((r, i) => i === idx ? entry : r) : [...prev, entry];
+      });
+      alert(`Marks saved for ${selectedCandidate?.name}!`);
+      setMarks({});
+      setAdditionalComments('');
+      setSelectedCandidateId('');
+    } catch (e: any) {
+      alert(`Failed to save marks: ${e.message}`);
+    } finally {
+      setSavingMarks(false);
+    }
+  }
 
+  // ── Phase 1: Scheme Setup (coordinator only) ───────────────────────────────
+  if (!schemeFinalized) {
+    return (
+      <div className="min-h-screen bg-[#f9f9f9]">
+        <header className="fixed top-0 left-0 right-0 h-16 bg-[#4db4ac] shadow-md z-50 flex items-center justify-between px-6">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" className="text-white hover:bg-[#3c9a93]" onClick={onBack}>
+              <ArrowLeft className="h-5 w-5 mr-2" />Back
+            </Button>
+            <Separator orientation="vertical" className="h-8 bg-white/30" />
+            <h1 className="text-white" style={{ fontWeight: 600, fontSize: '18px' }}>
+              {interview.interviewNumber} — Create Marking Assignment
+            </h1>
+          </div>
+          <Badge className="bg-white text-[#4db4ac] border-0" style={{ fontSize: '12px', fontWeight: 600 }}>
+            {interview.date}
+          </Badge>
+        </header>
+
+        <div className="pt-24 pb-8 px-6 max-w-3xl mx-auto">
+          <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+            <div className="flex items-center gap-2 mb-2">
+              <ClipboardList className="h-6 w-6 text-[#4db4ac]" />
+              <h2 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
+                Create Marking Assignment
+              </h2>
+            </div>
+            <p className="text-[#555555] mb-4" style={{ fontSize: '13px' }}>
+              Define the criteria that panelists will use to mark each candidate.
+            </p>
+            <Separator className="mb-5" />
+
+            <div className="space-y-3 mb-5">
+              {criteria.map((criterion, idx) => (
+                <div key={criterion.id} className="flex items-center gap-3 bg-[#f9f9f9] border border-[#e0e0e0] rounded-lg px-4 py-3">
+                  <span className="h-6 w-6 rounded-full bg-[#4db4ac] text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                    {idx + 1}
+                  </span>
+                  <Label className="text-[#555555] flex-shrink-0" style={{ fontSize: '13px', fontWeight: 600 }}>Criteria Name</Label>
+                  <Input
+                    placeholder="e.g., Communication Skills"
+                    value={criterion.name}
+                    onChange={e => updateCriterion(criterion.id, 'name', e.target.value)}
+                    className="flex-1 bg-white border-[#d0d0d0] rounded-lg focus:border-[#4db4ac]"
+                    style={{ minWidth: 0 }}
+                  />
+                  <Label className="text-[#555555] flex-shrink-0" style={{ fontSize: '13px', fontWeight: 600 }}>Max Marks</Label>
+                  <div className="relative flex-shrink-0 w-24">
+                    <Input
+                      type="number" min="1" placeholder="0"
+                      value={criterion.maxMarks || ''}
+                      onChange={e => updateCriterion(criterion.id, 'maxMarks', e.target.value)}
+                      className="bg-white border-[#d0d0d0] rounded-lg focus:border-[#4db4ac] pr-10 text-center"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#aaaaaa]" style={{ fontSize: '11px' }}>pts</span>
+                  </div>
+                  <Button
+                    size="icon" variant="ghost"
+                    onClick={() => removeCriterion(criterion.id)}
+                    disabled={criteria.length === 1}
+                    className="text-red-400 hover:text-red-600 hover:bg-red-50 h-9 w-9 flex-shrink-0"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+
+            <Button
+              variant="outline" onClick={addCriterion}
+              className="w-full border-dashed border-[#4db4ac] text-[#4db4ac] hover:bg-[#e6f7f6] mb-6"
+            >
+              <Plus className="h-4 w-4 mr-2" />Add Marking Criterion
+            </Button>
+
+            <div className="bg-[#e6f7f6] border border-[#4db4ac] rounded-lg p-4 mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-[#4db4ac]" style={{ fontSize: '13px', fontWeight: 600 }}>
+                  {criteria.length} {criteria.length === 1 ? 'criterion' : 'criteria'} defined
+                </p>
+                <p className="text-[#555555]" style={{ fontSize: '12px' }}>
+                  Total max marks: <strong>{maxTotal}</strong>
+                </p>
+              </div>
+              <Badge className="bg-[#4db4ac] text-white border-0 text-lg px-4 py-1">/ {maxTotal}</Badge>
+            </div>
+
+            {schemeError && (
+              <p className="text-red-500 text-sm mb-3">{schemeError}</p>
+            )}
+
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" onClick={onBack} className="border-[#d0d0d0] text-[#555555]">
+                Cancel
+              </Button>
+              <Button
+                onClick={finalizeScheme} disabled={savingScheme}
+                className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white px-6"
+              >
+                {savingScheme
+                  ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving…</>
+                  : <><CheckCircle className="h-4 w-4 mr-2" />Create Marking Assignment</>}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Phase 2: Marking Panel ─────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#f9f9f9]">
-      {/* Header Bar */}
       <header className="fixed top-0 left-0 right-0 h-16 bg-[#4db4ac] shadow-md z-50 flex items-center justify-between px-6">
         <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            className="text-white hover:bg-[#3c9a93]"
-            onClick={onBack}
-          >
-            <ArrowLeft className="h-5 w-5 mr-2" />
-            Back to Dashboard
+          <Button variant="ghost" className="text-white hover:bg-[#3c9a93]" onClick={onBack}>
+            <ArrowLeft className="h-5 w-5 mr-2" />Back
           </Button>
           <Separator orientation="vertical" className="h-8 bg-white/30" />
           <h1 className="text-white" style={{ fontWeight: 600, fontSize: '18px' }}>
-            {interview.interviewNumber} - Marking Assignment
+            {interview.interviewNumber} — Marking Assignment
           </h1>
         </div>
-        
-        <Badge className="bg-white text-[#4db4ac] border-0" style={{ fontSize: '12px', fontWeight: 600 }}>
-          {interview.date}
-        </Badge>
+        <div className="flex items-center gap-3">
+          {!isReadonlyScheme && (
+            <Button
+              size="sm" variant="ghost"
+              className="text-white hover:bg-[#3c9a93] border border-white/40"
+              onClick={() => { setSchemeFinalized(false); setMarks({}); setSelectedCandidateId(''); }}
+            >
+              <Edit className="h-3 w-3 mr-1" />Edit Scheme
+            </Button>
+          )}
+          <Badge className="bg-white text-[#4db4ac] border-0" style={{ fontSize: '12px', fontWeight: 600 }}>
+            {interview.date}
+          </Badge>
+        </div>
       </header>
 
-      <div className="pt-20 pb-8 px-6 max-w-5xl mx-auto">
-        {/* Interview Information */}
-        <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6 mb-6">
-          <div className="flex items-center gap-2 mb-4">
-            <CalendarIcon className="h-6 w-6 text-[#4db4ac]" />
-            <h2 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
-              Interview Details
-            </h2>
+      <div className="pt-24 pb-8 px-6 max-w-5xl mx-auto space-y-6">
+
+        {/* Scheme summary */}
+        <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <ClipboardList className="h-5 w-5 text-[#4db4ac]" />
+              <h2 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '17px' }}>Marking Scheme</h2>
+              {existingScheme && (
+                <span className="text-[#555555] text-xs">Created by {existingScheme.createdByName}</span>
+              )}
+            </div>
+            <Badge className="bg-[#4db4ac] text-white border-0">Total: {maxTotal} pts</Badge>
           </div>
-          <Separator className="mb-4" />
-          
-          <div className="grid grid-cols-3 gap-4">
-            <div className="bg-[#f9f9f9] rounded-lg p-4 border border-[#e0e0e0]">
-              <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
-                Interview Name
-              </p>
-              <p className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 600 }}>
-                {interview.interviewNumber}
-              </p>
-            </div>
-            <div className="bg-[#f9f9f9] rounded-lg p-4 border border-[#e0e0e0]">
-              <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
-                Interview Date
-              </p>
-              <p className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 600 }}>
-                {interview.date}
-              </p>
-            </div>
-            <div className="bg-[#f9f9f9] rounded-lg p-4 border border-[#e0e0e0]">
-              <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
-                Total Candidates
-              </p>
-              <p className="text-[#4db4ac]" style={{ fontSize: '16px', fontWeight: 700 }}>
-                {candidates.length}
-              </p>
-            </div>
+          <Separator className="mb-3" />
+          <div className="flex flex-wrap gap-2">
+            {criteria.map((c, idx) => (
+              <div key={c.id} className="flex items-center gap-1 bg-[#f0faf9] border border-[#4db4ac] rounded-lg px-3 py-1">
+                <span className="text-[#4db4ac] font-semibold text-xs">{idx + 1}.</span>
+                <span className="text-[#222222] font-semibold text-sm">{c.name}</span>
+                <span className="text-[#555555] text-xs">({c.maxMarks} pts)</span>
+              </div>
+            ))}
           </div>
         </Card>
 
-        {/* Candidate Selection */}
-        <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6 mb-6">
-          <div className="flex items-center gap-2 mb-4">
-            <User className="h-6 w-6 text-[#4db4ac]" />
-            <h2 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
-              Select Candidate
-            </h2>
+        {/* Interview info */}
+        <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <CalendarIcon className="h-5 w-5 text-[#4db4ac]" />
+            <h2 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '17px' }}>Interview Details</h2>
           </div>
-          <Separator className="mb-4" />
+          <Separator className="mb-3" />
+          <div className="grid grid-cols-3 gap-4">
+            {[
+              { label: 'Interview', value: interview.interviewNumber },
+              { label: 'Date', value: interview.date },
+              { label: 'Total Candidates', value: String(candidates.length) },
+            ].map(({ label, value }) => (
+              <div key={label} className="bg-[#f9f9f9] rounded-lg p-4 border border-[#e0e0e0]">
+                <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>{label}</p>
+                <p className="text-[#222222]" style={{ fontSize: '15px', fontWeight: 600 }}>{value}</p>
+              </div>
+            ))}
+          </div>
+        </Card>
 
+        {/* Candidate selection */}
+        <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <User className="h-5 w-5 text-[#4db4ac]" />
+            <h2 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '17px' }}>Select Candidate</h2>
+          </div>
+          <Separator className="mb-3" />
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label className="text-[#222222] mb-2 block" style={{ fontSize: '14px', fontWeight: 600 }}>
-                Candidate *
-              </Label>
-              <Select value={selectedCandidateId} onValueChange={setSelectedCandidateId}>
-                <SelectTrigger className="w-full bg-white border-[#d0d0d0] rounded-lg focus:border-[#4db4ac]">
-                  <SelectValue placeholder="Select candidate to mark">
-                    {selectedCandidate ? (
-                      <div className="flex items-center gap-2">
-                        <span className="text-[#4db4ac]" style={{ fontWeight: 600 }}>{selectedCandidate.id}</span>
-                        <span>-</span>
-                        <span>{selectedCandidate.name}</span>
-                      </div>
-                    ) : (
-                      'Select candidate to mark'
-                    )}
-                  </SelectValue>
+              <Label className="text-[#222222] mb-2 block" style={{ fontSize: '14px', fontWeight: 600 }}>Candidate *</Label>
+              <Select value={selectedCandidateId} onValueChange={v => { setSelectedCandidateId(v); setMarks({}); }}>
+                <SelectTrigger className="w-full bg-white border-[#d0d0d0] rounded-lg">
+                  <SelectValue placeholder="Select candidate to mark" />
                 </SelectTrigger>
                 <SelectContent>
-                  {candidates.map((candidate) => (
-                    <SelectItem key={candidate.id} value={candidate.id}>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[#4db4ac]" style={{ fontWeight: 600 }}>{candidate.id}</span>
-                        <span>-</span>
-                        <span>{candidate.name}</span>
-                        <span className="text-[#999999]">({candidate.email})</span>
-                      </div>
+                  {candidates.map(c => (
+                    <SelectItem key={c.id} value={c.id}>
+                      <span className="text-[#4db4ac] font-semibold mr-1">{c.id}</span> — {c.name}
+                      {savedResults.find(r => r.candidateId === c.id) && (
+                        <span className="ml-2 text-green-600 text-xs">✓ marked</span>
+                      )}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-
             <div className="flex items-end">
               <Button
                 variant="outline"
                 className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#e6f7f6] w-full"
-                disabled={!selectedCandidateId}
-                onClick={() => alert(`Viewing CV for ${selectedCandidate?.name}`)}
+                disabled={!selectedCandidateId || !selectedCandidate?.cvUrl}
+                onClick={() => window.open(selectedCandidate?.cvUrl, '_blank')}
               >
-                <FileText className="h-4 w-4 mr-2" />
-                View CV
+                <FileText className="h-4 w-4 mr-2" />View CV
               </Button>
             </div>
           </div>
-
           {selectedCandidate && (
             <div className="mt-4 bg-[#e6f7f6] border border-[#4db4ac] rounded-lg p-4">
-              <p className="text-[#4db4ac] mb-2" style={{ fontSize: '13px', fontWeight: 600 }}>
-                Selected Candidate Details:
-              </p>
+              <p className="text-[#4db4ac] mb-2" style={{ fontSize: '13px', fontWeight: 600 }}>Selected Candidate:</p>
               <div className="grid grid-cols-3 gap-3 text-[#222222]" style={{ fontSize: '13px' }}>
-                <div>
-                  <span className="text-[#555555]">ID: </span>
-                  <span style={{ fontWeight: 600 }}>{selectedCandidate.id}</span>
-                </div>
-                <div>
-                  <span className="text-[#555555]">Email: </span>
-                  <span>{selectedCandidate.email}</span>
-                </div>
-                <div>
-                  <span className="text-[#555555]">Phone: </span>
-                  <span>{selectedCandidate.phone}</span>
-                </div>
+                <div><span className="text-[#555555]">ID: </span><span style={{ fontWeight: 600 }}>{selectedCandidate.id}</span></div>
+                <div><span className="text-[#555555]">Email: </span>{selectedCandidate.email}</div>
+                <div><span className="text-[#555555]">Phone: </span>{selectedCandidate.phone}</div>
               </div>
             </div>
           )}
         </Card>
 
-        {/* Marking Assignment Form */}
-        <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6 mb-6">
-          <div className="flex items-center gap-2 mb-4">
-            <FileText className="h-6 w-6 text-[#4db4ac]" />
-            <h2 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
-              Marking Assignment
-            </h2>
+        {/* Marks entry */}
+        <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <FileText className="h-5 w-5 text-[#4db4ac]" />
+            <h2 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '17px' }}>Enter Marks</h2>
           </div>
           <Separator className="mb-4" />
-
-          <div className="grid grid-cols-3 gap-4 mb-4">
-            <div>
-              <Label className="text-[#222222] mb-2 block" style={{ fontSize: '14px', fontWeight: 600 }}>
-                Part 1 Marks (Max: 30) *
-              </Label>
-              <Input
-                type="number"
-                min="0"
-                max="30"
-                placeholder="0"
-                value={marks.part1}
-                onChange={(e) => setMarks({ ...marks, part1: e.target.value })}
-                className="w-full bg-white border-[#d0d0d0] rounded-lg focus:border-[#4db4ac] focus:ring-[#4db4ac]"
-              />
-            </div>
-            <div>
-              <Label className="text-[#222222] mb-2 block" style={{ fontSize: '14px', fontWeight: 600 }}>
-                Part 2 Marks (Max: 30) *
-              </Label>
-              <Input
-                type="number"
-                min="0"
-                max="30"
-                placeholder="0"
-                value={marks.part2}
-                onChange={(e) => setMarks({ ...marks, part2: e.target.value })}
-                className="w-full bg-white border-[#d0d0d0] rounded-lg focus:border-[#4db4ac] focus:ring-[#4db4ac]"
-              />
-            </div>
-            <div>
-              <Label className="text-[#222222] mb-2 block" style={{ fontSize: '14px', fontWeight: 600 }}>
-                Part 3 Marks (Max: 40) *
-              </Label>
-              <Input
-                type="number"
-                min="0"
-                max="40"
-                placeholder="0"
-                value={marks.part3}
-                onChange={(e) => setMarks({ ...marks, part3: e.target.value })}
-                className="w-full bg-white border-[#d0d0d0] rounded-lg focus:border-[#4db4ac] focus:ring-[#4db4ac]"
-              />
-            </div>
+          <div className="space-y-3 mb-5">
+            {criteria.map((criterion, idx) => (
+              <div key={criterion.id} className="grid grid-cols-[1fr_200px] gap-4 items-center p-3 bg-[#f9f9f9] border border-[#e0e0e0] rounded-lg">
+                <div>
+                  <p className="text-[#555555]" style={{ fontSize: '11px', fontWeight: 600 }}>CRITERION {idx + 1}</p>
+                  <p className="text-[#222222]" style={{ fontSize: '15px', fontWeight: 600 }}>{criterion.name}</p>
+                  <p className="text-[#999999]" style={{ fontSize: '12px' }}>Maximum: {criterion.maxMarks} marks</p>
+                </div>
+                <div>
+                  <Label className="text-[#222222] mb-1 block" style={{ fontSize: '13px', fontWeight: 600 }}>
+                    Marks (0 – {criterion.maxMarks})
+                  </Label>
+                  <Input
+                    type="number" min="0" max={criterion.maxMarks} placeholder="0"
+                    value={marks[criterion.id] || ''}
+                    onChange={e => setMarks(prev => ({ ...prev, [criterion.id]: e.target.value }))}
+                    disabled={!selectedCandidateId}
+                    className="w-full bg-white border-[#d0d0d0] rounded-lg focus:border-[#4db4ac]"
+                  />
+                </div>
+              </div>
+            ))}
           </div>
 
-          <div className="bg-[#4db4ac] bg-opacity-10 border-2 border-[#4db4ac] rounded-lg p-4">
-            <p className="text-[#4db4ac] mb-1" style={{ fontSize: '14px', fontWeight: 600 }}>
-              Total Marks
+          {/* Total */}
+          <div className="bg-[#4db4ac] bg-opacity-10 border-2 border-[#4db4ac] rounded-lg p-4 mb-5 flex items-center justify-between">
+            <div>
+              <p className="text-[#4db4ac]" style={{ fontSize: '14px', fontWeight: 600 }}>Total Marks</p>
+              <p className="text-[#555555]" style={{ fontSize: '12px' }}>Across {criteria.length} criteria</p>
+            </div>
+            <p className="text-[#4db4ac]" style={{ fontSize: '36px', fontWeight: 700 }}>
+              {currentTotal} <span style={{ fontSize: '20px', fontWeight: 400 }}>/ {maxTotal}</span>
             </p>
-            <p className="text-[#4db4ac]" style={{ fontSize: '32px', fontWeight: 700 }}>
-              {totalMarks} / 100
-            </p>
+          </div>
+
+          {/* Comments */}
+          <div className="mb-5">
+            <Label className="text-[#222222] mb-2 block" style={{ fontSize: '14px', fontWeight: 600 }}>
+              Additional Comments
+            </Label>
+            <Textarea
+              placeholder="Enter observations about the candidate's performance…"
+              value={additionalComments}
+              onChange={e => setAdditionalComments(e.target.value)}
+              className="w-full min-h-[90px] bg-white border-[#d0d0d0] rounded-lg focus:border-[#4db4ac]"
+              style={{ fontSize: '14px' }}
+            />
+          </div>
+
+          <div className="flex gap-3 justify-end">
+            <Button variant="outline" onClick={onBack} className="border-[#d0d0d0] text-[#555555]">
+              Cancel
+            </Button>
+            <Button
+              className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white px-6"
+              onClick={handleAssignMarks}
+              disabled={!selectedCandidateId || savingMarks}
+            >
+              {savingMarks
+                ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving…</>
+                : <><Save className="h-4 w-4 mr-2" />Save Marks</>}
+            </Button>
           </div>
         </Card>
 
-        {/* Additional Comments */}
-        <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6 mb-6">
-          <h3 className="text-[#222222] mb-4" style={{ fontWeight: 700, fontSize: '18px' }}>
-            Additional Comments
-          </h3>
-          <Separator className="mb-4" />
-
-          <Textarea
-            placeholder="Enter any additional comments or observations about the candidate's performance..."
-            value={additionalComments}
-            onChange={(e) => setAdditionalComments(e.target.value)}
-            className="w-full min-h-[120px] bg-white border-[#d0d0d0] rounded-lg focus:border-[#4db4ac] focus:ring-[#4db4ac]"
-            style={{ fontSize: '14px' }}
-          />
-        </Card>
-
-        {/* Action Buttons */}
-        <div className="flex gap-4 justify-end">
-          <Button
-            variant="outline"
-            className="border-[#d0d0d0] text-[#555555] hover:bg-[#f0f0f0] px-6"
-            onClick={onBack}
-          >
-            Cancel
-          </Button>
-          <Button
-            className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white px-6"
-            onClick={handleAssignMarks}
-          >
-            <Save className="h-4 w-4 mr-2" />
-            Assign Marks
-          </Button>
-        </div>
+        {/* Saved results */}
+        {savedResults.length > 0 && (
+          <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <CheckCircle className="h-5 w-5 text-green-600" />
+              <h2 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '17px' }}>
+                Marked Candidates ({savedResults.length})
+              </h2>
+            </div>
+            <Separator className="mb-3" />
+            <div className="space-y-2">
+              {savedResults.map(r => (
+                <div key={r.candidateId} className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div>
+                    <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>{r.name}</p>
+                    <p className="text-[#555555]" style={{ fontSize: '12px' }}>ID: {r.candidateId}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-green-700" style={{ fontSize: '18px', fontWeight: 700 }}>{r.total} / {r.max}</p>
+                    <p className="text-green-500" style={{ fontSize: '11px' }}>
+                      {r.max > 0 ? Math.round((r.total / r.max) * 100) : 0}%
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
       </div>
     </div>
   );

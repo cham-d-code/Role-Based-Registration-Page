@@ -109,6 +109,20 @@ public class InterviewSessionService {
         participantRepo.save(p);
     }
 
+    /**
+     * Caller voluntarily leaves the session.
+     * Their marks will still be kept but excluded from average calculations.
+     */
+    @Transactional
+    public void leaveSession(UUID interviewId, UUID callerId) {
+        InterviewSession session = sessionRepo.findByInterviewIdAndActiveTrue(interviewId)
+                .orElseThrow(() -> new RuntimeException("No active session"));
+        participantRepo.findBySessionIdAndUserId(session.getId(), callerId).ifPresent(p -> {
+            p.setLeftSession(true);
+            participantRepo.save(p);
+        });
+    }
+
     /** Remove an active participant back to waiting */
     @Transactional
     public void removeParticipant(UUID interviewId, UUID targetUserId) {

@@ -1,0 +1,227 @@
+package com.tempstaff.service;
+
+import com.tempstaff.dto.request.SaveMarkingSchemeRequest;
+import com.tempstaff.dto.request.SubmitMarksRequest;
+import com.tempstaff.dto.response.InterviewReportResponse;
+import com.tempstaff.dto.response.MarkingSchemeResponse;
+import com.tempstaff.entity.*;
+import com.tempstaff.repository.*;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class MarkingService {
+
+    private final MarkingSchemeRepository schemeRepo;
+    private final CandidateMarkRepository markRepo;
+    private final InterviewRepository interviewRepo;
+    private final InterviewSessionRepository sessionRepo;
+    private final SessionParticipantRepository participantRepo;
+    private final UserRepository userRepo;
+    private final CandidateRepository candidateRepo;
+
+    // ─── Scheme ───────────────────────────────────────────────────────────────
+
+    @Transactional
+    public MarkingSchemeResponse saveScheme(UUID interviewId, UUID creatorId,
+                                            SaveMarkingSchemeRequest req) {
+        Interview interview = interviewRepo.findById(interviewId)
+                .orElseThrow(() -> new RuntimeException("Interview not found"));
+        User creator = userRepo.findById(creatorId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Delete old scheme if exists
+        schemeRepo.findByInterviewId(interviewId).ifPresent(schemeRepo::delete);
+
+        MarkingScheme scheme = MarkingScheme.builder()
+                .interview(interview)
+                .createdBy(creator)
+                .build();
+        scheme = schemeRepo.save(scheme);
+
+        List<MarkingCriterion> criteriaEntities = new ArrayList<>();
+        for (int i = 0; i < req.getCriteria().size(); i++) {
+            SaveMarkingSchemeRequest.CriterionInput c = req.getCriteria().get(i);
+            criteriaEntities.add(MarkingCriterion.builder()
+                    .scheme(scheme)
+                    .name(c.getName())
+                    .maxMarks(c.getMaxMarks())
+                    .displayOrder(i)
+                    .build());
+        }
+        scheme.getCriteria().addAll(criteriaEntities);
+        scheme = schemeRepo.save(scheme);
+
+        return toSchemeResponse(scheme);
+    }
+
+    @Transactional(readOnly = true)
+    public Optional<MarkingSchemeResponse> getScheme(UUID interviewId) {
+        return schemeRepo.findByInterviewId(interviewId).map(this::toSchemeResponse);
+    }
+
+    // ─── Submit marks ─────────────────────────────────────────────────────────
+
+    @Transactional
+    public void submitMarks(UUID interviewId, UUID candidateId, UUID markerId,
+                            SubmitMarksRequest req) {
+        InterviewSession session = sessionRepo.findByInterviewIdAndActiveTrue(interviewId)
+                .orElseThrow(() -> new RuntimeException("No active session for this interview"));
+
+        Candidate candidate = candidateRepo.findById(candidateId)
+                .orElseThrow(() -> new RuntimeException("Candidate not found"));
+        User marker = userRepo.findById(markerId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        MarkingScheme scheme = schemeRepo.findByInterviewId(interviewId)
+                .orElseThrow(() -> new RuntimeException("No marking scheme for this interview"));
+
+        Map<UUID, MarkingCriterion> criterionMap = scheme.getCriteria().stream()
+                .collect(Collectors.toMap(MarkingCriterion::getId, c -> c));
+
+        // Replace existing marks from this marker for this candidate
+        markRepo.deleteBySessionIdAndCandidateIdAndMarkerId(session.getId(), candidateId, markerId);
+
+        for (SubmitMarksRequest.MarkEntry entry : req.getMarks()) {
+            UUID criterionId = UUID.fromString(entry.getCriterionId());
+            MarkingCriterion criterion = criterionMap.get(criterionId);
+            if (criterion == null) continue;
+
+            markRepo.save(CandidateMark.builder()
+                    .session(session)
+                    .candidate(candidate)
+                    .marker(marker)
+                    .criterion(criterion)
+                    .marksGiven(Math.min(entry.getMarksGiven(), criterion.getMaxMarks()))
+                    .comments(req.getComments())
+                    .build());
+        }
+    }
+
+    // ─── Report ───────────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public InterviewReportResponse getReport(UUID interviewId) {
+        Interview interview = interviewRepo.findById(interviewId)
+                .orElseThrow(() -> new RuntimeException("Interview not found"));
+
+        // Use most recent session (active or ended)
+        InterviewSession session = sessionRepo
+                .findTopByInterviewIdOrderByStartedAtDesc(interviewId)
+                .orElseThrow(() -> new RuntimeException("No session found for this interview"));
+
+        MarkingScheme scheme = schemeRepo.findByInterviewId(interviewId)
+                .orElseThrow(() -> new RuntimeException("No marking scheme for this interview"));
+
+        List<MarkingSchemeResponse.CriterionResponse> criteriaList = scheme.getCriteria().stream()
+                .map(c -> MarkingSchemeResponse.CriterionResponse.builder()
+                        .id(c.getId().toString())
+                        .name(c.getName())
+                        .maxMarks(c.getMaxMarks())
+                        .displayOrder(c.getDisplayOrder())
+                        .build())
+                .collect(Collectors.toList());
+
+        int totalMaxMarks = scheme.getCriteria().stream().mapToInt(MarkingCriterion::getMaxMarks).sum();
+
+        // Find markers who DIDN'T leave (exclude left_session = true)
+        Set<UUID> leftMarkers = participantRepo.findBySessionId(session.getId()).stream()
+                .filter(SessionParticipant::isLeftSession)
+                .map(p -> p.getUser().getId())
+                .collect(Collectors.toSet());
+
+        // All marks for this session
+        List<CandidateMark> allMarks = markRepo.findBySessionId(session.getId());
+
+        // Group by candidate
+        Map<UUID, List<CandidateMark>> byCand = allMarks.stream()
+                .collect(Collectors.groupingBy(m -> m.getCandidate().getId()));
+
+        // All candidates for this interview
+        List<Candidate> candidates = candidateRepo.findByInterviewId(interviewId);
+
+        List<InterviewReportResponse.CandidateReport> candReports = new ArrayList<>();
+        for (Candidate cand : candidates) {
+            List<CandidateMark> candMarks = byCand.getOrDefault(cand.getId(), Collections.emptyList());
+
+            // Group by marker, excluding those who left
+            Map<UUID, List<CandidateMark>> byMarker = candMarks.stream()
+                    .filter(m -> !leftMarkers.contains(m.getMarker().getId()))
+                    .collect(Collectors.groupingBy(m -> m.getMarker().getId()));
+
+            List<InterviewReportResponse.MarkerResult> markerResults = new ArrayList<>();
+            for (Map.Entry<UUID, List<CandidateMark>> entry : byMarker.entrySet()) {
+                User marker = entry.getValue().get(0).getMarker();
+                Map<String, Integer> marksByCriterion = entry.getValue().stream()
+                        .collect(Collectors.toMap(
+                                m -> m.getCriterion().getId().toString(),
+                                CandidateMark::getMarksGiven
+                        ));
+                int total = marksByCriterion.values().stream().mapToInt(Integer::intValue).sum();
+                String comments = entry.getValue().stream()
+                        .map(CandidateMark::getComments).filter(Objects::nonNull)
+                        .findFirst().orElse(null);
+
+                markerResults.add(InterviewReportResponse.MarkerResult.builder()
+                        .markerId(marker.getId().toString())
+                        .markerName(marker.getFullName())
+                        .markerRole(marker.getRole().name())
+                        .marksByCriterion(marksByCriterion)
+                        .total(total)
+                        .comments(comments)
+                        .build());
+            }
+
+            double avgTotal = markerResults.stream()
+                    .mapToInt(InterviewReportResponse.MarkerResult::getTotal)
+                    .average().orElse(0.0);
+
+            candReports.add(InterviewReportResponse.CandidateReport.builder()
+                    .candidateId(cand.getId().toString())
+                    .candidateName(cand.getName())
+                    .candidateEmail(cand.getEmail())
+                    .markerResults(markerResults)
+                    .averageTotal(Math.round(avgTotal * 10.0) / 10.0)
+                    .maxTotal(totalMaxMarks)
+                    .build());
+        }
+
+        // Sort by average descending
+        candReports.sort(Comparator.comparingDouble(InterviewReportResponse.CandidateReport::getAverageTotal).reversed());
+
+        return InterviewReportResponse.builder()
+                .interviewId(interview.getId().toString())
+                .interviewNumber(interview.getInterviewNumber())
+                .sessionId(session.getId().toString())
+                .criteria(criteriaList)
+                .totalMaxMarks(totalMaxMarks)
+                .candidates(candReports)
+                .build();
+    }
+
+    // ─── Helpers ──────────────────────────────────────────────────────────────
+
+    private MarkingSchemeResponse toSchemeResponse(MarkingScheme s) {
+        List<MarkingSchemeResponse.CriterionResponse> cList = s.getCriteria().stream()
+                .map(c -> MarkingSchemeResponse.CriterionResponse.builder()
+                        .id(c.getId().toString())
+                        .name(c.getName())
+                        .maxMarks(c.getMaxMarks())
+                        .displayOrder(c.getDisplayOrder())
+                        .build())
+                .collect(Collectors.toList());
+        int total = s.getCriteria().stream().mapToInt(MarkingCriterion::getMaxMarks).sum();
+        return MarkingSchemeResponse.builder()
+                .schemeId(s.getId().toString())
+                .interviewId(s.getInterview().getId().toString())
+                .createdByName(s.getCreatedBy().getFullName())
+                .criteria(cList)
+                .totalMaxMarks(total)
+                .build();
+    }
+}

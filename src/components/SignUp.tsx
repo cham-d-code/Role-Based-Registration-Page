@@ -21,6 +21,8 @@ interface ValidationErrors {
   confirmPassword?: string;
   role?: string;
   subjects?: string;
+  contractStartDate?: string;
+  contractEndDate?: string;
 }
 
 export default function SignUp({ onSwitchToSignIn }: SignUpProps) {
@@ -37,7 +39,9 @@ export default function SignUp({ onSwitchToSignIn }: SignUpProps) {
     mobile: '',
     password: '',
     confirmPassword: '',
-    role: ''
+    role: '',
+    contractStartDate: '',
+    contractEndDate: ''
   });
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>([]);
 
@@ -123,6 +127,14 @@ export default function SignUp({ onSwitchToSignIn }: SignUpProps) {
       newErrors.subjects = 'Please select at least one preferred subject';
     }
 
+    if (formData.role === 'staff') {
+      if (!formData.contractStartDate) newErrors.contractStartDate = 'Contract start date is required';
+      if (!formData.contractEndDate) newErrors.contractEndDate = 'Contract end date is required';
+      if (formData.contractStartDate && formData.contractEndDate && formData.contractEndDate <= formData.contractStartDate) {
+        newErrors.contractEndDate = 'End date must be after start date';
+      }
+    }
+
     setErrors(newErrors);
     return !Object.values(newErrors).some(error => error !== undefined);
   };
@@ -166,7 +178,9 @@ export default function SignUp({ onSwitchToSignIn }: SignUpProps) {
       mobile: true,
       password: true,
       confirmPassword: true,
-      role: true
+      role: true,
+      contractStartDate: true,
+      contractEndDate: true
     });
 
     if (!validateForm()) {
@@ -183,7 +197,11 @@ export default function SignUp({ onSwitchToSignIn }: SignUpProps) {
         fullName: formData.fullName,
         mobile: formData.mobile,
         role: formData.role,
-        preferredSubjects: selectedSubjects
+        preferredSubjects: selectedSubjects,
+        ...(formData.role === 'staff' && {
+          contractStartDate: formData.contractStartDate,
+          contractEndDate: formData.contractEndDate
+        })
       });
 
       if (result.success) {
@@ -532,6 +550,46 @@ export default function SignUp({ onSwitchToSignIn }: SignUpProps) {
               </p>
             )}
           </div>
+
+          {/* Contract Dates - Only for Temporary Staff */}
+          {formData.role === 'staff' && (
+            <div className="grid grid-cols-2 gap-4 pt-2">
+              <div className="space-y-2">
+                <Label className="text-[#555555]">Contract Start Date</Label>
+                <Input
+                  type="date"
+                  value={formData.contractStartDate}
+                  onChange={e => handleChange('contractStartDate', e.target.value)}
+                  onBlur={() => handleBlur('contractStartDate')}
+                  className={`border rounded-xl h-12 focus:ring-1 transition-colors ${touched.contractStartDate && errors.contractStartDate
+                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
+                    : 'border-[#e0e0e0] focus:border-[#4db4ac] focus:ring-[#4db4ac]'}`}
+                />
+                {touched.contractStartDate && errors.contractStartDate && (
+                  <p className="text-red-500 flex items-center gap-1" style={{ fontSize: '12px' }}>
+                    <AlertCircle className="h-3 w-3" />{errors.contractStartDate}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label className="text-[#555555]">Contract End Date</Label>
+                <Input
+                  type="date"
+                  value={formData.contractEndDate}
+                  onChange={e => handleChange('contractEndDate', e.target.value)}
+                  onBlur={() => handleBlur('contractEndDate')}
+                  className={`border rounded-xl h-12 focus:ring-1 transition-colors ${touched.contractEndDate && errors.contractEndDate
+                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
+                    : 'border-[#e0e0e0] focus:border-[#4db4ac] focus:ring-[#4db4ac]'}`}
+                />
+                {touched.contractEndDate && errors.contractEndDate && (
+                  <p className="text-red-500 flex items-center gap-1" style={{ fontSize: '12px' }}>
+                    <AlertCircle className="h-3 w-3" />{errors.contractEndDate}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Preferred Subjects - Only for Temporary Staff */}
           {formData.role === 'staff' && (

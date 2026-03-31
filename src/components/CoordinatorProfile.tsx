@@ -24,7 +24,8 @@ import {
   Send,
   Play,
   Download,
-  CalendarCheck
+  CalendarCheck,
+  Loader2
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -99,6 +100,9 @@ interface StaffMember {
   id: string;
   name: string;
   email: string;
+  phone?: string;
+  contractStartDate?: string;
+  contractEndDate?: string;
   preferredSubjects: string[];
   mentor?: string;
   hasJobDescription: boolean;
@@ -355,23 +359,38 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
   }, [activeMenu]);
 
   // FR9, FR10, FR11, FR12: Staff members
-  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([
-    {
-      id: 'STAFF001',
-      name: 'K.M. Silva',
-      email: 'km.silva@kln.ac.lk',
-      preferredSubjects: ['Marketing Management', 'Brand Management'],
-      mentor: 'Dr. T. Mahanama',
-      hasJobDescription: true
-    },
-    {
-      id: 'STAFF002',
-      name: 'R.P. Fernando',
-      email: 'rp.fernando@kln.ac.lk',
-      preferredSubjects: ['Operations Management', 'Supply Chain'],
-      hasJobDescription: false
+  const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
+  const [loadingStaff, setLoadingStaff] = useState(false);
+
+  useEffect(() => {
+    if (activeMenu === 'staff' || activeMenu === 'mentors') {
+      setLoadingStaff(true);
+      import('../services/api').then(api => {
+        api.getApprovedStaff()
+          .then(data => {
+            setStaffMembers(prev => {
+              // Preserve any local state (hasJobDescription, preferencesRequested, mentor) from existing entries
+              const existingMap = Object.fromEntries(prev.map(s => [s.id, s]));
+              return data.map(u => ({
+                id: u.id,
+                name: u.fullName,
+                email: u.email,
+                phone: u.mobile,
+                contractStartDate: u.contractStartDate,
+                contractEndDate: u.contractEndDate,
+                preferredSubjects: u.preferredSubjects ?? [],
+                hasJobDescription: existingMap[u.id]?.hasJobDescription ?? false,
+                preferencesRequested: existingMap[u.id]?.preferencesRequested ?? false,
+                mentor: existingMap[u.id]?.mentor,
+                preferredModules: existingMap[u.id]?.preferredModules,
+              }));
+            });
+          })
+          .catch(err => console.error('Failed to fetch staff:', err))
+          .finally(() => setLoadingStaff(false));
+      });
     }
-  ]);
+  }, [activeMenu]);
 
   // Sample interview candidates data
   const upcomingInterviewCandidates = [
@@ -1314,6 +1333,20 @@ University of Kelaniya
               </div>
               <Separator className="mb-4" />
 
+              {loadingStaff && (
+                <div className="flex items-center justify-center py-8 gap-3 text-[#4db4ac]">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span style={{ fontSize: '14px' }}>Loading staff...</span>
+                </div>
+              )}
+
+              {!loadingStaff && staffMembers.length === 0 && (
+                <div className="text-center py-8">
+                  <Users className="h-10 w-10 text-[#d0d0d0] mx-auto mb-2" />
+                  <p className="text-[#999999]" style={{ fontSize: '14px' }}>No approved temporary staff yet.</p>
+                </div>
+              )}
+
               <div className="space-y-4">
                 {staffMembers.map((staff) => (
                   <Card
@@ -1331,6 +1364,20 @@ University of Kelaniya
                             <Mail className="h-4 w-4 text-[#4db4ac]" />
                             <span>{staff.email}</span>
                           </div>
+                          {staff.phone && (
+                            <div className="flex items-center gap-2 text-[#555555]" style={{ fontSize: '13px' }}>
+                              <Phone className="h-4 w-4 text-[#4db4ac]" />
+                              <span>{staff.phone}</span>
+                            </div>
+                          )}
+                          {(staff.contractStartDate || staff.contractEndDate) && (
+                            <div className="flex items-center gap-2 text-[#555555]" style={{ fontSize: '13px' }}>
+                              <Calendar className="h-4 w-4 text-[#4db4ac]" />
+                              <span>
+                                Contract: {staff.contractStartDate ?? '—'} → {staff.contractEndDate ?? '—'}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
 

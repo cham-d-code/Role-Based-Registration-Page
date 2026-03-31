@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, ClipboardCheck, FileText, BellRing, UserIcon, ChevronDown, Settings, LogOut, Mail, Phone, Calendar, Award, Eye, Check, X, AlertCircle, Clock, Download, Send, Archive, Edit, DollarSign, CheckCircle, Play, XCircle } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardCheck, FileText, BellRing, UserIcon, ChevronDown, Settings, LogOut, Mail, Phone, Calendar, Eye, Clock, Archive, Edit, DollarSign, CheckCircle, XCircle, BarChart2, Loader2 } from 'lucide-react';
+import { getInterviewReport, InterviewReport } from '../services/api';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -40,7 +41,11 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     avatarUrl: '',
     initials: '...'
   });
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  // Interview report state
+  const [reportData, setReportData] = useState<InterviewReport | null>(null);
+  const [reportInterviewId, setReportInterviewId] = useState<string | null>(null);
+  const [loadingReport, setLoadingReport] = useState(false);
+  const [reportError, setReportError] = useState('');
 
   // Fetch real profile data from backend on mount
   useEffect(() => {
@@ -77,122 +82,41 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     });
   }, []);
 
-  // Temporary Staff with Mentors
-  const temporaryStaff = [
-    {
-      id: 'STAFF001',
-      name: 'Mr. Saman Perera',
-      email: 'saman.perera@kln.ac.lk',
-      phone: '+94 77 123 4567',
-      module: 'Marketing Management',
-      mentor: 'Dr. T. Mahanama',
-      contractExpiry: '2025-12-31',
-      status: 'Active',
-      jobDescription: {
-        staffId: 'STAFF001',
-        staffName: 'Mr. Saman Perera',
-        tasks: [
-          { id: '1', description: 'Conduct tutorial sessions for Marketing Management (MKT 301)', type: 'academic' as const },
-          { id: '2', description: 'Prepare and grade assignments for Consumer Behavior course', type: 'academic' as const },
-          { id: '3', description: 'Assist with student registration and documentation', type: 'administrative' as const },
-          { id: '4', description: 'Support department events and workshops', type: 'administrative' as const }
-        ],
-        createdDate: 'Oct 15, 2025',
-        createdBy: 'Dr. Thilini Mahanama (Coordinator)'
-      }
-    },
-    {
-      id: 'STAFF002',
-      name: 'Ms. Nisha Fernando',
-      email: 'nisha.fernando@kln.ac.lk',
-      phone: '+94 76 234 5678',
-      module: 'Human Resource Management',
-      mentor: 'Dr. R. Fernando',
-      contractExpiry: '2025-11-30',
-      status: 'Active',
-      jobDescription: {
-        staffId: 'STAFF002',
-        staffName: 'Ms. Nisha Fernando',
-        tasks: [
-          { id: '1', description: 'Conduct tutorial sessions for HR Management (HRM 402)', type: 'academic' as const },
-          { id: '2', description: 'Grade examination papers for Organizational Behavior', type: 'academic' as const },
-          { id: '3', description: 'Maintain student attendance records', type: 'administrative' as const },
-          { id: '4', description: 'Coordinate department meetings and seminars', type: 'administrative' as const }
-        ],
-        createdDate: 'Oct 14, 2025',
-        createdBy: 'Dr. Thilini Mahanama (Coordinator)'
-      }
-    },
-    {
-      id: 'STAFF003',
-      name: 'Mr. Kamal Silva',
-      email: 'kamal.silva@kln.ac.lk',
-      phone: '+94 75 345 6789',
-      module: 'Operations Management',
-      mentor: 'Dr. T. Mahanama',
-      contractExpiry: '2025-10-28',
-      status: 'Active',
-      jobDescription: {
-        staffId: 'STAFF003',
-        staffName: 'Mr. Kamal Silva',
-        tasks: [
-          { id: '1', description: 'Conduct lab sessions for Operations Management (OPS 303)', type: 'academic' as const },
-          { id: '2', description: 'Supervise student projects and presentations', type: 'academic' as const },
-          { id: '3', description: 'Prepare course materials and handouts', type: 'academic' as const },
-          { id: '4', description: 'Assist with department inventory management', type: 'administrative' as const }
-        ],
-        createdDate: 'Oct 10, 2025',
-        createdBy: 'Dr. Thilini Mahanama (Coordinator)'
-      }
-    },
-    {
-      id: 'STAFF004',
-      name: 'Ms. Priya Jayawardena',
-      email: 'priya.j@kln.ac.lk',
-      phone: '+94 74 456 7890',
-      module: 'Marketing Management',
-      mentor: 'Dr. S. Wijesinghe',
-      contractExpiry: '2026-01-15',
-      status: 'Active',
-      jobDescription: {
-        staffId: 'STAFF004',
-        staffName: 'Ms. Priya Jayawardena',
-        tasks: [
-          { id: '1', description: 'Conduct tutorial sessions for Digital Marketing (DM 401)', type: 'academic' as const },
-          { id: '2', description: 'Guide students in marketing research projects', type: 'academic' as const },
-          { id: '3', description: 'Update course content and learning materials', type: 'administrative' as const }
-        ],
-        createdDate: 'Oct 16, 2025',
-        createdBy: 'Dr. Thilini Mahanama (Coordinator)'
-      }
-    },
-    {
-      id: 'STAFF005',
-      name: 'Mr. Dilshan Perera',
-      email: 'dilshan.p@kln.ac.lk',
-      phone: '+94 73 567 8901',
-      module: 'Business Analytics',
-      mentor: 'Dr. R. Fernando',
-      contractExpiry: '2025-11-20',
-      status: 'Active',
-      jobDescription: {
-        staffId: 'STAFF005',
-        staffName: 'Mr. Dilshan Perera',
-        tasks: [
-          { id: '1', description: 'Conduct lab sessions for Business Analytics (BA 501)', type: 'academic' as const },
-          { id: '2', description: 'Assist students with data analysis projects', type: 'academic' as const },
-          { id: '3', description: 'Grade assignments and provide feedback', type: 'academic' as const },
-          { id: '4', description: 'Maintain lab equipment and software', type: 'administrative' as const },
-          { id: '5', description: 'Coordinate with IT department for technical support', type: 'administrative' as const }
-        ],
-        createdDate: 'Oct 12, 2025',
-        createdBy: 'Dr. Thilini Mahanama (Coordinator)'
-      }
-    }
-  ];
+  // Temporary Staff — loaded from backend
+  const [temporaryStaff, setTemporaryStaff] = useState<{
+    id: string;
+    name: string;
+    email: string;
+    phone?: string;
+    contractStartDate?: string;
+    contractEndDate?: string;
+  }[]>([]);
+  const [loadingStaff, setLoadingStaff] = useState(false);
 
   // Registration requests data
   const [registrationRequests, setRegistrationRequests] = useState<any[]>([]);
+
+  // Fetch staff list from backend
+  useEffect(() => {
+    if (activeMenu === 'staff') {
+      setLoadingStaff(true);
+      import('../services/api').then(api => {
+        api.getApprovedStaff()
+          .then(data => {
+            setTemporaryStaff(data.map(u => ({
+              id: u.id,
+              name: u.fullName,
+              email: u.email,
+              phone: u.mobile,
+              contractStartDate: u.contractStartDate,
+              contractEndDate: u.contractEndDate,
+            })));
+          })
+          .catch(err => console.error('Failed to fetch staff:', err))
+          .finally(() => setLoadingStaff(false));
+      });
+    }
+  }, [activeMenu]);
 
   // Fetch pending requests
   useEffect(() => {
@@ -356,14 +280,26 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     }
   ];
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setUploadedFile(file);
-      // Simulate importing candidates from Excel
-      alert(`File "${file.name}" uploaded successfully! Candidates imported into interview portal.`);
+  async function handleViewReport(interviewId: string) {
+    if (reportInterviewId === interviewId) {
+      // Toggle off
+      setReportInterviewId(null);
+      setReportData(null);
+      return;
     }
-  };
+    setReportInterviewId(interviewId);
+    setReportData(null);
+    setReportError('');
+    setLoadingReport(true);
+    try {
+      const data = await getInterviewReport(interviewId);
+      setReportData(data);
+    } catch (e: any) {
+      setReportError(e.message || 'Failed to load report.');
+    } finally {
+      setLoadingReport(false);
+    }
+  }
 
   const handleProfileSave = (updatedProfile: any) => {
     setProfileData({
@@ -606,10 +542,27 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                 </Badge>
               </div>
 
+              {loadingStaff && (
+                <div className="flex items-center justify-center py-12 gap-3 text-[#4db4ac]">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                  <span style={{ fontSize: '14px' }}>Loading staff…</span>
+                </div>
+              )}
+
+              {!loadingStaff && temporaryStaff.length === 0 && (
+                <div className="text-center py-12">
+                  <Users className="h-12 w-12 text-[#d0d0d0] mx-auto mb-3" />
+                  <p className="text-[#999999]" style={{ fontSize: '14px' }}>No approved temporary staff yet.</p>
+                </div>
+              )}
+
               <div className="space-y-4">
                 {temporaryStaff.map((staff) => {
-                  const daysUntilExpiry = Math.ceil((new Date(staff.contractExpiry).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-                  const isExpiringSoon = daysUntilExpiry <= 30;
+                  const endDate = staff.contractEndDate ? new Date(staff.contractEndDate) : null;
+                  const daysUntilExpiry = endDate
+                    ? Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+                    : null;
+                  const isExpiringSoon = daysUntilExpiry !== null && daysUntilExpiry <= 30;
 
                   return (
                     <Card
@@ -622,82 +575,95 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                           <div className="flex items-start gap-4">
                             <Avatar className="h-16 w-16 border-2 border-[#4db4ac]">
                               <AvatarFallback className="bg-[#4db4ac] text-white" style={{ fontSize: '18px', fontWeight: 600 }}>
-                                {staff.name.split(' ').map(n => n[0]).join('')}
+                                {staff.name.split(' ').filter(Boolean).map(n => n[0]).slice(0, 2).join('')}
                               </AvatarFallback>
                             </Avatar>
                             <div className="flex-1">
                               <h3 className="text-[#222222] mb-1" style={{ fontSize: '18px', fontWeight: 700 }}>
                                 {staff.name}
                               </h3>
-
                               <div className="flex flex-wrap gap-3 text-[#555555]" style={{ fontSize: '13px' }}>
                                 <div className="flex items-center gap-1">
                                   <Mail className="h-3 w-3 text-[#4db4ac]" />
                                   {staff.email}
                                 </div>
-                                <div className="flex items-center gap-1">
-                                  <Phone className="h-3 w-3 text-[#4db4ac]" />
-                                  {staff.phone}
-                                </div>
+                                {staff.phone && (
+                                  <div className="flex items-center gap-1">
+                                    <Phone className="h-3 w-3 text-[#4db4ac]" />
+                                    {staff.phone}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
                         </div>
 
-                        {/* Staff Details */}
-                        <div className="lg:w-80 space-y-3">
-                          <div className="bg-[#f9f9f9] rounded-lg p-3">
-                            <p className="text-[#555555] mb-1" style={{ fontSize: '11px', fontWeight: 600 }}>
-                              Mentor Assigned
-                            </p>
-                            <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
-                              {staff.mentor}
-                            </p>
-                          </div>
+                        {/* Contract Details + Actions */}
+                        <div className="lg:w-72 space-y-3">
 
-                          <div className="bg-[#f9f9f9] rounded-lg p-3">
-                            <p className="text-[#555555] mb-1" style={{ fontSize: '11px', fontWeight: 600 }}>
-                              Contract Expiry
-                            </p>
-                            <div className="flex items-center gap-2">
-                              <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
-                                {new Date(staff.contractExpiry).toLocaleDateString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  year: 'numeric'
-                                })}
+                          {/* Contract date row */}
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="bg-[#f9f9f9] rounded-lg p-3">
+                              <p className="text-[#555555] mb-1" style={{ fontSize: '11px', fontWeight: 600 }}>CONTRACT START</p>
+                              <p className="text-[#222222]" style={{ fontSize: '13px', fontWeight: 600 }}>
+                                {staff.contractStartDate
+                                  ? new Date(staff.contractStartDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                  : <span className="text-[#999]">Not set</span>}
+                              </p>
+                            </div>
+                            <div className="bg-[#f9f9f9] rounded-lg p-3">
+                              <p className="text-[#555555] mb-1" style={{ fontSize: '11px', fontWeight: 600 }}>CONTRACT END</p>
+                              <p className="text-[#222222]" style={{ fontSize: '13px', fontWeight: 600 }}>
+                                {staff.contractEndDate
+                                  ? new Date(staff.contractEndDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                  : <span className="text-[#999]">Not set</span>}
                               </p>
                             </div>
                           </div>
 
-                          <div className="bg-[#f9f9f9] rounded-lg p-3">
-                            <p className="text-[#555555] mb-1" style={{ fontSize: '11px', fontWeight: 600 }}>
-                              Days Remaining
-                            </p>
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-4 w-4 text-[#4db4ac]" />
-                              <p
-                                className={`${isExpiringSoon ? 'text-red-600' : 'text-[#4db4ac]'}`}
-                                style={{ fontSize: '18px', fontWeight: 700 }}
-                              >
-                                {Math.abs(daysUntilExpiry)}
-                              </p>
-                              <span className="text-[#555555]" style={{ fontSize: '12px' }}>
-                                days
-                              </span>
+                          {/* Countdown */}
+                          {daysUntilExpiry !== null && (
+                            <div className={`rounded-lg p-3 border ${
+                              daysUntilExpiry < 0
+                                ? 'bg-red-50 border-red-200'
+                                : isExpiringSoon
+                                ? 'bg-orange-50 border-orange-200'
+                                : 'bg-green-50 border-green-200'
+                            }`}>
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Clock className={`h-4 w-4 ${daysUntilExpiry < 0 ? 'text-red-500' : isExpiringSoon ? 'text-orange-500' : 'text-green-600'}`} />
+                                  <p className={`font-semibold ${daysUntilExpiry < 0 ? 'text-red-600' : isExpiringSoon ? 'text-orange-600' : 'text-green-700'}`}
+                                    style={{ fontSize: '12px' }}>
+                                    {daysUntilExpiry < 0 ? 'Contract Expired' : 'Days Remaining'}
+                                  </p>
+                                </div>
+                                <span className={`font-bold text-lg ${daysUntilExpiry < 0 ? 'text-red-600' : isExpiringSoon ? 'text-orange-600' : 'text-green-700'}`}>
+                                  {daysUntilExpiry < 0 ? `${Math.abs(daysUntilExpiry)}d ago` : `${daysUntilExpiry}d`}
+                                </span>
+                              </div>
+                              {daysUntilExpiry >= 0 && (
+                                <div className="w-full bg-white/60 rounded-full h-1.5">
+                                  <div
+                                    className={`h-1.5 rounded-full ${isExpiringSoon ? 'bg-orange-400' : 'bg-green-500'}`}
+                                    style={{ width: `${Math.min(100, Math.max(2, (daysUntilExpiry / 365) * 100))}%` }}
+                                  />
+                                </div>
+                              )}
                             </div>
-                          </div>
+                          )}
 
+                          {/* View JD button */}
                           <Button
                             onClick={() => {
                               setSelectedStaffForJd(staff);
                               setViewJdOpen(true);
                             }}
                             className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg w-full"
-                            style={{ fontSize: '12px' }}
+                            style={{ fontSize: '13px' }}
                           >
                             <Eye className="h-4 w-4 mr-2" />
-                            View JD
+                            View Job Description
                           </Button>
                         </div>
                       </div>
@@ -995,29 +961,173 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                       </div>
                     </Card>
 
-                    {/* Approval Actions */}
-                    <div className="bg-[#fff8e1] border-2 border-[#ffd54f] rounded-lg p-4">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-[#222222] mb-1" style={{ fontSize: '14px', fontWeight: 600 }}>
-                            Approval Required
-                          </p>
-                          <p className="text-[#555555]" style={{ fontSize: '13px' }}>
-                            Review the interview results and approve the shortlisted candidates
-                          </p>
+                    {/* Actions row */}
+                    <div className="flex gap-3">
+                      <div className="flex-1 bg-[#fff8e1] border-2 border-[#ffd54f] rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-[#222222] mb-1" style={{ fontSize: '14px', fontWeight: 600 }}>
+                              Approval Required
+                            </p>
+                            <p className="text-[#555555]" style={{ fontSize: '13px' }}>
+                              Review results and approve shortlisted candidates
+                            </p>
+                          </div>
+                          <Button
+                            onClick={() => { setSelectedInterview(interview); setCurrentPage('approvalPage'); }}
+                            className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white ml-4"
+                          >
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Review & Approve
+                          </Button>
                         </div>
-                        <Button
-                          onClick={() => {
-                            setSelectedInterview(interview);
-                            setCurrentPage('approvalPage');
-                          }}
-                          className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
-                        >
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          Review & Approve
-                        </Button>
                       </div>
+
+                      <Button
+                        variant="outline"
+                        onClick={() => handleViewReport(interview.id)}
+                        className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#e6f7f6] self-stretch px-5"
+                      >
+                        <BarChart2 className="h-4 w-4 mr-2" />
+                        {reportInterviewId === interview.id ? 'Hide Report' : 'View Report'}
+                      </Button>
                     </div>
+
+                    {/* Inline report panel */}
+                    {reportInterviewId === interview.id && (
+                      <div className="mt-2">
+                        {loadingReport && (
+                          <div className="flex items-center gap-2 py-6 justify-center text-[#4db4ac]">
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            <span style={{ fontSize: '14px' }}>Loading report…</span>
+                          </div>
+                        )}
+                        {reportError && (
+                          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-600" style={{ fontSize: '13px' }}>
+                            {reportError}
+                          </div>
+                        )}
+                        {reportData && (
+                          <div className="space-y-4">
+                            {/* Criteria legend */}
+                            <div className="bg-[#e6f7f6] border border-[#4db4ac] rounded-lg p-4">
+                              <p className="text-[#4db4ac] font-semibold mb-2" style={{ fontSize: '13px' }}>
+                                Marking Criteria — Max {reportData.totalMaxMarks} pts
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {reportData.criteria.map((c, i) => (
+                                  <span key={c.id} className="bg-white border border-[#4db4ac] text-[#222222] text-xs px-2 py-1 rounded-full">
+                                    {i + 1}. {c.name} <span className="text-[#4db4ac] font-semibold">/{c.maxMarks}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Per-candidate report */}
+                            {reportData.candidates.length === 0 ? (
+                              <div className="text-center py-6 text-[#999]" style={{ fontSize: '14px' }}>
+                                No marks submitted yet.
+                              </div>
+                            ) : reportData.candidates.map((cand, ci) => (
+                              <Card key={cand.candidateId} className="border border-[#e0e0e0] rounded-lg p-4">
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="h-7 w-7 rounded-full bg-[#4db4ac] text-white flex items-center justify-center text-xs font-bold">
+                                      {ci + 1}
+                                    </span>
+                                    <div>
+                                      <p className="text-[#222222] font-semibold" style={{ fontSize: '15px' }}>{cand.candidateName}</p>
+                                      <p className="text-[#555555]" style={{ fontSize: '12px' }}>{cand.candidateEmail}</p>
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-[#4db4ac] font-bold" style={{ fontSize: '20px' }}>
+                                      {cand.averageTotal} <span className="text-[#999] font-normal text-sm">/ {cand.maxTotal} avg</span>
+                                    </p>
+                                    <p className="text-[#555555]" style={{ fontSize: '12px' }}>
+                                      {cand.maxTotal > 0 ? Math.round((cand.averageTotal / cand.maxTotal) * 100) : 0}% average
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {cand.markerResults.length === 0 ? (
+                                  <p className="text-[#999] text-sm">No marks submitted for this candidate.</p>
+                                ) : (
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-sm border-collapse">
+                                      <thead>
+                                        <tr className="bg-[#f9f9f9]">
+                                          <th className="text-left p-2 text-[#555555] font-semibold border border-[#e0e0e0]" style={{ fontSize: '12px' }}>
+                                            Marker
+                                          </th>
+                                          {reportData.criteria.map(c => (
+                                            <th key={c.id} className="p-2 text-center text-[#555555] font-semibold border border-[#e0e0e0]" style={{ fontSize: '12px', minWidth: '80px' }}>
+                                              {c.name}<br /><span className="text-[#4db4ac]">/{c.maxMarks}</span>
+                                            </th>
+                                          ))}
+                                          <th className="p-2 text-center text-[#222222] font-bold border border-[#e0e0e0] bg-[#e6f7f6]" style={{ fontSize: '12px' }}>
+                                            Total<br /><span className="text-[#4db4ac]">/{reportData.totalMaxMarks}</span>
+                                          </th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {cand.markerResults.map(mr => (
+                                          <tr key={mr.markerId} className="hover:bg-[#f9f9f9]">
+                                            <td className="p-2 border border-[#e0e0e0]">
+                                              <p className="font-semibold text-[#222222]" style={{ fontSize: '13px' }}>{mr.markerName}</p>
+                                              <p className="text-[#999]" style={{ fontSize: '11px' }}>{mr.markerRole}</p>
+                                            </td>
+                                            {reportData.criteria.map(c => (
+                                              <td key={c.id} className="p-2 text-center border border-[#e0e0e0] text-[#222222] font-semibold">
+                                                {mr.marksByCriterion[c.id] ?? '—'}
+                                              </td>
+                                            ))}
+                                            <td className="p-2 text-center border border-[#e0e0e0] bg-[#e6f7f6] font-bold text-[#4db4ac]">
+                                              {mr.total}
+                                            </td>
+                                          </tr>
+                                        ))}
+                                        {/* Average row */}
+                                        <tr className="bg-[#4db4ac] text-white">
+                                          <td className="p-2 border border-[#3c9a93] font-bold" style={{ fontSize: '13px' }}>
+                                            Average
+                                          </td>
+                                          {reportData.criteria.map(c => {
+                                            const vals = cand.markerResults
+                                              .map(mr => mr.marksByCriterion[c.id])
+                                              .filter((v): v is number => v !== undefined);
+                                            const avg = vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
+                                            return (
+                                              <td key={c.id} className="p-2 text-center border border-[#3c9a93] font-semibold">
+                                                {avg.toFixed(1)}
+                                              </td>
+                                            );
+                                          })}
+                                          <td className="p-2 text-center border border-[#3c9a93] font-bold text-lg">
+                                            {cand.averageTotal}
+                                          </td>
+                                        </tr>
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+
+                                {cand.markerResults.some(mr => mr.comments) && (
+                                  <div className="mt-3 space-y-1">
+                                    <p className="text-[#555555] font-semibold" style={{ fontSize: '12px' }}>Comments:</p>
+                                    {cand.markerResults.filter(mr => mr.comments).map(mr => (
+                                      <div key={mr.markerId} className="bg-[#f9f9f9] rounded p-2 text-[#555555]" style={{ fontSize: '12px' }}>
+                                        <span className="font-semibold text-[#222222]">{mr.markerName}:</span> {mr.comments}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </Card>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </Card>
               ))}
@@ -1233,7 +1343,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
       <SendNoticeDialog
         open={sendNoticeOpen}
         onOpenChange={setSendNoticeOpen}
-        userRole="hod"
+        onSend={() => setSendNoticeOpen(false)}
       />
       <ViewJobDescriptionDialog
         open={viewJdOpen}

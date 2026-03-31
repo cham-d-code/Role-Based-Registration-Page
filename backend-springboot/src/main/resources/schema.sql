@@ -406,6 +406,44 @@ CREATE INDEX IF NOT EXISTS idx_session_participants_session ON session_participa
 CREATE INDEX IF NOT EXISTS idx_session_participants_user ON session_participants(user_id);;
 
 -- ============================================
+-- 10. MARKING SCHEME
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS marking_schemes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    interview_id UUID NOT NULL REFERENCES interviews(id) ON DELETE CASCADE,
+    created_by UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(interview_id)
+);;
+
+CREATE TABLE IF NOT EXISTS marking_criteria (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    scheme_id UUID NOT NULL REFERENCES marking_schemes(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    max_marks INTEGER NOT NULL,
+    display_order INTEGER NOT NULL DEFAULT 0
+);;
+
+CREATE INDEX IF NOT EXISTS idx_criteria_scheme ON marking_criteria(scheme_id);;
+
+CREATE TABLE IF NOT EXISTS candidate_marks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id UUID NOT NULL REFERENCES interview_sessions(id) ON DELETE CASCADE,
+    candidate_id UUID NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
+    marker_id UUID NOT NULL REFERENCES users(id),
+    criterion_id UUID NOT NULL REFERENCES marking_criteria(id) ON DELETE CASCADE,
+    marks_given INTEGER NOT NULL,
+    comments TEXT,
+    marked_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(session_id, candidate_id, marker_id, criterion_id)
+);;
+
+CREATE INDEX IF NOT EXISTS idx_candidate_marks_session ON candidate_marks(session_id);;
+CREATE INDEX IF NOT EXISTS idx_candidate_marks_candidate ON candidate_marks(candidate_id);;
+
+-- ============================================
 -- SAFE COLUMN MIGRATIONS
 -- ============================================
 ALTER TABLE IF EXISTS candidates ADD COLUMN IF NOT EXISTS candidate_id VARCHAR(50);;
+ALTER TABLE IF EXISTS session_participants ADD COLUMN IF NOT EXISTS left_session BOOLEAN NOT NULL DEFAULT FALSE;;

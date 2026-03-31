@@ -78,6 +78,8 @@ public class AuthService {
                 .mobile(request.getMobile())
                 .role(role)
                 .status(status)
+                .contractStartDate(request.getContractStartDate())
+                .contractEndDate(request.getContractEndDate())
                 .build();
 
         user = userRepository.save(user);

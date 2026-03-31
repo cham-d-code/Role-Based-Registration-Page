@@ -6,7 +6,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @NoArgsConstructor
@@ -23,4 +25,7 @@ public class UserProfileResponse {
     private String status;
     private String profileImageUrl;
     private LocalDateTime createdAt;
+    private LocalDate contractStartDate;
+    private LocalDate contractEndDate;
+    private List<String> preferredSubjects;
 }

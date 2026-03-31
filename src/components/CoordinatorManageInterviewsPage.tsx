@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import {
   getInterviews, getInterviewCandidates, createInterview, updateInterviewDate,
   startInterviewSession, endInterviewSession, getInterviewSession,
-  approveParticipant, removeParticipant,
+  approveParticipant, removeParticipant, leaveSession,
   InterviewData, CandidateData, SessionState
 } from '../services/api';
 import InterviewMarkingPage from './InterviewMarkingPage';
@@ -157,6 +157,15 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
   async function handleEndSession() {
     if (!liveInterviewId) return;
     try { await endInterviewSession(liveInterviewId); } catch { /* ignore */ }
+    setLiveInterviewId(null);
+    setSessionState(null);
+  }
+
+  // ── Leave Session (coordinator exits but session stays live; marks excluded from average) ──
+  async function handleLeaveSession() {
+    if (!liveInterviewId) return;
+    if (!confirm('Leave this session? The interview stays live but your marks will not be included in the average score.')) return;
+    try { await leaveSession(liveInterviewId); } catch { /* ignore */ }
     setLiveInterviewId(null);
     setSessionState(null);
   }
@@ -378,13 +387,23 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
                           </p>
                         </div>
                       </div>
-                      <Button
-                        onClick={handleEndSession}
-                        className="bg-white text-green-700 hover:bg-green-50 font-semibold"
-                      >
-                        <Square className="h-4 w-4 mr-2" />
-                        End Session
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={handleLeaveSession}
+                          variant="outline"
+                          className="bg-transparent border-white text-white hover:bg-white/20 font-semibold"
+                        >
+                          <UserX className="h-4 w-4 mr-2" />
+                          Leave Session
+                        </Button>
+                        <Button
+                          onClick={handleEndSession}
+                          className="bg-white text-green-700 hover:bg-green-50 font-semibold"
+                        >
+                          <Square className="h-4 w-4 mr-2" />
+                          End Session
+                        </Button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">

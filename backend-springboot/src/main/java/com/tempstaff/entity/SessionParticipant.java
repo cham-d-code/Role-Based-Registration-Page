@@ -29,6 +29,11 @@ public class SessionParticipant {
     @Builder.Default
     private String status = "waiting";
 
+    /** true when the participant voluntarily left the session mid-interview */
+    @Column(name = "left_session", nullable = false)
+    @Builder.Default
+    private boolean leftSession = false;
+
     @Column(name = "requested_at", nullable = false)
     @Builder.Default
     private LocalDateTime requestedAt = LocalDateTime.now();

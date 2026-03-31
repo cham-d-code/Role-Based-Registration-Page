@@ -17,11 +17,11 @@ import {
   Plus,
   Eye,
   Trash2,
-  AlertCircle,
-  TrendingUp,
   FileText,
   Calendar,
-  Play
+  Play,
+  ClipboardList,
+  Loader2,
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -38,8 +38,7 @@ import InterviewMarkingPage from './InterviewMarkingPage';
 import ResearchDetailsDialog from './ResearchDetailsDialog';
 import AddResearchDialog from './AddResearchDialog';
 import EditProfileDialog from './EditProfileDialog';
-import { getInterviews, getInterviewCandidates, getActiveSession, InterviewData, CandidateData, SessionState } from '../services/api';
-import logo from 'figma:asset/39b6269214ec5f8a015cd1f1a1adaa157fd5d025.png';
+import { getInterviews, getInterviewCandidates, getActiveSession, getMarkingScheme, MarkingSchemeData, SessionState } from '../services/api';
 
 interface MentorProfileProps {
   onLogout?: () => void;
@@ -86,13 +85,13 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
     initials: '...'
   });
 
-  // Real interview data from API
-  const [apiInterviews, setApiInterviews] = useState<InterviewData[]>([]);
-  const [interviewCandidatesMap, setInterviewCandidatesMap] = useState<Record<string, CandidateData[]>>({});
-  const [loadingInterviews, setLoadingInterviews] = useState(true);
-
   // Live session polling
   const [liveSession, setLiveSession] = useState<SessionState | null>(null);
+  // Marking scheme fetched from backend when active in a session
+  const [markingScheme, setMarkingScheme] = useState<MarkingSchemeData | null>(null);
+  const [loadingScheme, setLoadingScheme] = useState(false);
+  // Candidates for the live interview
+  const [liveCandidates, setLiveCandidates] = useState<{ id: string; name: string; email: string; phone: string }[]>([]);
 
   // Fetch profile on mount
   useEffect(() => {
@@ -128,23 +127,6 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
     });
   }, []);
 
-  // Fetch real interviews from API
-  useEffect(() => {
-    getInterviews()
-      .then(data => {
-        setApiInterviews(data);
-        // Pre-load candidates for upcoming interviews
-        data.filter(i => i.status === 'upcoming').forEach(async (i) => {
-          try {
-            const cands = await getInterviewCandidates(i.id);
-            setInterviewCandidatesMap(prev => ({ ...prev, [i.id]: cands }));
-          } catch (e) { /* ignore */ }
-        });
-      })
-      .catch(e => console.error('Failed to load interviews', e))
-      .finally(() => setLoadingInterviews(false));
-  }, []);
-
   // Poll backend for live session every 5s
   useEffect(() => {
     const check = async () => {
@@ -154,6 +136,31 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
     const interval = setInterval(check, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  // When we become active in a session, fetch the marking scheme + candidates
+  useEffect(() => {
+    if (liveSession?.myStatus === 'active' && liveSession.interviewId) {
+      setLoadingScheme(true);
+      Promise.all([
+        getMarkingScheme(liveSession.interviewId),
+        getInterviewCandidates(liveSession.interviewId),
+      ])
+        .then(([scheme, cands]) => {
+          setMarkingScheme(scheme);
+          setLiveCandidates(cands.map(c => ({
+            id: c.id,
+            name: c.name,
+            email: c.email,
+            phone: c.phone,
+          })));
+        })
+        .catch(e => console.error('Failed to load scheme/candidates', e))
+        .finally(() => setLoadingScheme(false));
+    } else if (!liveSession || liveSession.myStatus !== 'active') {
+      setMarkingScheme(null);
+      setLiveCandidates([]);
+    }
+  }, [liveSession?.interviewId, liveSession?.myStatus]);
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -362,16 +369,18 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
     alert('Profile updated successfully!');
   };
 
-  // Show interview marking page if currentPage is 'interviewMarking'
-  if (currentPage === 'interviewMarking' && selectedInterview) {
+  // Show interview marking page when active in a live session
+  if (currentPage === 'interviewMarking' && liveSession) {
     return (
       <InterviewMarkingPage
-        interview={selectedInterview}
-        candidates={selectedInterview.candidates}
-        onBack={() => {
-          setCurrentPage('main');
-          setSelectedInterview(null);
+        interview={{
+          id: liveSession.interviewId,
+          interviewNumber: liveSession.interviewNumber,
+          date: new Date(liveSession.startedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
         }}
+        candidates={liveCandidates}
+        existingScheme={markingScheme ?? undefined}
+        onBack={() => setCurrentPage('main')}
       />
     );
   }
@@ -660,29 +669,66 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
               {/* Live Session Status Banner */}
               {liveSession && (
                 <Card className={`mb-6 rounded-xl p-4 border-0 ${liveSession.myStatus === 'active' ? 'bg-green-600' : liveSession.myStatus === 'waiting' ? 'bg-orange-500' : 'bg-red-500'}`}>
-                  <div className="flex items-center gap-3">
-                    <div className="bg-white rounded-full p-2">
-                      {liveSession.myStatus === 'active' ? (
-                        <svg className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.143 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" /></svg>
-                      ) : (
-                        <svg className="h-5 w-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                      )}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-white rounded-full p-2 flex-shrink-0">
+                        {liveSession.myStatus === 'active' ? (
+                          <CheckCircle className="h-5 w-5 text-green-600" />
+                        ) : (
+                          <Clock className="h-5 w-5 text-orange-500" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-white font-bold text-base">
+                          {liveSession.myStatus === 'active'
+                            ? `You are in the live session — ${liveSession.interviewNumber}`
+                            : liveSession.myStatus === 'waiting'
+                            ? `Waiting for approval — ${liveSession.interviewNumber} is live`
+                            : `You have been removed from ${liveSession.interviewNumber}`}
+                        </p>
+                        <p className="text-white/80 text-sm">
+                          Started by {liveSession.startedByName}
+                          {liveSession.myStatus === 'waiting' && ' · Waiting for coordinator/HOD to allow you in'}
+                          {liveSession.myStatus === 'active' && ` · ${liveSession.activeParticipants.length} active participant(s)`}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-white font-bold text-base">
-                        {liveSession.myStatus === 'active'
-                          ? `You are in the live session — ${liveSession.interviewNumber}`
-                          : liveSession.myStatus === 'waiting'
-                          ? `Waiting for approval — ${liveSession.interviewNumber} is live`
-                          : `You have been removed from ${liveSession.interviewNumber}`}
-                      </p>
-                      <p className="text-white/80 text-sm">
-                        Started by {liveSession.startedByName}
-                        {liveSession.myStatus === 'waiting' && ' · Waiting for coordinator/HOD to allow you in'}
-                        {liveSession.myStatus === 'active' && ` · ${liveSession.activeParticipants.length} active participant(s)`}
-                      </p>
-                    </div>
+
+                    {liveSession.myStatus === 'active' && (
+                      <div className="flex-shrink-0">
+                        {loadingScheme ? (
+                          <div className="flex items-center gap-2 text-white/80 text-sm">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Loading scheme…
+                          </div>
+                        ) : (
+                          <Button
+                            className="bg-white text-green-700 hover:bg-green-50 font-semibold"
+                            onClick={() => setCurrentPage('interviewMarking')}
+                          >
+                            <ClipboardList className="h-4 w-4 mr-2" />
+                            {markingScheme ? 'Enter Marks' : 'Enter Marks (No Scheme Set)'}
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
+
+                  {/* Show coordinator's scheme summary when active */}
+                  {liveSession.myStatus === 'active' && markingScheme && (
+                    <div className="mt-3 pt-3 border-t border-white/30">
+                      <p className="text-white/80 text-xs mb-2 font-semibold">
+                        MARKING SCHEME — created by {markingScheme.createdByName} · {markingScheme.criteria.length} criteria · max {markingScheme.totalMaxMarks} pts
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {markingScheme.criteria.map((c, i) => (
+                          <span key={c.id} className="bg-white/20 text-white text-xs px-2 py-1 rounded-full">
+                            {i + 1}. {c.name} ({c.maxMarks} pts)
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </Card>
               )}
 
