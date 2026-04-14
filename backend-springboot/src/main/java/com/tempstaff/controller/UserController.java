@@ -95,6 +95,41 @@ public class UserController {
     }
 
     /**
+     * GET /api/user/{userId}
+     * Senior staff can view a user's profile (used for "View Profile" in applicants list).
+     */
+    @GetMapping("/{userId}")
+    @PreAuthorize("hasAnyRole('HOD', 'COORDINATOR', 'MENTOR')")
+    public ResponseEntity<UserProfileResponse> getUserById(@PathVariable UUID userId) {
+        User u = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        List<String> preferredSubjects = userSubjectRepository
+                .findByUserIdAndIsPreferred(u.getId(), true)
+                .stream()
+                .map(UserSubject::getModuleId)
+                .map(moduleId -> moduleRepository.findById(moduleId)
+                        .map(m -> m.getName())
+                        .orElse(null))
+                .filter(name -> name != null)
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(UserProfileResponse.builder()
+                .id(u.getId().toString())
+                .email(u.getEmail())
+                .fullName(u.getFullName())
+                .mobile(u.getMobile())
+                .role(u.getRole().name())
+                .status(u.getStatus().name())
+                .profileImageUrl(u.getProfileImageUrl())
+                .createdAt(u.getCreatedAt())
+                .contractStartDate(u.getContractStartDate())
+                .contractEndDate(u.getContractEndDate())
+                .preferredSubjects(preferredSubjects)
+                .build());
+    }
+
+    /**
      * PUT /api/user/staff/{staffUserId}/contract
      * Update contract start/end dates for a staff member (Coordinator/HOD only)
      */

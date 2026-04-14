@@ -37,8 +37,9 @@ import UpcomingInterviewDetailsDialog from './UpcomingInterviewDetailsDialog';
 import InterviewMarkingPage from './InterviewMarkingPage';
 import ResearchDetailsDialog from './ResearchDetailsDialog';
 import AddResearchDialog from './AddResearchDialog';
+import EditResearchDialog from './EditResearchDialog';
 import EditProfileDialog from './EditProfileDialog';
-import { getInterviews, getInterviewCandidates, getActiveSession, getMarkingScheme, MarkingSchemeData, SessionState } from '../services/api';
+import { createResearchOpportunity, deleteResearchOpportunity, getInterviews, getInterviewCandidates, getActiveSession, getMarkingScheme, getMyResearchOpportunities, MarkingSchemeData, ResearchOpportunityDto, SessionState, updateResearchOpportunity } from '../services/api';
 
 interface MentorProfileProps {
   onLogout?: () => void;
@@ -76,7 +77,10 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
   const [showResearchDialog, setShowResearchDialog] = useState(false);
   const [selectedResearch, setSelectedResearch] = useState<any>(null);
   const [showAddResearchDialog, setShowAddResearchDialog] = useState(false);
+  const [showEditResearchDialog, setShowEditResearchDialog] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [myResearch, setMyResearch] = useState<ResearchOpportunityDto[]>([]);
+  const [loadingResearch, setLoadingResearch] = useState(false);
   const [profileData, setProfileData] = useState({
     name: 'Loading...',
     email: '',
@@ -285,44 +289,14 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
     },
   ];
 
-  const researchOpportunities = [
-    {
-      title: 'Consumer Behavior Study in Digital Marketing',
-      description: 'Research on social media influence on purchasing decisions among Gen Z consumers in Sri Lanka.',
-      postedDate: 'Oct 15, 2025',
-      applicants: [
-        { id: 'APP001', name: 'Kasun Perera', email: 'kasun.perera@kln.ac.lk', phone: '+94 77 123 4567', appliedDate: 'Oct 16, 2025', status: 'pending' as const },
-        { id: 'APP002', name: 'Nimali Fernando', email: 'nimali.fernando@kln.ac.lk', phone: '+94 76 234 5678', appliedDate: 'Oct 17, 2025', status: 'reviewed' as const },
-        { id: 'APP003', name: 'Ravindu Silva', email: 'ravindu.silva@kln.ac.lk', phone: '+94 75 345 6789', appliedDate: 'Oct 17, 2025', status: 'pending' as const },
-        { id: 'APP004', name: 'Sanduni Jayawardena', email: 'sanduni.j@kln.ac.lk', phone: '+94 71 456 7890', appliedDate: 'Oct 18, 2025', status: 'accepted' as const },
-        { id: 'APP005', name: 'Malith Bandara', email: 'malith.bandara@kln.ac.lk', phone: '+94 77 567 8901', appliedDate: 'Oct 19, 2025', status: 'pending' as const }
-      ]
-    },
-    {
-      title: 'Brand Loyalty in E-Commerce Platforms',
-      description: 'Investigating factors affecting customer retention in online shopping platforms.',
-      postedDate: 'Oct 10, 2025',
-      applicants: [
-        { id: 'APP006', name: 'Tharindu Wickramasinghe', email: 'tharindu.w@kln.ac.lk', phone: '+94 76 678 9012', appliedDate: 'Oct 11, 2025', status: 'reviewed' as const },
-        { id: 'APP007', name: 'Dilshani Rathnayake', email: 'dilshani.r@kln.ac.lk', phone: '+94 75 789 0123', appliedDate: 'Oct 12, 2025', status: 'pending' as const },
-        { id: 'APP008', name: 'Chamara Dissanayake', email: 'chamara.d@kln.ac.lk', phone: '+94 71 890 1234', appliedDate: 'Oct 13, 2025', status: 'rejected' as const }
-      ]
-    },
-    {
-      title: 'Impact of Influencer Marketing on SMEs',
-      description: 'Analyzing effectiveness of social media influencers for small and medium enterprises.',
-      postedDate: 'Oct 5, 2025',
-      applicants: [
-        { id: 'APP009', name: 'Hasitha Kumara', email: 'hasitha.kumara@kln.ac.lk', phone: '+94 77 901 2345', appliedDate: 'Oct 6, 2025', status: 'accepted' as const },
-        { id: 'APP010', name: 'Priyanka Senanayake', email: 'priyanka.s@kln.ac.lk', phone: '+94 76 012 3456', appliedDate: 'Oct 7, 2025', status: 'reviewed' as const },
-        { id: 'APP011', name: 'Buddhika Mendis', email: 'buddhika.mendis@kln.ac.lk', phone: '+94 75 123 4567', appliedDate: 'Oct 8, 2025', status: 'pending' as const },
-        { id: 'APP012', name: 'Ishara Samaraweera', email: 'ishara.s@kln.ac.lk', phone: '+94 71 234 5678', appliedDate: 'Oct 9, 2025', status: 'pending' as const },
-        { id: 'APP013', name: 'Janaka Herath', email: 'janaka.herath@kln.ac.lk', phone: '+94 77 345 6789', appliedDate: 'Oct 10, 2025', status: 'pending' as const },
-        { id: 'APP014', name: 'Kaveesha De Silva', email: 'kaveesha.ds@kln.ac.lk', phone: '+94 76 456 7890', appliedDate: 'Oct 11, 2025', status: 'reviewed' as const },
-        { id: 'APP015', name: 'Lakshan Gunasekara', email: 'lakshan.g@kln.ac.lk', phone: '+94 75 567 8901', appliedDate: 'Oct 12, 2025', status: 'pending' as const }
-      ]
-    },
-  ];
+  useEffect(() => {
+    if (activeMenu !== 'research') return;
+    setLoadingResearch(true);
+    getMyResearchOpportunities()
+      .then(setMyResearch)
+      .catch((e) => console.error('Failed to load research opportunities', e))
+      .finally(() => setLoadingResearch(false));
+  }, [activeMenu]);
 
   const upcomingReminders = [
     { task: 'Evaluation Submission Due - Mr. Kavinda Jayasuriya', priority: 'HIGH', date: 'Oct 21, 2025' },
@@ -898,24 +872,31 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
               </div>
 
               <div className="grid grid-cols-1 gap-4">
-                {researchOpportunities.map((research, index) => (
-                  <Card key={index} className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6 hover:shadow-lg transition-shadow">
+                {loadingResearch && (
+                  <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6 text-center text-[#4db4ac]">
+                    <Loader2 className="h-5 w-5 animate-spin inline mr-2" />
+                    Loading research opportunities…
+                  </Card>
+                )}
+
+                {!loadingResearch && myResearch.map((research) => (
+                  <Card key={research.id} className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6 hover:shadow-lg transition-shadow">
                     <div className="flex justify-between items-start mb-2">
                       <h4 className="text-[#222222] flex-1" style={{ fontSize: '18px', fontWeight: 600 }}>
                         {research.title}
                       </h4>
                       <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '11px' }}>
-                        {research.applicants.length} applicants
+                        {research.applicantsCount ?? 0} applicants
                       </Badge>
                     </div>
 
                     <p className="text-[#555555] mb-4" style={{ fontSize: '14px', lineHeight: '1.6' }}>
-                      {research.description}
+                      {research.description || ''}
                     </p>
 
                     <div className="flex justify-between items-center">
                       <span className="text-[#777777]" style={{ fontSize: '12px' }}>
-                        Posted: {research.postedDate}
+                        {research.createdAt ? `Posted: ${new Date(research.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
                       </span>
                       <div className="flex gap-2">
                         <Button
@@ -934,6 +915,10 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                           variant="outline"
                           size="sm"
                           className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#4db4ac] hover:text-white rounded-lg"
+                          onClick={() => {
+                            setSelectedResearch(research);
+                            setShowEditResearchDialog(true);
+                          }}
                         >
                           <Edit className="h-3 w-3 mr-1" />
                           Edit
@@ -942,6 +927,15 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                           variant="outline"
                           size="sm"
                           className="border-red-400 text-red-500 hover:bg-red-500 hover:text-white rounded-lg"
+                          onClick={async () => {
+                            if (!confirm('Delete this research opportunity?')) return;
+                            try {
+                              await deleteResearchOpportunity(research.id);
+                              setMyResearch(prev => prev.filter(r => r.id !== research.id));
+                            } catch (e: any) {
+                              alert(`Delete failed: ${e?.message || 'Unknown error'}`);
+                            }
+                          }}
                         >
                           <Trash2 className="h-3 w-3" />
                         </Button>
@@ -1144,13 +1138,35 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
         />
       )}
 
+      <EditResearchDialog
+        open={showEditResearchDialog}
+        onOpenChange={setShowEditResearchDialog}
+        research={selectedResearch}
+        onSubmit={async (updates) => {
+          if (!selectedResearch?.id) return;
+          try {
+            const updated = await updateResearchOpportunity(selectedResearch.id, updates);
+            setMyResearch(prev => prev.map(r => r.id === updated.id ? updated : r));
+            setSelectedResearch(updated);
+          } catch (e: any) {
+            alert(`Edit failed: ${e?.message || 'Unknown error'}`);
+          }
+        }}
+      />
+
       <AddResearchDialog
         open={showAddResearchDialog}
         onOpenChange={setShowAddResearchDialog}
-        onSubmit={(researchData) => {
-          // Handle new research submission
-          console.log('New research opportunity:', researchData);
-          // Here you would typically add the new research to your state/database
+        onSubmit={async (researchData) => {
+          try {
+            const created = await createResearchOpportunity({
+              title: researchData.title,
+              description: researchData.description,
+            });
+            setMyResearch(prev => [created, ...prev]);
+          } catch (e: any) {
+            alert(`Create failed: ${e?.message || 'Unknown error'}`);
+          }
         }}
       />
 

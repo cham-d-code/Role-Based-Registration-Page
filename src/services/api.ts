@@ -10,7 +10,8 @@ export interface UserProfile {
     profileImageUrl?: string;
     createdAt?: string;
 }
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
+// Backend port can vary in local dev; default to 8081 (matches our current Spring Boot run).
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081/api';
 
 export interface LoginData {
     email: string;
@@ -154,6 +155,112 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     return response.json();
 }
 
+// ─── Research Opportunities APIs ───────────────────────────────────────────────
+
+export type ResearchStatus = 'open' | 'closed' | 'filled';
+export type ResearchApplicationStatus = 'applied' | 'accepted' | 'rejected';
+
+export interface ResearchOpportunityDto {
+    id: string;
+    title: string;
+    description?: string | null;
+    status: ResearchStatus;
+    deadline?: string | null;
+    maxApplicants?: number | null;
+    createdBy: string;
+    createdByName?: string | null;
+    createdAt?: string;
+    applicantsCount?: number;
+}
+
+export interface ResearchApplicantDto {
+    applicationId: string;
+    userId: string;
+    fullName: string;
+    email: string;
+    specializations: string[];
+    status: ResearchApplicationStatus;
+    appliedAt?: string;
+}
+
+export async function createResearchOpportunity(body: {
+    title: string;
+    description?: string;
+    deadline?: string;
+    maxApplicants?: number;
+    status?: ResearchStatus;
+}): Promise<ResearchOpportunityDto> {
+    return fetchWithAuth(`${API_BASE_URL}/research/opportunities`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+    });
+}
+
+export async function getMyResearchOpportunities(): Promise<ResearchOpportunityDto[]> {
+    return fetchWithAuth(`${API_BASE_URL}/research/opportunities/mine`);
+}
+
+export async function updateResearchOpportunity(
+    opportunityId: string,
+    body: Partial<{
+        title: string;
+        description: string;
+        deadline: string;
+        maxApplicants: number;
+        status: ResearchStatus;
+    }>
+): Promise<ResearchOpportunityDto> {
+    return fetchWithAuth(`${API_BASE_URL}/research/opportunities/${opportunityId}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+    });
+}
+
+export async function deleteResearchOpportunity(opportunityId: string): Promise<{ success: boolean; message?: string }> {
+    return fetchWithAuth(`${API_BASE_URL}/research/opportunities/${opportunityId}`, { method: 'DELETE' });
+}
+
+export async function listOpenResearchOpportunities(): Promise<ResearchOpportunityDto[]> {
+    return fetchWithAuth(`${API_BASE_URL}/research/opportunities`);
+}
+
+export async function applyToResearchOpportunity(opportunityId: string): Promise<{ id: string; opportunityId: string; status: ResearchApplicationStatus; appliedAt?: string }> {
+    return fetchWithAuth(`${API_BASE_URL}/research/opportunities/${opportunityId}/apply`, { method: 'POST' });
+}
+
+export async function getResearchApplicants(opportunityId: string): Promise<ResearchApplicantDto[]> {
+    return fetchWithAuth(`${API_BASE_URL}/research/opportunities/${opportunityId}/applications`);
+}
+
+export async function acceptResearchApplicant(applicationId: string): Promise<ResearchApplicantDto> {
+    return fetchWithAuth(`${API_BASE_URL}/research/applications/${applicationId}/accept`, { method: 'POST' });
+}
+
+export async function rejectResearchApplicant(applicationId: string): Promise<ResearchApplicantDto> {
+    return fetchWithAuth(`${API_BASE_URL}/research/applications/${applicationId}/reject`, { method: 'POST' });
+}
+
+// ─── User Notifications (backend inbox) ───────────────────────────────────────
+
+export interface UserNotificationDto {
+    id: string;
+    title: string;
+    message: string;
+    type: string;
+    isRead: boolean;
+    relatedOpportunityId?: string | null;
+    relatedApplicationId?: string | null;
+    createdAt?: string;
+}
+
+export async function getMyNotifications(unreadOnly = false): Promise<UserNotificationDto[]> {
+    return fetchWithAuth(`${API_BASE_URL}/notifications?unreadOnly=${unreadOnly ? 'true' : 'false'}`);
+}
+
+export async function markNotificationRead(notificationId: string): Promise<{ success: boolean }> {
+    return fetchWithAuth(`${API_BASE_URL}/notifications/${notificationId}/read`, { method: 'POST' });
+}
+
 // Check if user is authenticated
 export function isAuthenticated(): boolean {
     return !!getAuthToken();
@@ -194,6 +301,10 @@ export async function rejectUser(userId: string, reason?: string): Promise<any> 
 // Get the currently authenticated user's profile from the backend
 export async function getUserProfile(): Promise<UserProfile> {
     return fetchWithAuth(`${API_BASE_URL}/user/me`);
+}
+
+export async function getUserProfileById(userId: string): Promise<UserProfile> {
+    return fetchWithAuth(`${API_BASE_URL}/user/${userId}`);
 }
 
 // Get all approved HOD and mentor users for the interview panel

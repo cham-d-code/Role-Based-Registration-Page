@@ -38,6 +38,7 @@ import ViewJobDescriptionDialog from './ViewJobDescriptionDialog';
 import LeaveApplicationDialog from './LeaveApplicationDialog';
 import AddTaskDialog from './AddTaskDialog';
 import EditProfileDialog from './EditProfileDialog';
+import { applyToResearchOpportunity, listOpenResearchOpportunities, ResearchOpportunityDto } from '../services/api';
 import logo from 'figma:asset/39b6269214ec5f8a015cd1f1a1adaa157fd5d025.png';
 
 interface TempStaffProfileProps {
@@ -134,6 +135,9 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
   ]);
 
   const [appliedResearch, setAppliedResearch] = useState<number[]>([]);
+  const [openResearch, setOpenResearch] = useState<ResearchOpportunityDto[]>([]);
+  const [loadingResearch, setLoadingResearch] = useState(false);
+  const [appliedOpportunityIds, setAppliedOpportunityIds] = useState<string[]>([]);
 
   // Helper function to get category styling
   const getCategoryStyle = (category: string) => {
@@ -181,9 +185,13 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
     setWeeklyTasks([newTask, ...weeklyTasks]);
   };
 
-  const handleResearchApply = (index: number) => {
-    if (!appliedResearch.includes(index)) {
-      setAppliedResearch([...appliedResearch, index]);
+  const handleResearchApply = async (opportunityId: string) => {
+    try {
+      await applyToResearchOpportunity(opportunityId);
+      setAppliedOpportunityIds(prev => prev.includes(opportunityId) ? prev : [...prev, opportunityId]);
+      alert('Applied successfully!');
+    } catch (e: any) {
+      alert(`Apply failed: ${e?.message || 'Unknown error'}`);
     }
   };
 
@@ -219,20 +227,14 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
     { label: 'Days to Contract End', value: '45', color: '#555555' },
   ];
 
-  const researchOpportunities = [
-    { 
-      title: 'Consumer Behavior Study in Digital Marketing',
-      mentor: 'Dr. T. Mahanama',
-      description: 'Research on social media influence on purchasing decisions among Gen Z consumers.',
-      postedDate: 'Oct 15, 2025'
-    },
-    { 
-      title: 'Sustainable Supply Chain Management',
-      mentor: 'Dr. R. Fernando',
-      description: 'Investigating green logistics practices in Sri Lankan manufacturing sector.',
-      postedDate: 'Oct 12, 2025'
-    },
-  ];
+  useEffect(() => {
+    if (activeMenu !== 'research') return;
+    setLoadingResearch(true);
+    listOpenResearchOpportunities()
+      .then(setOpenResearch)
+      .catch((e) => console.error('Failed to load research opportunities', e))
+      .finally(() => setLoadingResearch(false));
+  }, [activeMenu]);
 
   const upcomingReminders = [
     { task: 'Tutorial Session - Marketing 201', priority: 'urgent', date: 'Oct 20, 2025' },
@@ -720,24 +722,30 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
               <Separator className="mb-4" />
               
               <div className="space-y-4">
-                {researchOpportunities.map((research, index) => (
-                  <Card key={index} className="bg-white border border-[#e0e0e0] rounded-lg p-4 hover:shadow-md transition-shadow">
+                {loadingResearch && (
+                  <Card className="bg-white border border-[#e0e0e0] rounded-lg p-4 text-center text-[#4db4ac]">
+                    Loading research opportunities…
+                  </Card>
+                )}
+
+                {!loadingResearch && openResearch.map((research) => (
+                  <Card key={research.id} className="bg-white border border-[#e0e0e0] rounded-lg p-4 hover:shadow-md transition-shadow">
                     <div className="flex items-start justify-between gap-4 mb-2">
                       <h5 className="text-[#222222] flex-1" style={{ fontSize: '15px', fontWeight: 600 }}>
                         {research.title}
                       </h5>
                       <Badge className="bg-[#e6f7f6] text-[#4db4ac] border border-[#4db4ac]" style={{ fontSize: '11px' }}>
-                        {research.mentor}
+                        {research.createdByName || 'Senior Staff'}
                       </Badge>
                     </div>
                     <p className="text-[#555555] mb-3" style={{ fontSize: '13px' }}>
-                      {research.description}
+                      {research.description || ''}
                     </p>
                     <div className="flex items-center justify-between">
                       <p className="text-[#999999]" style={{ fontSize: '12px' }}>
-                        Posted: {research.postedDate}
+                        {research.createdAt ? `Posted: ${new Date(research.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
                       </p>
-                      {appliedResearch.includes(index) ? (
+                      {appliedOpportunityIds.includes(research.id) ? (
                         <Button 
                           size="sm" 
                           className="bg-green-600 text-white rounded-lg cursor-default"
@@ -750,7 +758,7 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                         <Button 
                           size="sm" 
                           className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg"
-                          onClick={() => handleResearchApply(index)}
+                          onClick={() => handleResearchApply(research.id)}
                         >
                           Apply
                         </Button>
