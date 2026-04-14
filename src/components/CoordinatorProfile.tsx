@@ -25,6 +25,7 @@ import {
   Play,
   Download,
   CalendarCheck,
+  Clock,
   Loader2
 } from 'lucide-react';
 import { Card } from './ui/card';
@@ -37,10 +38,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
+import { jsPDF } from 'jspdf';
 
 import MentorAssignmentDialog from './MentorAssignmentDialog';
 import JobDescriptionDialog from './JobDescriptionDialog';
-import ModuleNotificationDialog from './ModuleNotificationDialog';
+import CurriculumModulesPanel from './CurriculumModulesPanel';
 import EndedInterviewDetailsDialog from './EndedInterviewDetailsDialog';
 import InterviewMarkingPage from './InterviewMarkingPage';
 import EndedInterviewDetailsPage from './EndedInterviewDetailsPage';
@@ -129,7 +132,6 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
 
   const [showMentorDialog, setShowMentorDialog] = useState(false);
   const [showJdDialog, setShowJdDialog] = useState(false);
-  const [showModuleDialog, setShowModuleDialog] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
   const [showEndedInterviews, setShowEndedInterviews] = useState(true);
   const [expandedInterviewId, setExpandedInterviewId] = useState<string | null>(null);
@@ -147,6 +149,11 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
   });
   const [showAttendanceDialog, setShowAttendanceDialog] = useState(false);
   const [selectedStaffForAttendance, setSelectedStaffForAttendance] = useState<StaffMember | null>(null);
+  const [contractFilter, setContractFilter] = useState<'all' | 'remaining' | 'expired'>('all');
+  const [extendContractOpen, setExtendContractOpen] = useState(false);
+  const [selectedStaffForContract, setSelectedStaffForContract] = useState<StaffMember | null>(null);
+  const [newContractStartDate, setNewContractStartDate] = useState('');
+  const [newContractEndDate, setNewContractEndDate] = useState('');
 
   // Fetch real profile data from backend on mount
   useEffect(() => {
@@ -511,11 +518,6 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
     alert('Mentor assigned successfully!');
   };
 
-  // FR11: Send module notification
-  const handleSendModuleNotification = (selectedModules: string[], message: string) => {
-    alert(`Module notification sent to newly registered staff!\nModules: ${selectedModules.length}\nMessage: ${message || 'Default notification'}`);
-  };
-
   // FR12: Save job description
   const handleSaveJobDescription = (staffId: string, tasks: any[]) => {
     setStaffMembers(prev =>
@@ -566,6 +568,91 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
     { task: 'Monthly Report Submission', priority: 'normal', date: 'Oct 31, 2025' },
   ];
 
+  const getRemainingContractDaysValue = (contractEndDate?: string) => {
+    if (!contractEndDate) return null;
+    const end = new Date(contractEndDate);
+    if (Number.isNaN(end.getTime())) return null;
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfEndDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+
+    const msPerDay = 24 * 60 * 60 * 1000;
+    return Math.ceil((startOfEndDay.getTime() - startOfToday.getTime()) / msPerDay);
+  };
+
+  const getRemainingContractDaysLabel = (contractEndDate?: string) => {
+    const diffDays = getRemainingContractDaysValue(contractEndDate);
+    if (diffDays === null) return '—';
+    if (diffDays < 0) return 'Expired';
+    if (diffDays === 0) return 'Expires today';
+    if (diffDays === 1) return '1 day';
+    return `${diffDays} days`;
+  };
+
+  const filteredStaffMembers = staffMembers.filter((s) => {
+    const remaining = getRemainingContractDaysValue(s.contractEndDate);
+    const isExpired = remaining !== null && remaining < 0;
+    if (contractFilter === 'expired') return isExpired;
+    if (contractFilter === 'remaining') return remaining !== null && remaining >= 0;
+    return true;
+  });
+
+  const openExtendContractDialog = (staff: StaffMember) => {
+    setSelectedStaffForContract(staff);
+    const todayIso = new Date().toISOString().slice(0, 10);
+
+    const existingEnd = staff.contractEndDate ? new Date(staff.contractEndDate) : null;
+    if (existingEnd && !Number.isNaN(existingEnd.getTime())) {
+      const start = new Date(existingEnd.getFullYear(), existingEnd.getMonth(), existingEnd.getDate() + 1);
+      const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 30);
+      setNewContractStartDate(start.toISOString().slice(0, 10));
+      setNewContractEndDate(end.toISOString().slice(0, 10));
+    } else {
+      setNewContractStartDate(todayIso);
+      setNewContractEndDate(todayIso);
+    }
+
+    setExtendContractOpen(true);
+  };
+
+  const handleExtendContractSave = async () => {
+    if (!selectedStaffForContract) return;
+    if (!newContractStartDate || !newContractEndDate) {
+      alert('Please select both contract start date and end date.');
+      return;
+    }
+
+    const start = new Date(newContractStartDate);
+    const end = new Date(newContractEndDate);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      alert('Invalid date(s). Please select valid dates.');
+      return;
+    }
+    if (end.getTime() < start.getTime()) {
+      alert('Contract end date must be on or after the start date.');
+      return;
+    }
+
+    try {
+      const api = await import('../services/api');
+      await api.updateStaffContract(selectedStaffForContract.id, newContractStartDate, newContractEndDate);
+
+      setStaffMembers((prev) =>
+        prev.map((s) =>
+          s.id === selectedStaffForContract.id
+            ? { ...s, contractStartDate: newContractStartDate, contractEndDate: newContractEndDate }
+            : s
+        )
+      );
+
+      setExtendContractOpen(false);
+      alert(`Contract period updated for ${selectedStaffForContract.name}.`);
+    } catch (e: any) {
+      alert(e?.message || 'Failed to update contract dates.');
+    }
+  };
+
   const handleProfileSave = (updatedProfile: any) => {
     setProfileData({
       ...profileData,
@@ -583,49 +670,72 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
   };
 
   const handleDownloadServiceLetter = (staff: StaffMember) => {
-    // In a real application, this would generate and download a PDF
-    // For now, we'll simulate the download
-    const letterContent = `
-SERVICE LETTER
+    const dateStr = new Date().toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'long',
+      day: '2-digit',
+    });
 
-University of Kelaniya
-Department of Industrial Management
+    const coordinatorName =
+      profileData?.name && profileData.name !== 'Loading...' ? profileData.name : 'Temporary Staff Coordinator';
 
-Date: ${new Date().toLocaleDateString()}
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const left = 56;
+    const right = 56;
+    const maxWidth = pageWidth - left - right;
 
-TO WHOM IT MAY CONCERN
+    let y = 72;
 
-This is to certify that ${staff.name} has been serving as a Temporary Staff Member 
-at the Department of Industrial Management, University of Kelaniya.
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.text('SERVICE LETTER', left, y);
 
-Staff ID: ${staff.id}
-Email: ${staff.email}
-Position: Temporary Lecturer
-Department: Industrial Management
+    y += 28;
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'normal');
+    doc.text(['University of Kelaniya', 'Department of Industrial Management'], left, y);
 
-During their tenure, ${staff.name} has demonstrated exceptional commitment and 
-professionalism in their teaching responsibilities.
+    y += 40;
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Date: ${dateStr}`, left, y);
 
-This letter is issued upon request for official purposes.
+    y += 30;
+    doc.setFont('helvetica', 'bold');
+    doc.text('TO WHOM IT MAY CONCERN', left, y);
 
-Sincerely,
-Temporary Staff Coordinator
-Department of Industrial Management
-University of Kelaniya
-    `;
+    y += 24;
+    doc.setFont('helvetica', 'normal');
 
-    // Create a blob and download
-    const blob = new Blob([letterContent], { type: 'text/plain' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Service_Letter_${staff.name.replace(/\s+/g, '_')}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
+    const paragraphs = [
+      `This is to certify that ${staff.name} has been serving as a Temporary Staff Member at the Department of Industrial Management, University of Kelaniya.`,
+      `Staff ID: ${staff.id}`,
+      `Email: ${staff.email}`,
+      `Position: Temporary Lecturer`,
+      `Department: Industrial Management`,
+      `During their tenure, ${staff.name} has demonstrated exceptional commitment and professionalism in their teaching responsibilities.`,
+      `This letter is issued upon request for official purposes.`,
+    ];
 
-    alert(`Service letter for ${staff.name} has been downloaded successfully!`);
+    for (const p of paragraphs) {
+      const lines = doc.splitTextToSize(p, maxWidth);
+      doc.text(lines, left, y);
+      y += lines.length * 16 + 10;
+    }
+
+    y += 10;
+    doc.text('Sincerely,', left, y);
+    y += 22;
+    doc.setFont('helvetica', 'bold');
+    doc.text(coordinatorName, left, y);
+    y += 18;
+    doc.setFont('helvetica', 'normal');
+    doc.text(['Temporary Staff Coordinator', 'Department of Industrial Management', 'University of Kelaniya'], left, y);
+
+    const safeName = (staff.name || 'Staff').replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, '_');
+    doc.save(`Service_Letter_${safeName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+
+    alert(`Service letter PDF for ${staff.name} has been downloaded successfully!`);
   };
 
   // Show CoordinatorManageInterviewsPage
@@ -733,7 +843,7 @@ University of Kelaniya
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 ml-64 mr-80 p-6 space-y-6">
+        <main className={`flex-1 ml-64 p-6 space-y-6 ${activeMenu === 'dashboard' ? 'mr-80' : ''}`}>
           {/* Dashboard View */}
           {activeMenu === 'dashboard' && (
             <>
@@ -800,32 +910,39 @@ University of Kelaniya
                 ))}
               </div>
 
-              {/* Recent Activity Section */}
+              {/* Upcoming Deadlines Section */}
               <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
                 <h3 className="text-[#222222] mb-4" style={{ fontWeight: 700, fontSize: '18px' }}>
-                  Recent System Activities
+                  Upcoming Deadlines
                 </h3>
                 <Separator className="mb-4" />
 
-                <div className="space-y-4">
-                  {recentActivities.map((activity, index) => (
-                    <div key={index} className="flex items-start gap-4">
-                      <div className="mt-1">
-                        <div className="w-2 h-2 rounded-full bg-[#4db4ac]"></div>
-                        {index < recentActivities.length - 1 && (
-                          <div className="w-0.5 h-12 bg-[#e0e0e0] ml-0.5 mt-1"></div>
-                        )}
-                      </div>
-
-                      <div className="flex-1 pb-4">
-                        <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 500 }}>
-                          {activity.action}
+                <div className="space-y-3">
+                  {upcomingDeadlines.map((deadline, index) => (
+                    <Card
+                      key={index}
+                      className="bg-[#f9f9f9] border border-[#e0e0e0] rounded-lg p-4 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <p className="text-[#222222] flex-1" style={{ fontSize: '14px', fontWeight: 600 }}>
+                          {deadline.task}
                         </p>
-                        <p className="text-[#999999] mt-1" style={{ fontSize: '12px' }}>
-                          {activity.time} • {activity.date}
-                        </p>
+                        <Badge
+                          className={`${deadline.priority === 'urgent'
+                            ? 'bg-red-100 text-red-700 border-red-300'
+                            : deadline.priority === 'medium'
+                              ? 'bg-orange-100 text-orange-700 border-orange-300'
+                              : 'bg-blue-100 text-blue-700 border-blue-300'
+                            } border`}
+                          style={{ fontSize: '10px' }}
+                        >
+                          {deadline.priority.toUpperCase()}
+                        </Badge>
                       </div>
-                    </div>
+                      <p className="text-[#999999]" style={{ fontSize: '12px' }}>
+                        Due: {deadline.date}
+                      </p>
+                    </Card>
                   ))}
                 </div>
               </Card>
@@ -1330,6 +1447,21 @@ University of Kelaniya
                   Temporary Staff List & Job Descriptions
                 </h3>
 
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className="ml-auto inline-flex items-center justify-center whitespace-nowrap rounded-md border border-[#4db4ac] bg-white px-4 py-2 text-sm font-medium text-[#4db4ac] transition-colors hover:bg-[#e6f7f6]"
+                      type="button"
+                    >
+                      Filter: {contractFilter === 'all' ? 'All' : contractFilter === 'expired' ? 'Expired' : 'Remaining'}
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    <DropdownMenuItem onClick={() => setContractFilter('all')}>All</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setContractFilter('remaining')}>Contract days remaining</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setContractFilter('expired')}>Expired</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
               <Separator className="mb-4" />
 
@@ -1348,7 +1480,7 @@ University of Kelaniya
               )}
 
               <div className="space-y-4">
-                {staffMembers.map((staff) => (
+                {filteredStaffMembers.map((staff) => (
                   <Card
                     key={staff.id}
                     className="border border-[#e0e0e0] rounded-lg p-5 hover:shadow-md transition-shadow"
@@ -1378,6 +1510,12 @@ University of Kelaniya
                               </span>
                             </div>
                           )}
+                          <div className="flex items-center gap-2 text-[#555555]" style={{ fontSize: '13px' }}>
+                            <Clock className="h-4 w-4 text-[#4db4ac]" />
+                            <span>
+                              Remaining contract days: {getRemainingContractDaysLabel(staff.contractEndDate)}
+                            </span>
+                          </div>
                         </div>
                       </div>
 
@@ -1391,6 +1529,14 @@ University of Kelaniya
                         >
                           <ClipboardList className="h-4 w-4 mr-2" />
                           {staff.hasJobDescription ? 'Edit JD' : 'Create JD'}
+                        </Button>
+                        <Button
+                          onClick={() => openExtendContractDialog(staff)}
+                          variant="outline"
+                          className="border-purple-600 text-purple-700 hover:bg-purple-50"
+                        >
+                          <Calendar className="h-4 w-4 mr-2" />
+                          Extend Contract
                         </Button>
                         <Button
                           onClick={() => handleAskPreferences(staff.id)}
@@ -1476,52 +1622,16 @@ University of Kelaniya
           {/* FR11: Module Notifications View */}
           {activeMenu === 'modules' && (
             <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-              <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-2 mb-2">
                 <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
                   Module Notifications
                 </h3>
-
               </div>
+              <p className="text-[#555555] mb-4" style={{ fontSize: '14px' }}>
+                Department programme modules by level. Filter, select modules, and notify approved temporary staff.
+              </p>
               <Separator className="mb-4" />
-
-              <div className="bg-[#e6f7f6] border border-[#4db4ac] rounded-lg p-6 text-center mb-6">
-                <BellRing className="h-12 w-12 text-[#4db4ac] mx-auto mb-3" />
-                <h4 className="text-[#222222] mb-2" style={{ fontSize: '16px', fontWeight: 600 }}>
-                  Notify Temporary Staff About Available Modules
-                </h4>
-                <p className="text-[#555555] mb-4" style={{ fontSize: '14px' }}>
-                  Send notifications to newly registered temporary staff members about available teaching modules
-                </p>
-                <Button
-                  onClick={() => setShowModuleDialog(true)}
-                  className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
-                >
-                  <Send className="h-4 w-4 mr-2" />
-                  Create & Send Module Notification
-                </Button>
-              </div>
-
-              <h4 className="text-[#222222] mb-3" style={{ fontSize: '16px', fontWeight: 600 }}>
-                Notification History
-              </h4>
-              <div className="space-y-3">
-                <Card className="bg-[#f9f9f9] border border-[#e0e0e0] rounded-lg p-4">
-                  <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
-                    Module Notification - Marketing & Operations Modules
-                  </p>
-                  <p className="text-[#555555] mt-1" style={{ fontSize: '12px' }}>
-                    Sent to 12 staff members • Oct 18, 2025
-                  </p>
-                </Card>
-                <Card className="bg-[#f9f9f9] border border-[#e0e0e0] rounded-lg p-4">
-                  <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
-                    Module Notification - HRM & Finance Modules
-                  </p>
-                  <p className="text-[#555555] mt-1" style={{ fontSize: '12px' }}>
-                    Sent to 8 staff members • Oct 15, 2025
-                  </p>
-                </Card>
-              </div>
+              <CurriculumModulesPanel />
             </Card>
           )}
 
@@ -1714,47 +1824,19 @@ University of Kelaniya
           )}
         </main>
 
-        {/* Right Sidebar - Reminders */}
-        <aside className="fixed right-0 top-16 bottom-0 w-80 bg-white shadow-lg overflow-y-auto p-6">
-          <h3 className="text-[#222222] mb-4" style={{ fontWeight: 700, fontSize: '18px' }}>
-            Upcoming Deadlines
-          </h3>
-          <Separator className="mb-4" />
+        {/* Right Sidebar - only on Dashboard */}
+        {activeMenu === 'dashboard' && (
+          <aside className="fixed right-0 top-16 bottom-0 w-80 bg-white shadow-lg overflow-y-auto p-6">
+            <h3 className="text-[#222222] mb-4" style={{ fontWeight: 700, fontSize: '18px' }}>
+              Reminders
+            </h3>
+            <Separator className="mb-4" />
 
-          <div className="space-y-3">
-            {upcomingDeadlines.map((deadline, index) => (
-              <Card
-                key={index}
-                className="bg-[#f9f9f9] border border-[#e0e0e0] rounded-lg p-4 hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <p className="text-[#222222] flex-1" style={{ fontSize: '14px', fontWeight: 600 }}>
-                    {deadline.task}
-                  </p>
-                  <Badge
-                    className={`${deadline.priority === 'urgent'
-                      ? 'bg-red-100 text-red-700 border-red-300'
-                      : deadline.priority === 'medium'
-                        ? 'bg-orange-100 text-orange-700 border-orange-300'
-                        : 'bg-blue-100 text-blue-700 border-blue-300'
-                      } border`}
-                    style={{ fontSize: '10px' }}
-                  >
-                    {deadline.priority.toUpperCase()}
-                  </Badge>
-                </div>
-                <p className="text-[#999999]" style={{ fontSize: '12px' }}>
-                  Due: {deadline.date}
-                </p>
-              </Card>
-            ))}
-          </div>
-
-          <Button className="w-full mt-6 bg-white border-2 border-[#4db4ac] text-[#4db4ac] hover:bg-[#4db4ac] hover:text-white rounded-lg">
-            <BellRing className="h-4 w-4 mr-2" />
-            View All Reminders
-          </Button>
-        </aside>
+            <p className="text-[#777777]" style={{ fontSize: '13px' }}>
+              Use the dashboard panels to track upcoming deadlines.
+            </p>
+          </aside>
+        )}
       </div>
 
 
@@ -1773,13 +1855,6 @@ University of Kelaniya
         onOpenChange={setShowJdDialog}
         staffMember={selectedStaff}
         onSave={handleSaveJobDescription}
-      />
-
-      {/* Module Notification Dialog */}
-      <ModuleNotificationDialog
-        open={showModuleDialog}
-        onOpenChange={setShowModuleDialog}
-        onSend={handleSendModuleNotification}
       />
 
       {/* Ended Interview Details Dialog */}
@@ -1804,6 +1879,45 @@ University of Kelaniya
         staffName={selectedStaffForAttendance?.name || ''}
         staffId={selectedStaffForAttendance?.id || ''}
       />
+
+      <Dialog open={extendContractOpen} onOpenChange={setExtendContractOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Extend contract period</DialogTitle>
+            <DialogDescription>
+              Update contract start and end dates for {selectedStaffForContract?.name ?? 'this staff member'}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>New contract start date</Label>
+              <Input
+                type="date"
+                value={newContractStartDate}
+                onChange={(e) => setNewContractStartDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>New contract end date</Label>
+              <Input
+                type="date"
+                value={newContractEndDate}
+                onChange={(e) => setNewContractEndDate(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExtendContractOpen(false)}>
+              Cancel
+            </Button>
+            <Button className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white" onClick={handleExtendContractSave}>
+              Save contract dates
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

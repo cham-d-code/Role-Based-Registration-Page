@@ -78,6 +78,11 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;;
 
+DO $$ BEGIN
+    CREATE TYPE notification_type AS ENUM ('research_new', 'research_applied', 'research_accepted', 'research_rejected', 'info');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;;
+
 -- ============================================
 -- 1. USERS & AUTHENTICATION
 -- ============================================
@@ -329,7 +334,8 @@ CREATE TABLE IF NOT EXISTS research_opportunities (
     status research_status DEFAULT 'open',
     deadline DATE,
     max_applicants INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );;
 
 CREATE INDEX IF NOT EXISTS idx_research_status ON research_opportunities(status);;
@@ -376,6 +382,26 @@ CREATE TABLE IF NOT EXISTS notice_dismissals (
 
 CREATE INDEX IF NOT EXISTS idx_dismissals_notice ON notice_dismissals(notice_id);;
 CREATE INDEX IF NOT EXISTS idx_dismissals_user ON notice_dismissals(user_id);;
+
+-- ============================================
+-- 8b. USER NOTIFICATIONS (per-user inbox)
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS user_notifications (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    recipient_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+    type notification_type DEFAULT 'info',
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    related_opportunity_id UUID,
+    related_application_id UUID,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);;
+
+CREATE INDEX IF NOT EXISTS idx_user_notifications_recipient ON user_notifications(recipient_id);;
+CREATE INDEX IF NOT EXISTS idx_user_notifications_read ON user_notifications(recipient_id, is_read);;
+CREATE INDEX IF NOT EXISTS idx_user_notifications_created ON user_notifications(recipient_id, created_at);;
 
 -- ============================================
 -- 9. INTERVIEW LIVE SESSIONS
@@ -447,3 +473,23 @@ CREATE INDEX IF NOT EXISTS idx_candidate_marks_candidate ON candidate_marks(cand
 -- ============================================
 ALTER TABLE IF EXISTS candidates ADD COLUMN IF NOT EXISTS candidate_id VARCHAR(50);;
 ALTER TABLE IF EXISTS session_participants ADD COLUMN IF NOT EXISTS left_session BOOLEAN NOT NULL DEFAULT FALSE;;
+
+-- ============================================
+-- CURRICULUM MODULES (B.Sc. programme – coordinator notifications)
+-- ============================================
+CREATE TABLE IF NOT EXISTS curriculum_modules (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    code VARCHAR(30) NOT NULL UNIQUE,
+    name VARCHAR(500) NOT NULL,
+    academic_level INT NOT NULL,
+    semester_label VARCHAR(20) NOT NULL,
+    credits INT NOT NULL DEFAULT 3,
+    compulsory_optional VARCHAR(1) NOT NULL DEFAULT 'C',
+    chief_tutor VARCHAR(255),
+    program_kind VARCHAR(3) NOT NULL,
+    mit_track VARCHAR(10),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);;
+
+CREATE INDEX IF NOT EXISTS idx_curriculum_modules_level ON curriculum_modules(academic_level);;
+CREATE INDEX IF NOT EXISTS idx_curriculum_modules_kind ON curriculum_modules(program_kind);;

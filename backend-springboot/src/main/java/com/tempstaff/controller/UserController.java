@@ -1,5 +1,6 @@
 package com.tempstaff.controller;
 
+import com.tempstaff.dto.request.UpdateContractRequest;
 import com.tempstaff.dto.response.UserProfileResponse;
 import com.tempstaff.entity.User;
 import com.tempstaff.entity.UserRole;
@@ -10,11 +11,13 @@ import com.tempstaff.repository.UserRepository;
 import com.tempstaff.repository.UserSubjectRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @RestController
@@ -89,6 +92,47 @@ public class UserController {
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * PUT /api/user/staff/{staffUserId}/contract
+     * Update contract start/end dates for a staff member (Coordinator/HOD only)
+     */
+    @PutMapping("/staff/{staffUserId}/contract")
+    @PreAuthorize("hasAnyRole('HOD', 'COORDINATOR')")
+    public ResponseEntity<UserProfileResponse> updateStaffContract(
+            @PathVariable UUID staffUserId,
+            @RequestBody UpdateContractRequest request
+    ) {
+        User staff = userRepository.findById(staffUserId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (staff.getRole() != UserRole.staff) {
+            throw new RuntimeException("Only staff users can be updated");
+        }
+
+        if (request.getContractStartDate() == null || request.getContractEndDate() == null) {
+            throw new RuntimeException("contractStartDate and contractEndDate are required");
+        }
+
+        if (request.getContractEndDate().isBefore(request.getContractStartDate())) {
+            throw new RuntimeException("contractEndDate must be on or after contractStartDate");
+        }
+
+        staff.setContractStartDate(request.getContractStartDate());
+        staff.setContractEndDate(request.getContractEndDate());
+        userRepository.save(staff);
+
+        return ResponseEntity.ok(
+                UserProfileResponse.builder()
+                        .id(staff.getId().toString())
+                        .fullName(staff.getFullName())
+                        .email(staff.getEmail())
+                        .mobile(staff.getMobile())
+                        .contractStartDate(staff.getContractStartDate())
+                        .contractEndDate(staff.getContractEndDate())
+                        .build()
+        );
     }
 
     /**

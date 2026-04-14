@@ -214,6 +214,98 @@ export async function getApprovedStaff(): Promise<{
     return fetchWithAuth(`${API_BASE_URL}/user/staff`);
 }
 
+// Update a staff member's contract period (Coordinator/HOD)
+export async function updateStaffContract(
+    staffUserId: string,
+    contractStartDate: string,
+    contractEndDate: string
+): Promise<{
+    id: string;
+    fullName: string;
+    email: string;
+    mobile?: string;
+    contractStartDate?: string;
+    contractEndDate?: string;
+}> {
+    return fetchWithAuth(`${API_BASE_URL}/user/staff/${staffUserId}/contract`, {
+        method: 'PUT',
+        body: JSON.stringify({ contractStartDate, contractEndDate }),
+    });
+}
+
+// ─── Curriculum modules (coordinator programme list) ───────────────
+
+export interface CurriculumModuleDto {
+    id: string;
+    code: string;
+    name: string;
+    chiefTutor?: string | null;
+    academicLevel: number;
+    semesterLabel: string;
+    credits: number;
+    compulsoryOptional: string;
+    programKind: string;
+    mitTrack?: string | null;
+}
+
+export async function getCurriculumModules(params?: {
+    semester?: string;
+    programKind?: string;
+}): Promise<CurriculumModuleDto[]> {
+    const q = new URLSearchParams();
+    if (params?.semester && params.semester !== 'all') q.set('semester', params.semester);
+    if (params?.programKind && params.programKind !== 'all') q.set('programKind', params.programKind);
+    const suffix = q.toString() ? `?${q.toString()}` : '';
+    return fetchWithAuth(`${API_BASE_URL}/curriculum-modules${suffix}`);
+}
+
+export async function createCurriculumModule(body: {
+    code: string;
+    name: string;
+    academicLevel: number;
+    semesterLabel: string;
+    credits: number;
+    compulsoryOptional: string;
+    chiefTutor?: string;
+    programKind: string;
+    mitTrack?: string | null;
+}): Promise<CurriculumModuleDto> {
+    return fetchWithAuth(`${API_BASE_URL}/curriculum-modules`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+    });
+}
+
+export async function updateCurriculumModule(
+    id: string,
+    body: {
+        code: string;
+        name: string;
+        academicLevel: number;
+        semesterLabel: string;
+        credits: number;
+        compulsoryOptional: string;
+        chiefTutor?: string;
+        programKind: string;
+        mitTrack?: string | null;
+    }
+): Promise<CurriculumModuleDto> {
+    return fetchWithAuth(`${API_BASE_URL}/curriculum-modules/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+    });
+}
+
+export async function notifyCurriculumModules(
+    moduleIds: string[],
+    message?: string
+): Promise<{ success: boolean; message: string; moduleCount: number; staffNotified: number }> {
+    return fetchWithAuth(`${API_BASE_URL}/curriculum-modules/notify`, {
+        method: 'POST',
+        body: JSON.stringify({ moduleIds, message: message ?? null }),
+    });
+}
+
 // ─── Interview APIs ───────────────────────────────────────────────
 
 export interface InterviewData {
