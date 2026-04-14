@@ -454,7 +454,9 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                   style={{ fontSize: '14px', fontWeight: isActive ? 600 : 500 }}
                 >
                   <Icon className="h-5 w-5" />
-                  {item.label}
+                  <span className="whitespace-nowrap overflow-hidden text-ellipsis">
+                    {item.label}
+                  </span>
                 </button>
               );
             })}
@@ -1317,13 +1319,6 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
           </Button>
         </aside>
       </div>
-
-      {/* Footer */}
-      <footer className="fixed bottom-0 left-64 right-80 bg-white border-t border-[#e0e0e0] py-3 px-6 text-center">
-        <p className="text-[#555555]" style={{ fontSize: '12px' }}>
-          University of Kelaniya | Temporary Staff Coordination System
-        </p>
-      </footer>
 
       {/* Dialogs */}
       <AttendanceSummaryDialog

@@ -688,14 +688,6 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#e0e0e0] py-3">
-        <div className="text-center">
-          <p className="text-[#555555]" style={{ fontSize: '13px' }}>
-            University of Kelaniya | Temporary Staff Coordination System
-          </p>
-        </div>
-      </footer>
     </div>
   );
 }

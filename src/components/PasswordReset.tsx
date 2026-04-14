@@ -194,12 +194,6 @@ export default function PasswordReset({ onBackToSignIn }: PasswordResetProps) {
         </div>
       </Card>
 
-      {/* Footer */}
-      <footer className="absolute bottom-4 left-0 right-0 text-center">
-        <p className="text-[#999999]" style={{ fontSize: '13px' }}>
-          University of Kelaniya | Temporary Staff Coordination System
-        </p>
-      </footer>
     </div>
   );
 }

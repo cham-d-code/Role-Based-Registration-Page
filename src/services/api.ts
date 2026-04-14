@@ -183,6 +183,13 @@ export interface ResearchApplicantDto {
     appliedAt?: string;
 }
 
+export interface MyResearchApplicationDto {
+    id: string;
+    opportunityId: string;
+    status: ResearchApplicationStatus;
+    appliedAt?: string;
+}
+
 export async function createResearchOpportunity(body: {
     title: string;
     description?: string;
@@ -226,6 +233,10 @@ export async function listOpenResearchOpportunities(): Promise<ResearchOpportuni
 
 export async function applyToResearchOpportunity(opportunityId: string): Promise<{ id: string; opportunityId: string; status: ResearchApplicationStatus; appliedAt?: string }> {
     return fetchWithAuth(`${API_BASE_URL}/research/opportunities/${opportunityId}/apply`, { method: 'POST' });
+}
+
+export async function getMyResearchApplications(): Promise<MyResearchApplicationDto[]> {
+    return fetchWithAuth(`${API_BASE_URL}/research/applications/mine`);
 }
 
 export async function getResearchApplicants(opportunityId: string): Promise<ResearchApplicantDto[]> {

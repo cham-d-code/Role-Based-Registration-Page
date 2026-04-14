@@ -38,7 +38,7 @@ import ViewJobDescriptionDialog from './ViewJobDescriptionDialog';
 import LeaveApplicationDialog from './LeaveApplicationDialog';
 import AddTaskDialog from './AddTaskDialog';
 import EditProfileDialog from './EditProfileDialog';
-import { applyToResearchOpportunity, listOpenResearchOpportunities, ResearchOpportunityDto } from '../services/api';
+import { applyToResearchOpportunity, getMyResearchApplications, listOpenResearchOpportunities, MyResearchApplicationDto, ResearchOpportunityDto } from '../services/api';
 import logo from 'figma:asset/39b6269214ec5f8a015cd1f1a1adaa157fd5d025.png';
 
 interface TempStaffProfileProps {
@@ -138,6 +138,7 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
   const [openResearch, setOpenResearch] = useState<ResearchOpportunityDto[]>([]);
   const [loadingResearch, setLoadingResearch] = useState(false);
   const [appliedOpportunityIds, setAppliedOpportunityIds] = useState<string[]>([]);
+  const [myApplications, setMyApplications] = useState<MyResearchApplicationDto[]>([]);
 
   // Helper function to get category styling
   const getCategoryStyle = (category: string) => {
@@ -230,9 +231,13 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
   useEffect(() => {
     if (activeMenu !== 'research') return;
     setLoadingResearch(true);
-    listOpenResearchOpportunities()
-      .then(setOpenResearch)
-      .catch((e) => console.error('Failed to load research opportunities', e))
+    Promise.all([listOpenResearchOpportunities(), getMyResearchApplications()])
+      .then(([opps, apps]) => {
+        setOpenResearch(opps);
+        setMyApplications(apps);
+        setAppliedOpportunityIds(apps.map(a => a.opportunityId));
+      })
+      .catch((e) => console.error('Failed to load research opportunities/applications', e))
       .finally(() => setLoadingResearch(false));
   }, [activeMenu]);
 
@@ -337,7 +342,10 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                   }`}
                 >
                   <Icon className="h-5 w-5" />
-                  <span style={{ fontSize: '14px', fontWeight: isActive ? 600 : 500 }}>
+                  <span
+                    className="whitespace-nowrap overflow-hidden text-ellipsis"
+                    style={{ fontSize: '14px', fontWeight: isActive ? 600 : 500 }}
+                  >
                     {item.label}
                   </span>
                 </button>
@@ -745,24 +753,45 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                       <p className="text-[#999999]" style={{ fontSize: '12px' }}>
                         {research.createdAt ? `Posted: ${new Date(research.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
                       </p>
-                      {appliedOpportunityIds.includes(research.id) ? (
-                        <Button 
-                          size="sm" 
-                          className="bg-green-600 text-white rounded-lg cursor-default"
-                          disabled
-                        >
-                          <CheckCircle className="h-4 w-4 mr-1" />
-                          Applied
-                        </Button>
-                      ) : (
-                        <Button 
-                          size="sm" 
-                          className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg"
-                          onClick={() => handleResearchApply(research.id)}
-                        >
-                          Apply
-                        </Button>
-                      )}
+                      {(() => {
+                        const app = myApplications.find(a => a.opportunityId === research.id);
+                        if (!app) {
+                          return (
+                            <Button 
+                              size="sm" 
+                              className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg"
+                              onClick={() => handleResearchApply(research.id)}
+                            >
+                              Apply
+                            </Button>
+                          );
+                        }
+
+                        if (app.status === 'accepted') {
+                          return (
+                            <Button size="sm" className="bg-green-600 text-white rounded-lg cursor-default" disabled>
+                              <CheckCircle className="h-4 w-4 mr-1" />
+                              Accepted{research.createdByName ? ` by ${research.createdByName}` : ''}
+                            </Button>
+                          );
+                        }
+
+                        if (app.status === 'rejected') {
+                          return (
+                            <Button size="sm" variant="outline" className="border-red-500 text-red-600 rounded-lg cursor-default" disabled>
+                              <XCircle className="h-4 w-4 mr-1" />
+                              Rejected{research.createdByName ? ` by ${research.createdByName}` : ''}
+                            </Button>
+                          );
+                        }
+
+                        return (
+                          <Button size="sm" className="bg-green-600 text-white rounded-lg cursor-default" disabled>
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Applied
+                          </Button>
+                        );
+                      })()}
                     </div>
                   </Card>
                 ))}
@@ -937,13 +966,6 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
           </Button>
         </aside>
       </div>
-
-      {/* Footer */}
-      <footer className="fixed bottom-0 left-64 right-0 bg-white border-t border-[#e0e0e0] py-3 text-center z-40">
-        <p className="text-[#555555]" style={{ fontSize: '13px' }}>
-          University of Kelaniya | Temporary Staff Coordination System
-        </p>
-      </footer>
 
       {/* View Job Description Dialog */}
       <ViewJobDescriptionDialog

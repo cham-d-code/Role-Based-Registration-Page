@@ -642,12 +642,6 @@ export default function SignUp({ onSwitchToSignIn }: SignUpProps) {
           </p>
         </div>
 
-        {/* Footer */}
-        <div className="text-center mt-8 pt-6 border-t border-[#e0e0e0]">
-          <p className="text-[#999999]" style={{ fontSize: '12px' }}>
-            University of Kelaniya | Temporary Staff Coordination System
-          </p>
-        </div>
       </Card>
     </div>
   );

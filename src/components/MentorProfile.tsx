@@ -417,7 +417,9 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                   style={{ fontSize: '14px', fontWeight: isActive ? 600 : 500 }}
                 >
                   <Icon className="h-5 w-5" />
-                  {item.label}
+                  <span className="whitespace-nowrap overflow-hidden text-ellipsis">
+                    {item.label}
+                  </span>
                 </button>
               );
             })}
@@ -1095,13 +1097,6 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
           </Button>
         </aside>
       </div>
-
-      {/* Footer */}
-      <footer className="bg-[#f9f9f9] border-t border-[#e0e0e0] py-4 text-center relative z-10">
-        <p className="text-[#555555]" style={{ fontSize: '14px', fontWeight: 500 }}>
-          University of Kelaniya | Temporary Staff Coordination System
-        </p>
-      </footer>
 
       {/* Dialogs */}
       {selectedMentee && (

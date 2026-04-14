@@ -835,7 +835,9 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                   style={{ fontSize: '14px', fontWeight: isActive ? 600 : 500 }}
                 >
                   <Icon className="h-5 w-5" />
-                  {item.label}
+                  <span className="whitespace-nowrap overflow-hidden text-ellipsis">
+                    {item.label}
+                  </span>
                 </button>
               );
             })}

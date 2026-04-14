@@ -473,6 +473,7 @@ CREATE INDEX IF NOT EXISTS idx_candidate_marks_candidate ON candidate_marks(cand
 -- ============================================
 ALTER TABLE IF EXISTS candidates ADD COLUMN IF NOT EXISTS candidate_id VARCHAR(50);;
 ALTER TABLE IF EXISTS session_participants ADD COLUMN IF NOT EXISTS left_session BOOLEAN NOT NULL DEFAULT FALSE;;
+ALTER TABLE IF EXISTS research_opportunities ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;;
 
 -- ============================================
 -- CURRICULUM MODULES (B.Sc. programme – coordinator notifications)
