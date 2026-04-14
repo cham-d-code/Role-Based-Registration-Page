@@ -24,6 +24,7 @@ public class UserProfileResponse {
     private String role;
     private String status;
     private String profileImageUrl;
+    private String specialization;
     private LocalDateTime createdAt;
     private LocalDate contractStartDate;
     private LocalDate contractEndDate;

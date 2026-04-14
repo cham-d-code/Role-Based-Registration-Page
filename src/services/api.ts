@@ -323,6 +323,10 @@ export async function getPanelMembers(): Promise<{ id: string; fullName: string;
     return fetchWithAuth(`${API_BASE_URL}/user/panel-members`);
 }
 
+export async function getApprovedMentors(): Promise<UserProfile[]> {
+    return fetchWithAuth(`${API_BASE_URL}/user/mentors`);
+}
+
 // Get all approved temporary staff members
 export async function getApprovedStaff(): Promise<{
     id: string;

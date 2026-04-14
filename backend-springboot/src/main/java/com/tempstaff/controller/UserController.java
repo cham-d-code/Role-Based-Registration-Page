@@ -49,6 +49,7 @@ public class UserController {
                 .role(user.getRole().name())
                 .status(user.getStatus().name())
                 .profileImageUrl(user.getProfileImageUrl())
+                .specialization(user.getSpecialization())
                 .createdAt(user.getCreatedAt())
                 .contractStartDate(user.getContractStartDate())
                 .contractEndDate(user.getContractEndDate())
@@ -122,6 +123,7 @@ public class UserController {
                 .role(u.getRole().name())
                 .status(u.getStatus().name())
                 .profileImageUrl(u.getProfileImageUrl())
+                .specialization(u.getSpecialization())
                 .createdAt(u.getCreatedAt())
                 .contractStartDate(u.getContractStartDate())
                 .contractEndDate(u.getContractEndDate())
@@ -198,6 +200,30 @@ public class UserController {
                         .build())
                 .collect(Collectors.toList());
 
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * GET /api/user/mentors
+     * Returns approved mentors with specialization (for mentor assignment).
+     */
+    @GetMapping("/mentors")
+    @PreAuthorize("hasAnyRole('HOD', 'COORDINATOR')")
+    public ResponseEntity<List<UserProfileResponse>> getApprovedMentors() {
+        List<User> mentors = userRepository.findByStatusAndRole(UserStatus.approved, UserRole.mentor);
+        List<UserProfileResponse> response = mentors.stream()
+                .map(u -> UserProfileResponse.builder()
+                        .id(u.getId().toString())
+                        .fullName(u.getFullName())
+                        .email(u.getEmail())
+                        .mobile(u.getMobile())
+                        .role(u.getRole().name())
+                        .status(u.getStatus().name())
+                        .profileImageUrl(u.getProfileImageUrl())
+                        .specialization(u.getSpecialization())
+                        .createdAt(u.getCreatedAt())
+                        .build())
+                .collect(Collectors.toList());
         return ResponseEntity.ok(response);
     }
 }

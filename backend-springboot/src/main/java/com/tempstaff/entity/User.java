@@ -44,6 +44,9 @@ public class User {
     @Column(name = "mentor_id")
     private UUID mentorId;
 
+    @Column(name = "specialization", columnDefinition = "TEXT")
+    private String specialization;
+
     @Column(name = "contract_start_date")
     private LocalDate contractStartDate;
 

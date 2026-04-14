@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS users (
     role user_role NOT NULL,
     status user_status DEFAULT 'pending',
     mentor_id UUID,
+    specialization TEXT,
     contract_start_date DATE,
     contract_end_date DATE,
     profile_image_url VARCHAR(500),
@@ -474,6 +475,7 @@ CREATE INDEX IF NOT EXISTS idx_candidate_marks_candidate ON candidate_marks(cand
 ALTER TABLE IF EXISTS candidates ADD COLUMN IF NOT EXISTS candidate_id VARCHAR(50);;
 ALTER TABLE IF EXISTS session_participants ADD COLUMN IF NOT EXISTS left_session BOOLEAN NOT NULL DEFAULT FALSE;;
 ALTER TABLE IF EXISTS research_opportunities ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;;
+ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS specialization TEXT;;
 
 -- ============================================
 -- CURRICULUM MODULES (B.Sc. programme – coordinator notifications)

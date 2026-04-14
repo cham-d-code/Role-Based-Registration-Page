@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from './ui/dialog';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Badge } from './ui/badge';
 import { Sparkles, CheckCircle } from 'lucide-react';
 import { Separator } from './ui/separator';
+import { getApprovedMentors, UserProfile } from '../services/api';
 
 interface Mentor {
   id: string;
@@ -35,34 +36,33 @@ export default function MentorAssignmentDialog({
   onAssign 
 }: MentorAssignmentDialogProps) {
   const [selectedMentor, setSelectedMentor] = useState('');
+  const [mentors, setMentors] = useState<Mentor[]>([]);
+  const [loadingMentors, setLoadingMentors] = useState(false);
 
-  // Simulated mentor data with specializations
-  const mentors: Mentor[] = [
-    {
-      id: 'M001',
-      name: 'Dr. T. Mahanama',
-      specializations: ['Marketing Management', 'Consumer Behavior', 'Brand Management'],
-      currentAssignments: 2
-    },
-    {
-      id: 'M002',
-      name: 'Dr. R. Fernando',
-      specializations: ['Operations Management', 'Supply Chain Management', 'Quality Management'],
-      currentAssignments: 3
-    },
-    {
-      id: 'M003',
-      name: 'Dr. S. Perera',
-      specializations: ['Human Resource Management', 'Organizational Behavior', 'Strategic Management'],
-      currentAssignments: 1
-    },
-    {
-      id: 'M004',
-      name: 'Dr. K. Silva',
-      specializations: ['Marketing Management', 'Digital Marketing', 'E-Commerce'],
-      currentAssignments: 2
-    }
-  ];
+  useEffect(() => {
+    if (!open) return;
+    setLoadingMentors(true);
+    getApprovedMentors()
+      .then((data: UserProfile[]) => {
+        const mapped: Mentor[] = data.map((u) => ({
+          id: u.id,
+          name: u.fullName,
+          specializations: (u as any).specialization
+            ? String((u as any).specialization)
+                .split(',')
+                .map((s: string) => s.trim())
+                .filter(Boolean)
+            : [],
+          currentAssignments: 0,
+        }));
+        setMentors(mapped);
+      })
+      .catch((e) => {
+        console.error('Failed to load mentors', e);
+        setMentors([]);
+      })
+      .finally(() => setLoadingMentors(false));
+  }, [open]);
 
   // FR10: Automatic mentor suggestion based on subject matching
   const calculateMatchScore = (mentor: Mentor, staffSubjects: string[]) => {
@@ -75,14 +75,14 @@ export default function MentorAssignmentDialog({
     return matches.length;
   };
 
-  const suggestedMentors = staffMember 
+  const suggestedMentors = useMemo(() => (staffMember 
     ? mentors
         .map(mentor => ({
           ...mentor,
           matchScore: calculateMatchScore(mentor, staffMember.preferredSubjects)
         }))
         .sort((a, b) => (b.matchScore || 0) - (a.matchScore || 0))
-    : [];
+    : []), [staffMember, mentors]);
 
   const topSuggestion = suggestedMentors[0];
 
@@ -173,6 +173,9 @@ export default function MentorAssignmentDialog({
               <Label className="text-[#555555] mb-2 block">
                 Or Choose a Mentor Manually
               </Label>
+              {loadingMentors && (
+                <p className="text-[#999999]" style={{ fontSize: '12px' }}>Loading mentors…</p>
+              )}
               <Select value={selectedMentor} onValueChange={setSelectedMentor}>
                 <SelectTrigger className="h-12 border-[#d0d0d0] rounded-lg focus:border-[#4db4ac]">
                   <SelectValue placeholder="Select a mentor" />

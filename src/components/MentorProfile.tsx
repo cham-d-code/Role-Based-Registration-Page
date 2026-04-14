@@ -39,7 +39,7 @@ import ResearchDetailsDialog from './ResearchDetailsDialog';
 import AddResearchDialog from './AddResearchDialog';
 import EditResearchDialog from './EditResearchDialog';
 import EditProfileDialog from './EditProfileDialog';
-import { createResearchOpportunity, deleteResearchOpportunity, getInterviews, getInterviewCandidates, getActiveSession, getMarkingScheme, getMyResearchOpportunities, MarkingSchemeData, ResearchOpportunityDto, SessionState, updateResearchOpportunity } from '../services/api';
+import { createResearchOpportunity, deleteResearchOpportunity, getInterviews, getInterviewCandidates, getActiveSession, getMarkingScheme, getMyNotifications, getMyResearchOpportunities, MarkingSchemeData, ResearchOpportunityDto, SessionState, updateResearchOpportunity, UserNotificationDto } from '../services/api';
 
 interface MentorProfileProps {
   onLogout?: () => void;
@@ -81,6 +81,7 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [myResearch, setMyResearch] = useState<ResearchOpportunityDto[]>([]);
   const [loadingResearch, setLoadingResearch] = useState(false);
+  const [notifications, setNotifications] = useState<UserNotificationDto[]>([]);
   const [profileData, setProfileData] = useState({
     name: 'Loading...',
     email: '',
@@ -175,10 +176,26 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
     { id: 'profile', label: 'Profile', icon: UserIcon },
   ];
 
+  // Load dashboard data from backend (research + notifications)
+  useEffect(() => {
+    if (activeMenu !== 'dashboard') return;
+    Promise.all([
+      getMyResearchOpportunities().catch(() => [] as ResearchOpportunityDto[]),
+      getMyNotifications(true).catch(() => [] as UserNotificationDto[]),
+    ]).then(([opps, notifs]) => {
+      setMyResearch(opps);
+      setNotifications(notifs);
+    });
+  }, [activeMenu]);
+
+  const activeResearchPosts = myResearch.filter(r => r.status === 'open').length;
+  const pendingReviews = myResearch.reduce((sum, r) => sum + (r.applicantsCount ?? 0), 0);
+
   const mentorStats = [
-    { label: 'Total Mentees Assigned', value: '6', color: '#222222' },
-    { label: 'Active Research Posts', value: '3', color: '#222222' },
-    { label: 'Pending Reviews', value: '2', color: '#f7a541' },
+    // We don't have a backend mentees endpoint yet; keep 0 until implemented
+    { label: 'Total Mentees Assigned', value: '0', color: '#222222' },
+    { label: 'Active Research Posts', value: String(activeResearchPosts), color: '#222222' },
+    { label: 'Pending Research Applicants', value: String(pendingReviews), color: pendingReviews > 0 ? '#f7a541' : '#222222' },
   ];
 
   const mentees: Mentee[] = [
@@ -298,20 +315,12 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
       .finally(() => setLoadingResearch(false));
   }, [activeMenu]);
 
-  const upcomingReminders = [
-    { task: 'Evaluation Submission Due - Mr. Kavinda Jayasuriya', priority: 'HIGH', date: 'Oct 21, 2025' },
-    { task: 'Mentor Meeting - Weekly Check-in', priority: 'MEDIUM', date: 'Oct 25, 2025' },
-    { task: 'Research Review Deadline - Consumer Behavior Study', priority: 'HIGH', date: 'Oct 30, 2025' },
-    { task: 'Department Research Presentation', priority: 'MEDIUM', date: 'Nov 2, 2025' },
-    { task: 'Mentee Progress Report Submission', priority: 'LOW', date: 'Nov 5, 2025' },
-  ];
-
-  const recentActivities = [
-    { activity: 'Published new research post', detail: 'Consumer Behavior Study in Digital Marketing', time: '3:15 PM', date: 'Oct 18, 2025' },
-    { activity: 'Submitted evaluation for candidate', detail: 'Mr. Ravindu Bandara - Marking Assignment', time: '1:45 PM', date: 'Oct 18, 2025' },
-    { activity: 'Reviewed mentee progress report', detail: 'Mr. Saman Perera - Monthly Progress', time: '10:30 AM', date: 'Oct 18, 2025' },
-    { activity: 'Scheduled mentor meeting', detail: 'Weekly Check-in Session', time: '9:00 AM', date: 'Oct 17, 2025' },
-  ];
+  const recentActivities = notifications.slice(0, 5).map(n => {
+    const d = n.createdAt ? new Date(n.createdAt) : null;
+    const date = d && !isNaN(d.getTime()) ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+    const time = d && !isNaN(d.getTime()) ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+    return { activity: n.title, detail: n.message, time, date };
+  });
 
   const calculateDaysUntilExpiry = (expiryDate: string) => {
     const today = new Date('2025-10-20'); // Current date for demo
@@ -427,7 +436,7 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 ml-64 mr-80 p-6 space-y-6 relative z-10">
+        <main className="flex-1 ml-64 p-6 space-y-6 relative z-10">
           {/* Dashboard View */}
           {activeMenu === 'dashboard' && (
             <>
@@ -1055,47 +1064,7 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
           )}
         </main>
 
-        {/* Right Sidebar - Reminders */}
-        <aside className="fixed right-0 top-16 bottom-0 w-80 bg-white shadow-lg overflow-y-auto p-6 z-10">
-          <h3 className="text-[#222222] mb-4" style={{ fontWeight: 700, fontSize: '18px' }}>
-            Reminders
-          </h3>
-          <Separator className="mb-4" />
-
-          <div className="space-y-3">
-            {upcomingReminders.map((reminder, index) => (
-              <Card
-                key={index}
-                className="bg-[#f9f9f9] border border-[#e0e0e0] rounded-lg p-4 hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <p className="text-[#222222] flex-1" style={{ fontSize: '14px', fontWeight: 600 }}>
-                    {reminder.task}
-                  </p>
-                  <Badge
-                    className={`${reminder.priority === 'HIGH'
-                      ? 'bg-red-100 text-red-700 border-red-300'
-                      : reminder.priority === 'MEDIUM'
-                        ? 'bg-orange-100 text-orange-700 border-orange-300'
-                        : 'bg-blue-100 text-blue-700 border-blue-300'
-                      } border`}
-                    style={{ fontSize: '10px' }}
-                  >
-                    {reminder.priority}
-                  </Badge>
-                </div>
-                <p className="text-[#999999]" style={{ fontSize: '12px' }}>
-                  Due: {reminder.date}
-                </p>
-              </Card>
-            ))}
-          </div>
-
-          <Button className="w-full mt-6 bg-white border-2 border-[#4db4ac] text-[#4db4ac] hover:bg-[#4db4ac] hover:text-white rounded-lg">
-            <BellRing className="h-4 w-4 mr-2" />
-            View All Reminders
-          </Button>
-        </aside>
+        {/* Right Sidebar - removed as requested */}
       </div>
 
       {/* Dialogs */}

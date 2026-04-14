@@ -28,6 +28,7 @@ public class AuthService {
     private final UserSubjectRepository userSubjectRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final ImStaffDirectoryService imStaffDirectoryService;
 
     @Value("${spring.profiles.active:development}")
     private String activeProfile;
@@ -83,6 +84,17 @@ public class AuthService {
                 .build();
 
         user = userRepository.save(user);
+
+        // Best-effort enrichment for senior academic staff (site does not expose email addresses)
+        if (request.getEmail() != null
+                && request.getEmail().toLowerCase().endsWith("@kln.ac.lk")
+                && role != UserRole.staff) {
+            String specialization = imStaffDirectoryService.lookupSpecializationByFullName(request.getFullName());
+            if (specialization != null && !specialization.isBlank()) {
+                user.setSpecialization(specialization);
+                userRepository.save(user);
+            }
+        }
 
         // If staff with preferred subjects, add them
         if (role == UserRole.staff && request.getPreferredSubjects() != null) {
