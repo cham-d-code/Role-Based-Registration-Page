@@ -89,6 +89,12 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;;
 
+-- Module preference request notifications
+DO $$ BEGIN
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'module_preferences_requested';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;;
+
 -- ============================================
 -- 1. USERS & AUTHENTICATION
 -- ============================================

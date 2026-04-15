@@ -23,7 +23,8 @@ import {
   Eye,
   Plus,
   UserCheck,
-  BookOpen
+  BookOpen,
+  Send
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -901,6 +902,9 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                                 </p>
                                 <p className="text-[#777777]" style={{ fontSize: '12px' }}>
                                   Level {m.academicLevel} • Semester {m.semesterLabel} • {m.credits} credits
+                                </p>
+                                <p className="text-[#777777]" style={{ fontSize: '12px' }}>
+                                  Chief Tutor: {m.chiefTutor && String(m.chiefTutor).trim() ? m.chiefTutor : '—'}
                                 </p>
                               </div>
                               <Badge className="bg-[#e6f7f6] text-[#4db4ac] border border-[#4db4ac]" style={{ fontSize: '11px' }}>
