@@ -32,4 +32,6 @@ public class UserProfileResponse {
     private Integer menteesCount;
     private String mentorId;
     private String mentorName;
+    private List<String> preferredModules;
+    private Boolean preferencesRequested;
 }

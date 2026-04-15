@@ -9,11 +9,14 @@ import com.tempstaff.entity.UserRole;
 import com.tempstaff.entity.UserStatus;
 import com.tempstaff.repository.CurriculumModuleRepository;
 import com.tempstaff.repository.UserRepository;
+import com.tempstaff.service.ModulePreferenceService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -30,6 +33,7 @@ public class CurriculumModuleController {
 
     private final CurriculumModuleRepository curriculumModuleRepository;
     private final UserRepository userRepository;
+    private final ModulePreferenceService modulePreferenceService;
 
     @GetMapping
     public ResponseEntity<List<CurriculumModuleResponse>> list(
@@ -95,18 +99,25 @@ public class CurriculumModuleController {
     }
 
     @PostMapping("/notify")
-    public ResponseEntity<Map<String, Object>> notifyStaff(@Valid @RequestBody NotifyCurriculumModulesRequest request) {
+    public ResponseEntity<Map<String, Object>> notifyStaff(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @Valid @RequestBody NotifyCurriculumModulesRequest request) {
+        User sender = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
         List<CurriculumModule> modules = curriculumModuleRepository.findAllById(request.getModuleIds());
         if (modules.size() != request.getModuleIds().size()) {
             throw new RuntimeException("One or more module ids are invalid");
         }
 
-        List<User> staff = userRepository.findByStatusAndRoleIn(
-                UserStatus.approved, List.of(UserRole.staff));
+        List<User> staff = userRepository.findByStatusAndRoleIn(UserStatus.approved, List.of(UserRole.staff));
+
+        // Persist the request and notify staff via in-app notifications
+        modulePreferenceService.createRequest(sender.getId(), request);
 
         Map<String, Object> body = new HashMap<>();
         body.put("success", true);
-        body.put("message", "Module notification queued (email delivery can be wired to your mail provider)");
+        body.put("message", "Module preferences request sent");
         body.put("moduleCount", modules.size());
         body.put("staffNotified", staff.size());
         body.put("moduleCodes", modules.stream().map(CurriculumModule::getCode).collect(Collectors.toList()));

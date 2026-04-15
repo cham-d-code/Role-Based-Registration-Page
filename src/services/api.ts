@@ -477,6 +477,30 @@ export async function notifyCurriculumModules(
     });
 }
 
+// ─── Module preferences (staff submits from requested module list) ────────────
+
+export interface ModulePreferenceRequestDto {
+    id: string;
+    message?: string | null;
+    createdAt?: string;
+    submittedByMe: boolean;
+    modules: CurriculumModuleDto[];
+}
+
+export async function getLatestModulePreferenceRequest(): Promise<ModulePreferenceRequestDto | null> {
+    return fetchWithAuth(`${API_BASE_URL}/module-preferences/latest`);
+}
+
+export async function submitModulePreferences(body: {
+    requestId: string;
+    moduleIds: string[];
+}): Promise<{ success: boolean }> {
+    return fetchWithAuth(`${API_BASE_URL}/module-preferences/submit`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+    });
+}
+
 // ─── Interview APIs ───────────────────────────────────────────────
 
 export interface InterviewData {

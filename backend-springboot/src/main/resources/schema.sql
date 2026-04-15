@@ -509,3 +509,42 @@ CREATE TABLE IF NOT EXISTS curriculum_modules (
 
 CREATE INDEX IF NOT EXISTS idx_curriculum_modules_level ON curriculum_modules(academic_level);;
 CREATE INDEX IF NOT EXISTS idx_curriculum_modules_kind ON curriculum_modules(program_kind);;
+
+-- ============================================
+-- MODULE PREFERENCES (staff selections for curriculum modules)
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS module_preference_requests (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    message TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);;
+
+CREATE TABLE IF NOT EXISTS module_preference_request_modules (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    request_id UUID NOT NULL REFERENCES module_preference_requests(id) ON DELETE CASCADE,
+    module_id UUID NOT NULL REFERENCES curriculum_modules(id) ON DELETE CASCADE,
+    UNIQUE(request_id, module_id)
+);;
+
+CREATE INDEX IF NOT EXISTS idx_modpref_req_created_at ON module_preference_requests(created_at);;
+CREATE INDEX IF NOT EXISTS idx_modpref_req_modules_req ON module_preference_request_modules(request_id);;
+
+CREATE TABLE IF NOT EXISTS module_preference_submissions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    request_id UUID NOT NULL REFERENCES module_preference_requests(id) ON DELETE CASCADE,
+    staff_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    submitted_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(request_id, staff_id)
+);;
+
+CREATE TABLE IF NOT EXISTS module_preference_submission_modules (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    submission_id UUID NOT NULL REFERENCES module_preference_submissions(id) ON DELETE CASCADE,
+    module_id UUID NOT NULL REFERENCES curriculum_modules(id) ON DELETE CASCADE,
+    UNIQUE(submission_id, module_id)
+);;
+
+CREATE INDEX IF NOT EXISTS idx_modpref_sub_staff ON module_preference_submissions(staff_id);;
+CREATE INDEX IF NOT EXISTS idx_modpref_sub_req ON module_preference_submissions(request_id);;

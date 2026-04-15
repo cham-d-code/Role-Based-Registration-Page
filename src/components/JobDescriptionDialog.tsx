@@ -70,7 +70,7 @@ export default function JobDescriptionDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-white max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="bg-white w-[96vw] max-w-[96vw] h-[94vh] max-h-[94vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-[#222222] flex items-center gap-2" style={{ fontWeight: 700, fontSize: '20px' }}>
             Create Job Description

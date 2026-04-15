@@ -404,9 +404,9 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                 contractEndDate: u.contractEndDate,
                 preferredSubjects: u.preferredSubjects ?? [],
                 hasJobDescription: existingMap[u.id]?.hasJobDescription ?? false,
-                preferencesRequested: existingMap[u.id]?.preferencesRequested ?? false,
+                preferencesRequested: u.preferencesRequested ?? existingMap[u.id]?.preferencesRequested ?? false,
                 mentor: u.mentorName ?? existingMap[u.id]?.mentor,
-                preferredModules: existingMap[u.id]?.preferredModules,
+                preferredModules: u.preferredModules ?? existingMap[u.id]?.preferredModules,
               }));
             });
           })

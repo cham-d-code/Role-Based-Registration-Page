@@ -40,7 +40,7 @@ import ViewJobDescriptionDialog from './ViewJobDescriptionDialog';
 import LeaveApplicationDialog from './LeaveApplicationDialog';
 import AddTaskDialog from './AddTaskDialog';
 import EditProfileDialog from './EditProfileDialog';
-import { applyToResearchOpportunity, getMyResearchApplications, listOpenResearchOpportunities, MyResearchApplicationDto, ResearchOpportunityDto } from '../services/api';
+import { applyToResearchOpportunity, getLatestModulePreferenceRequest, getMyResearchApplications, listOpenResearchOpportunities, MyResearchApplicationDto, ResearchOpportunityDto, submitModulePreferences, type ModulePreferenceRequestDto } from '../services/api';
 import logo from 'figma:asset/39b6269214ec5f8a015cd1f1a1adaa157fd5d025.png';
 
 interface TempStaffProfileProps {
@@ -56,6 +56,10 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
   const [editSubjectsOpen, setEditSubjectsOpen] = useState(false);
   const [preferredSubjects, setPreferredSubjects] = useState<string[]>([]);
   const [subjectsSaving, setSubjectsSaving] = useState(false);
+  const [modulePrefRequest, setModulePrefRequest] = useState<ModulePreferenceRequestDto | null>(null);
+  const [loadingModulePrefs, setLoadingModulePrefs] = useState(false);
+  const [selectedPrefModuleIds, setSelectedPrefModuleIds] = useState<Set<string>>(new Set());
+  const [submittingModulePrefs, setSubmittingModulePrefs] = useState(false);
   const [profileData, setProfileData] = useState({
     name: 'Loading...',
     email: '',
@@ -246,6 +250,7 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
     { id: 'tasks', label: 'My Tasks', icon: ClipboardList },
     { id: 'leave', label: 'Leave Requests', icon: Calendar },
     { id: 'research', label: 'Research Opportunities', icon: FileText },
+    { id: 'modulePreferences', label: 'Module Preferences', icon: BookOpen },
     { id: 'notifications', label: 'Notifications', icon: BellRing },
     { id: 'profile', label: 'Profile', icon: UserIcon },
   ];
@@ -268,6 +273,21 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
       })
       .catch((e) => console.error('Failed to load research opportunities/applications', e))
       .finally(() => setLoadingResearch(false));
+  }, [activeMenu]);
+
+  useEffect(() => {
+    if (activeMenu !== 'modulePreferences') return;
+    setLoadingModulePrefs(true);
+    getLatestModulePreferenceRequest()
+      .then((req) => {
+        setModulePrefRequest(req);
+        setSelectedPrefModuleIds(new Set());
+      })
+      .catch((e) => {
+        console.error('Failed to load module preference request', e);
+        setModulePrefRequest(null);
+      })
+      .finally(() => setLoadingModulePrefs(false));
   }, [activeMenu]);
 
   const upcomingReminders = [
@@ -439,20 +459,6 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                     </Button>
                   </div>
                 </div>
-              </Card>
-
-              {/* FR16: System Notices - Below Profile Card */}
-              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <BellRing className="h-5 w-5 text-[#4db4ac]" />
-                  <h3 className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 700 }}>
-                    Important Notices
-                  </h3>
-                  <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '10px' }}>
-                    FR16
-                  </Badge>
-                </div>
-                <SystemNotices userRole="staff" />
               </Card>
 
               {/* Quick Stats Section */}
@@ -825,6 +831,124 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                   </Card>
                 ))}
               </div>
+            </Card>
+          )}
+
+          {/* Module Preferences View */}
+          {activeMenu === 'modulePreferences' && (
+            <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <BookOpen className="h-6 w-6 text-[#4db4ac]" />
+                <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
+                  Module Preferences
+                </h3>
+              </div>
+              <Separator className="mb-6" />
+
+              {loadingModulePrefs && (
+                <Card className="bg-white border border-[#e0e0e0] rounded-lg p-4 text-center text-[#4db4ac]">
+                  Loading module request…
+                </Card>
+              )}
+
+              {!loadingModulePrefs && !modulePrefRequest && (
+                <div className="text-center py-12 text-[#999999]">
+                  <BookOpen className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p style={{ fontSize: '14px' }}>No module preferences request yet.</p>
+                </div>
+              )}
+
+              {!loadingModulePrefs && modulePrefRequest && (
+                <div className="space-y-4">
+                  {modulePrefRequest.message ? (
+                    <Card className="bg-[#f9f9f9] border border-[#e0e0e0] rounded-lg p-4">
+                      <p className="text-[#555555]" style={{ fontSize: '13px', lineHeight: '1.6' }}>
+                        {modulePrefRequest.message}
+                      </p>
+                    </Card>
+                  ) : null}
+
+                  <div className="space-y-2">
+                    <p className="text-[#555555]" style={{ fontSize: '13px', fontWeight: 600 }}>
+                      Select your preferred modules:
+                    </p>
+
+                    <div className="space-y-2">
+                      {modulePrefRequest.modules.map((m) => (
+                        <div
+                          key={m.id}
+                          className="flex items-start gap-3 p-3 rounded-lg border border-[#e0e0e0] hover:bg-[#f9f9f9] transition-colors"
+                        >
+                          <Checkbox
+                            checked={selectedPrefModuleIds.has(m.id)}
+                            onCheckedChange={(c) => {
+                              setSelectedPrefModuleIds((prev) => {
+                                const next = new Set(prev);
+                                if (c === true) next.add(m.id);
+                                else next.delete(m.id);
+                                return next;
+                              });
+                            }}
+                            className="mt-1 data-[state=checked]:bg-[#4db4ac] data-[state=checked]:border-[#4db4ac]"
+                            disabled={modulePrefRequest.submittedByMe}
+                          />
+
+                          <div className="flex-1">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 700 }}>
+                                  {m.code} — {m.name}
+                                </p>
+                                <p className="text-[#777777]" style={{ fontSize: '12px' }}>
+                                  Level {m.academicLevel} • Semester {m.semesterLabel} • {m.credits} credits
+                                </p>
+                              </div>
+                              <Badge className="bg-[#e6f7f6] text-[#4db4ac] border border-[#4db4ac]" style={{ fontSize: '11px' }}>
+                                {m.programKind === 'ALL' ? 'MIT/IT' : m.programKind}
+                              </Badge>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    {modulePrefRequest.submittedByMe && (
+                      <Badge className="bg-green-100 text-green-700 border border-green-300" style={{ fontSize: '12px' }}>
+                        Preferences submitted
+                      </Badge>
+                    )}
+                    <Button
+                      className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg"
+                      disabled={
+                        submittingModulePrefs ||
+                        modulePrefRequest.submittedByMe ||
+                        selectedPrefModuleIds.size === 0
+                      }
+                      onClick={async () => {
+                        if (!modulePrefRequest) return;
+                        try {
+                          setSubmittingModulePrefs(true);
+                          await submitModulePreferences({
+                            requestId: modulePrefRequest.id,
+                            moduleIds: Array.from(selectedPrefModuleIds),
+                          });
+                          setModulePrefRequest({ ...modulePrefRequest, submittedByMe: true });
+                          alert('Module preferences sent successfully!');
+                        } catch (e: any) {
+                          alert(`Send failed: ${e?.message || 'Unknown error'}`);
+                        } finally {
+                          setSubmittingModulePrefs(false);
+                        }
+                      }}
+                    >
+                      <Send className="h-4 w-4 mr-2" />
+                      Send Module Preferences
+                    </Button>
+                  </div>
+                </div>
+              )}
             </Card>
           )}
 

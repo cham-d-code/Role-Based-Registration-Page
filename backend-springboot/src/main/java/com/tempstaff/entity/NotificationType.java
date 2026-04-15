@@ -6,6 +6,7 @@ public enum NotificationType {
     research_accepted,
     research_rejected,
     mentor_assigned,
+    module_preferences_requested,
     info
 }
 

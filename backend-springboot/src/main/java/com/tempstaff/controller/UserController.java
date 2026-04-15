@@ -5,6 +5,7 @@ import com.tempstaff.dto.request.UpdateContractRequest;
 import com.tempstaff.dto.request.UpdateSpecializationRequest;
 import com.tempstaff.service.ImStaffDirectoryService;
 import com.tempstaff.service.NotificationService;
+import com.tempstaff.service.ModulePreferenceService;
 import com.tempstaff.dto.response.UserProfileResponse;
 import com.tempstaff.entity.NotificationType;
 import com.tempstaff.entity.User;
@@ -36,6 +37,7 @@ public class UserController {
     private final ModuleRepository moduleRepository;
     private final ImStaffDirectoryService imStaffDirectoryService;
     private final NotificationService notificationService;
+    private final ModulePreferenceService modulePreferenceService;
 
     /**
      * GET /api/user/me
@@ -103,6 +105,10 @@ public class UserController {
         List<User> staffUsers = userRepository.findByStatusAndRoleIn(
                 UserStatus.approved, List.of(UserRole.staff));
 
+        List<UUID> staffIds = staffUsers.stream().map(User::getId).collect(Collectors.toList());
+        var preferredModulesByStaff = modulePreferenceService.getLatestPreferredModuleCodesForStaff(staffIds);
+        var missingSubmission = modulePreferenceService.staffMissingSubmissionForLatestRequest(staffIds);
+
         List<UserProfileResponse> response = staffUsers.stream()
                 .map(u -> {
                     List<String> preferredSubjects = userSubjectRepository
@@ -137,6 +143,8 @@ public class UserController {
                             .preferredSubjects(preferredSubjects)
                             .mentorId(mentorId)
                             .mentorName(mentorName)
+                            .preferredModules(preferredModulesByStaff.get(u.getId()))
+                            .preferencesRequested(missingSubmission.contains(u.getId()))
                             .build();
                 })
                 .collect(Collectors.toList());
