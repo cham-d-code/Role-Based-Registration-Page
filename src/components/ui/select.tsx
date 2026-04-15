@@ -175,11 +175,45 @@ function SelectScrollDownButton({
   );
 }
 
+function SelectItemRich({
+  className,
+  text,
+  children,
+  ...props
+}: React.ComponentProps<typeof SelectPrimitive.Item> & { text: string }) {
+  return (
+    <SelectPrimitive.Item
+      data-slot="select-item"
+      className={cn(
+        "focus:bg-accent focus:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground relative flex w-full cursor-default items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        className,
+      )}
+      textValue={text}
+      {...props}
+    >
+      <span className="absolute right-2 flex size-3.5 items-center justify-center">
+        <SelectPrimitive.ItemIndicator>
+          <CheckIcon className="size-4" />
+        </SelectPrimitive.ItemIndicator>
+      </span>
+
+      {/* This is what appears in the trigger when selected */}
+      <SelectPrimitive.ItemText>{text}</SelectPrimitive.ItemText>
+
+      {/* Rich content only visible in the dropdown */}
+      <span aria-hidden="true" className="w-full">
+        {children}
+      </span>
+    </SelectPrimitive.Item>
+  );
+}
+
 export {
   Select,
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectItemRich,
   SelectLabel,
   SelectScrollDownButton,
   SelectScrollUpButton,

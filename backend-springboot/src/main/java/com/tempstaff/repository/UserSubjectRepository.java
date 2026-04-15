@@ -11,4 +11,6 @@ import java.util.UUID;
 public interface UserSubjectRepository extends JpaRepository<UserSubject, UUID> {
 
     List<UserSubject> findByUserIdAndIsPreferred(UUID userId, Boolean isPreferred);
+
+    void deleteByUserIdAndIsPreferred(UUID userId, Boolean isPreferred);
 }

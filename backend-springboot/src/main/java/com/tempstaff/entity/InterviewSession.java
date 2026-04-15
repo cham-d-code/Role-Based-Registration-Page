@@ -22,7 +22,7 @@ public class InterviewSession {
     private Interview interview;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "started_by", nullable = false)
+    @JoinColumn(name = "started_by")
     private User startedBy;
 
     @Column(name = "started_at", nullable = false)

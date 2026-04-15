@@ -83,6 +83,12 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;;
 
+-- Extend notification_type enum safely (idempotent)
+DO $$ BEGIN
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'mentor_assigned';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;;
+
 -- ============================================
 -- 1. USERS & AUTHENTICATION
 -- ============================================
@@ -411,7 +417,7 @@ CREATE INDEX IF NOT EXISTS idx_user_notifications_created ON user_notifications(
 CREATE TABLE IF NOT EXISTS interview_sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     interview_id UUID NOT NULL REFERENCES interviews(id) ON DELETE CASCADE,
-    started_by UUID NOT NULL REFERENCES users(id),
+    started_by UUID REFERENCES users(id) ON DELETE SET NULL,
     started_at TIMESTAMP NOT NULL DEFAULT NOW(),
     ended_at TIMESTAMP,
     is_active BOOLEAN NOT NULL DEFAULT TRUE
@@ -476,6 +482,13 @@ ALTER TABLE IF EXISTS candidates ADD COLUMN IF NOT EXISTS candidate_id VARCHAR(5
 ALTER TABLE IF EXISTS session_participants ADD COLUMN IF NOT EXISTS left_session BOOLEAN NOT NULL DEFAULT FALSE;;
 ALTER TABLE IF EXISTS research_opportunities ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;;
 ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS specialization TEXT;;
+
+-- Deleting a user must not fail when they started interview sessions (historical rows)
+ALTER TABLE interview_sessions DROP CONSTRAINT IF EXISTS interview_sessions_started_by_fkey;;
+ALTER TABLE interview_sessions ALTER COLUMN started_by DROP NOT NULL;;
+ALTER TABLE interview_sessions
+    ADD CONSTRAINT interview_sessions_started_by_fkey
+    FOREIGN KEY (started_by) REFERENCES users(id) ON DELETE SET NULL;;
 
 -- ============================================
 -- CURRICULUM MODULES (B.Sc. programme – coordinator notifications)

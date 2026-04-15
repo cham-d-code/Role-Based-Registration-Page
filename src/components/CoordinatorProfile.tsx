@@ -32,6 +32,7 @@ import { Card } from './ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
+import { Progress } from './ui/progress';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Separator } from './ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
@@ -51,7 +52,11 @@ import CoordinatorManageInterviewsPage from './CoordinatorManageInterviewsPage';
 import EditProfileDialog from './EditProfileDialog';
 import SystemNotices from './SystemNotices';
 import StaffAttendanceDialog from './StaffAttendanceDialog';
+import ResearchDetailsDialog from './ResearchDetailsDialog';
+import AddResearchDialog from './AddResearchDialog';
+import EditResearchDialog from './EditResearchDialog';
 import logo from 'figma:asset/39b6269214ec5f8a015cd1f1a1adaa157fd5d025.png';
+import { createResearchOpportunity, deleteResearchOpportunity, getMyMentees, getMyResearchOpportunities, ResearchOpportunityDto, updateResearchOpportunity, UserProfile } from '../services/api';
 
 interface CoordinatorProfileProps {
   onLogout: () => void;
@@ -154,6 +159,17 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
   const [selectedStaffForContract, setSelectedStaffForContract] = useState<StaffMember | null>(null);
   const [newContractStartDate, setNewContractStartDate] = useState('');
   const [newContractEndDate, setNewContractEndDate] = useState('');
+
+  // Research + Mentees (backend)
+  const [myResearch, setMyResearch] = useState<ResearchOpportunityDto[]>([]);
+  const [loadingResearch, setLoadingResearch] = useState(false);
+  const [showAddResearchDialog, setShowAddResearchDialog] = useState(false);
+  const [showEditResearchDialog, setShowEditResearchDialog] = useState(false);
+  const [showResearchDialog, setShowResearchDialog] = useState(false);
+  const [selectedResearch, setSelectedResearch] = useState<ResearchOpportunityDto | null>(null);
+
+  const [myMentees, setMyMentees] = useState<UserProfile[]>([]);
+  const [loadingMentees, setLoadingMentees] = useState(false);
 
   // Fetch real profile data from backend on mount
   useEffect(() => {
@@ -388,7 +404,7 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                 preferredSubjects: u.preferredSubjects ?? [],
                 hasJobDescription: existingMap[u.id]?.hasJobDescription ?? false,
                 preferencesRequested: existingMap[u.id]?.preferencesRequested ?? false,
-                mentor: existingMap[u.id]?.mentor,
+                mentor: u.mentorName ?? existingMap[u.id]?.mentor,
                 preferredModules: existingMap[u.id]?.preferredModules,
               }));
             });
@@ -512,10 +528,17 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
 
   // FR9, FR10: Assign mentor
   const handleAssignMentor = (staffId: string, mentorId: string) => {
-    setStaffMembers(prev =>
-      prev.map(staff => staff.id === staffId ? { ...staff, mentor: mentorId } : staff)
-    );
-    alert('Mentor assigned successfully!');
+    import('../services/api').then(async (api) => {
+      try {
+        const res = await api.assignMentorToStaff(staffId, mentorId);
+        setStaffMembers(prev =>
+          prev.map(staff => staff.id === staffId ? { ...staff, mentor: res.mentorName || mentorId } : staff)
+        );
+        alert('Mentor assigned successfully!');
+      } catch (e: any) {
+        alert(e?.message || 'Failed to assign mentor');
+      }
+    });
   };
 
   // FR12: Save job description
@@ -540,11 +563,31 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
     { id: 'interviews', label: 'Manage Interviews', icon: Calendar },
 
     { id: 'mentors', label: 'Assign Mentors', icon: UserCheck },
+    { id: 'mentees', label: 'My Mentees', icon: Users },
+    { id: 'research', label: 'Research Opportunities', icon: FileText },
     { id: 'staff', label: 'Temporary Staff List', icon: Users },
     { id: 'modules', label: 'Module Notifications', icon: BellRing },
     { id: 'leave', label: 'Leave Requests', icon: FileText },
     { id: 'profile', label: 'Profile', icon: UserIcon },
   ];
+
+  useEffect(() => {
+    if (activeMenu !== 'research') return;
+    setLoadingResearch(true);
+    getMyResearchOpportunities()
+      .then(setMyResearch)
+      .catch((e) => console.error('Failed to load research opportunities', e))
+      .finally(() => setLoadingResearch(false));
+  }, [activeMenu]);
+
+  useEffect(() => {
+    if (activeMenu !== 'mentees') return;
+    setLoadingMentees(true);
+    getMyMentees()
+      .then(setMyMentees)
+      .catch((e) => console.error('Failed to load mentees', e))
+      .finally(() => setLoadingMentees(false));
+  }, [activeMenu]);
 
   const statsCards = [
     { title: 'Active Staff Members', value: '24', color: '#4db4ac' },
@@ -579,6 +622,27 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
 
     const msPerDay = 24 * 60 * 60 * 1000;
     return Math.ceil((startOfEndDay.getTime() - startOfToday.getTime()) / msPerDay);
+  };
+
+  const parseLocalDate = (isoDate: string) => {
+    const [y, m, d] = isoDate.split('-').map(Number);
+    return new Date(y, (m || 1) - 1, d || 1);
+  };
+
+  const calculateDaysUntilExpiry = (expiryDate: string) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const expiry = parseLocalDate(expiryDate);
+    expiry.setHours(0, 0, 0, 0);
+    const diffTime = expiry.getTime() - today.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+
+  const getExpiryBadgeColor = (days: number) => {
+    if (days < 0) return 'bg-gray-100 text-gray-800 border-gray-400';
+    if (days < 30) return 'bg-red-100 text-red-700 border-red-300';
+    if (days < 60) return 'bg-orange-100 text-orange-700 border-orange-300';
+    return 'bg-green-100 text-green-700 border-green-300';
   };
 
   const getRemainingContractDaysLabel = (contractEndDate?: string) => {
@@ -1406,11 +1470,21 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                             Preferred Subjects:
                           </p>
                           <div className="flex flex-wrap gap-1">
-                            {staff.preferredSubjects.map((subject, idx) => (
-                              <Badge key={idx} className="bg-[#e6f7f6] text-[#4db4ac] border border-[#4db4ac]" style={{ fontSize: '11px' }}>
-                                {subject}
-                              </Badge>
-                            ))}
+                            {staff.preferredSubjects.length > 0 ? (
+                              staff.preferredSubjects.map((subject, idx) => (
+                                <Badge
+                                  key={idx}
+                                  className="bg-[#e6f7f6] text-[#4db4ac] border border-[#4db4ac]"
+                                  style={{ fontSize: '11px' }}
+                                >
+                                  {subject}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-[#999999]" style={{ fontSize: '12px' }}>
+                                —
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -1517,6 +1591,29 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                             <span>
                               Remaining contract days: {getRemainingContractDaysLabel(staff.contractEndDate)}
                             </span>
+                          </div>
+                        </div>
+
+                        <div className="mb-3">
+                          <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
+                            Preferred Subjects:
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {staff.preferredSubjects.length > 0 ? (
+                              staff.preferredSubjects.map((subject, idx) => (
+                                <Badge
+                                  key={idx}
+                                  className="bg-[#e6f7f6] text-[#4db4ac] border border-[#4db4ac]"
+                                  style={{ fontSize: '11px' }}
+                                >
+                                  {subject}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-[#999999]" style={{ fontSize: '12px' }}>
+                                —
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1635,6 +1732,230 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
               <Separator className="mb-4" />
               <CurriculumModulesPanel />
             </Card>
+          )}
+
+          {/* My Mentees */}
+          {activeMenu === 'mentees' && (
+            <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
+                  My Mentees
+                </h3>
+                <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '12px' }}>
+                  {myMentees.length} Total Mentees
+                </Badge>
+              </div>
+              <Separator className="mb-4" />
+
+              {loadingMentees && (
+                <div className="flex items-center justify-center py-8 gap-3 text-[#4db4ac]">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span style={{ fontSize: '14px' }}>Loading mentees…</span>
+                </div>
+              )}
+
+              {!loadingMentees && myMentees.length === 0 && (
+                <div className="text-center py-10 text-[#999999]" style={{ fontSize: '14px' }}>
+                  No mentees assigned to you yet.
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {!loadingMentees && myMentees.map((mentee: any) => {
+                  const contractExpiry = mentee.contractEndDate || '';
+                  const daysUntilExpiry = contractExpiry ? calculateDaysUntilExpiry(contractExpiry) : 0;
+                  const expiryColor = getExpiryBadgeColor(daysUntilExpiry);
+
+                  return (
+                    <Card
+                      key={mentee.id}
+                      className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6 hover:shadow-lg transition-shadow"
+                    >
+                      <div className="flex flex-col lg:flex-row gap-6">
+                        <div className="flex-1">
+                          <div className="flex items-start gap-4">
+                            <Avatar className="h-16 w-16 border-2 border-[#4db4ac]">
+                              <AvatarFallback className="bg-[#4db4ac] text-white" style={{ fontSize: '18px', fontWeight: 600 }}>
+                                {String(mentee.fullName || '').split(' ').filter(Boolean).map((n: string) => n[0]).join('')}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1">
+                              <h3 className="text-[#222222] mb-1" style={{ fontSize: '18px', fontWeight: 700 }}>
+                                {mentee.fullName}
+                              </h3>
+
+                              <div className="flex flex-wrap gap-3 text-[#555555]" style={{ fontSize: '13px' }}>
+                                <div className="flex items-center gap-1">
+                                  <Mail className="h-3 w-3 text-[#4db4ac]" />
+                                  {mentee.email}
+                                </div>
+                                {mentee.mobile && (
+                                  <div className="flex items-center gap-1">
+                                    <Phone className="h-3 w-3 text-[#4db4ac]" />
+                                    {mentee.mobile}
+                                  </div>
+                                )}
+                              </div>
+
+                              {Array.isArray(mentee.preferredSubjects) && mentee.preferredSubjects.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-3">
+                                  {mentee.preferredSubjects.slice(0, 6).map((s: string, idx: number) => (
+                                    <Badge key={idx} className="bg-[#e6f7f6] text-[#4db4ac] border border-[#4db4ac]" style={{ fontSize: '11px' }}>
+                                      {s}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="lg:w-64 space-y-3">
+                          <Card className={`${expiryColor} border p-4 rounded-lg`}>
+                            <div className="flex items-center gap-2 mb-2">
+                              <Clock className="h-4 w-4" />
+                              <p style={{ fontSize: '12px', fontWeight: 600 }}>
+                                Contract Expiry
+                              </p>
+                            </div>
+                            {contractExpiry ? (
+                              daysUntilExpiry < 0 ? (
+                                <>
+                                  <p style={{ fontSize: '24px', fontWeight: 700 }}>
+                                    Expired
+                                  </p>
+                                  <p style={{ fontSize: '11px' }} className="mt-1 opacity-90">
+                                    Ended: {parseLocalDate(contractExpiry).toLocaleDateString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      year: 'numeric'
+                                    })}
+                                  </p>
+                                </>
+                              ) : (
+                                <>
+                                  <p style={{ fontSize: '24px', fontWeight: 700 }}>
+                                    {daysUntilExpiry} days
+                                  </p>
+                                  <p style={{ fontSize: '11px' }} className="mt-1">
+                                    Expires: {parseLocalDate(contractExpiry).toLocaleDateString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      year: 'numeric'
+                                    })}
+                                  </p>
+                                  <Progress
+                                    value={Math.max(0, Math.min(100, (daysUntilExpiry / 90) * 100))}
+                                    className="h-2 mt-2"
+                                  />
+                                </>
+                              )
+                            ) : (
+                              <p className="text-[#999999]" style={{ fontSize: '12px' }}>—</p>
+                            )}
+                          </Card>
+
+                          <Button
+                            className="w-full bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
+                            onClick={() => alert('Job Description view can be wired next.')}
+                          >
+                            <FileText className="h-4 w-4 mr-2" />
+                            View Job Description
+                          </Button>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            </Card>
+          )}
+
+          {/* Research Opportunities */}
+          {activeMenu === 'research' && (
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
+                  Research Opportunities
+                </h2>
+                <Button
+                  className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg"
+                  style={{ fontWeight: 600 }}
+                  onClick={() => setShowAddResearchDialog(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add New Research
+                </Button>
+              </div>
+
+              {loadingResearch && (
+                <Card className="bg-white rounded-xl border-0 p-6 text-center text-[#4db4ac]">
+                  <Loader2 className="h-5 w-5 animate-spin inline mr-2" />
+                  Loading research opportunities…
+                </Card>
+              )}
+
+              <div className="grid grid-cols-1 gap-4">
+                {!loadingResearch && myResearch.map((research) => (
+                  <Card key={research.id} className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6 hover:shadow-lg transition-shadow">
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="text-[#222222] flex-1" style={{ fontSize: '18px', fontWeight: 600 }}>
+                        {research.title}
+                      </h4>
+                      <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '11px' }}>
+                        {research.applicantsCount ?? 0} applicants
+                      </Badge>
+                    </div>
+
+                    <p className="text-[#555555] mb-4" style={{ fontSize: '14px', lineHeight: '1.6' }}>
+                      {research.description || ''}
+                    </p>
+
+                    <div className="flex justify-between items-center">
+                      <span className="text-[#777777]" style={{ fontSize: '12px' }}>
+                        {research.createdAt ? `Posted: ${new Date(research.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
+                      </span>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#4db4ac] hover:text-white rounded-lg"
+                          onClick={() => { setSelectedResearch(research); setShowResearchDialog(true); }}
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          View Details
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#4db4ac] hover:text-white rounded-lg"
+                          onClick={() => { setSelectedResearch(research); setShowEditResearchDialog(true); }}
+                        >
+                          <Edit className="h-3 w-3 mr-1" />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-red-400 text-red-500 hover:bg-red-500 hover:text-white rounded-lg"
+                          onClick={async () => {
+                            if (!confirm('Delete this research opportunity?')) return;
+                            try {
+                              await deleteResearchOpportunity(research.id);
+                              setMyResearch(prev => prev.filter(r => r.id !== research.id));
+                            } catch (e: any) {
+                              alert(`Delete failed: ${e?.message || 'Unknown error'}`);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            </>
           )}
 
           {/* Leave Requests View */}
@@ -1849,6 +2170,43 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
         onOpenChange={setShowMentorDialog}
         staffMember={selectedStaff}
         onAssign={handleAssignMentor}
+      />
+
+      {selectedResearch && (
+        <ResearchDetailsDialog
+          open={showResearchDialog}
+          onOpenChange={setShowResearchDialog}
+          research={selectedResearch}
+        />
+      )}
+
+      <EditResearchDialog
+        open={showEditResearchDialog}
+        onOpenChange={setShowEditResearchDialog}
+        research={selectedResearch}
+        onSubmit={async (updates) => {
+          if (!selectedResearch?.id) return;
+          try {
+            const updated = await updateResearchOpportunity(selectedResearch.id, updates);
+            setMyResearch(prev => prev.map(r => r.id === updated.id ? updated : r));
+            setSelectedResearch(updated);
+          } catch (e: any) {
+            alert(`Edit failed: ${e?.message || 'Unknown error'}`);
+          }
+        }}
+      />
+
+      <AddResearchDialog
+        open={showAddResearchDialog}
+        onOpenChange={setShowAddResearchDialog}
+        onSubmit={async (researchData) => {
+          try {
+            const created = await createResearchOpportunity({ title: researchData.title, description: researchData.description });
+            setMyResearch(prev => [created, ...prev]);
+          } catch (e: any) {
+            alert(`Create failed: ${e?.message || 'Unknown error'}`);
+          }
+        }}
       />
 
       {/* Job Description Dialog */}

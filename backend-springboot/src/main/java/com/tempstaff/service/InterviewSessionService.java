@@ -168,7 +168,7 @@ public class InterviewSessionService {
                 .interviewId(session.getInterview().getId().toString())
                 .interviewNumber(session.getInterview().getInterviewNumber())
                 .startedAt(session.getStartedAt())
-                .startedByName(session.getStartedBy().getFullName())
+                .startedByName(session.getStartedBy() != null ? session.getStartedBy().getFullName() : null)
                 .myStatus(myStatus)
                 .activeParticipants(active)
                 .waitingParticipants(waiting)

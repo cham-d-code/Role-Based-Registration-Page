@@ -98,16 +98,35 @@ public class AuthService {
 
         // If staff with preferred subjects, add them
         if (role == UserRole.staff && request.getPreferredSubjects() != null) {
+            // Store raw selection too (module matching may not find an exact module name)
+            String raw = String.join(", ", request.getPreferredSubjects());
+            if (!raw.isBlank()) {
+                user.setSpecialization(raw);
+                userRepository.save(user);
+            }
+
             for (String subjectName : request.getPreferredSubjects()) {
                 List<Module> modules = moduleRepository.findByNameContainingIgnoreCase(subjectName);
+                Module moduleToUse;
                 if (!modules.isEmpty()) {
-                    UserSubject userSubject = UserSubject.builder()
-                            .userId(user.getId())
-                            .moduleId(modules.get(0).getId())
-                            .isPreferred(true)
-                            .build();
-                    userSubjectRepository.save(userSubject);
+                    moduleToUse = modules.get(0);
+                } else {
+                    // Ensure we still persist a preference even if seed modules differ.
+                    moduleToUse = moduleRepository.save(Module.builder()
+                            .code("USR-" + java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase())
+                            .name(subjectName)
+                            .department("Industrial Management")
+                            .credits(3)
+                            .isActive(true)
+                            .build());
                 }
+
+                UserSubject userSubject = UserSubject.builder()
+                        .userId(user.getId())
+                        .moduleId(moduleToUse.getId())
+                        .isPreferred(true)
+                        .build();
+                userSubjectRepository.save(userSubject);
             }
         }
 

@@ -1,7 +1,12 @@
 package com.tempstaff.controller;
 
+import com.tempstaff.dto.request.AssignMentorRequest;
 import com.tempstaff.dto.request.UpdateContractRequest;
+import com.tempstaff.dto.request.UpdateSpecializationRequest;
+import com.tempstaff.service.ImStaffDirectoryService;
+import com.tempstaff.service.NotificationService;
 import com.tempstaff.dto.response.UserProfileResponse;
+import com.tempstaff.entity.NotificationType;
 import com.tempstaff.entity.User;
 import com.tempstaff.entity.UserRole;
 import com.tempstaff.entity.UserStatus;
@@ -17,6 +22,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -28,6 +34,8 @@ public class UserController {
     private final UserRepository userRepository;
     private final UserSubjectRepository userSubjectRepository;
     private final ModuleRepository moduleRepository;
+    private final ImStaffDirectoryService imStaffDirectoryService;
+    private final NotificationService notificationService;
 
     /**
      * GET /api/user/me
@@ -41,6 +49,32 @@ public class UserController {
         User user = userRepository.findByEmail(userDetails.getUsername())
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
+        // Best-effort enrichment for senior academic staff if specialization is missing.
+        if ((user.getSpecialization() == null || user.getSpecialization().isBlank())
+                && user.getEmail() != null
+                && user.getEmail().toLowerCase().endsWith("@kln.ac.lk")
+                && user.getRole() != null
+                && user.getRole() != UserRole.staff) {
+            String specialization = imStaffDirectoryService.lookupSpecializationByFullName(user.getFullName());
+            if (specialization != null && !specialization.isBlank()) {
+                user.setSpecialization(specialization);
+                userRepository.save(user);
+            }
+        }
+
+        List<String> preferredSubjects = userSubjectRepository
+                .findByUserIdAndIsPreferred(user.getId(), true)
+                .stream()
+                .map(UserSubject::getModuleId)
+                .map(moduleId -> moduleRepository.findById(moduleId)
+                        .map(m -> m.getName())
+                        .orElse(null))
+                .filter(name -> name != null)
+                .collect(Collectors.toList());
+        if (preferredSubjects.isEmpty() && user.getSpecialization() != null && !user.getSpecialization().isBlank()) {
+            preferredSubjects = List.of(user.getSpecialization().split("\\s*,\\s*"));
+        }
+
         UserProfileResponse profile = UserProfileResponse.builder()
                 .id(user.getId().toString())
                 .email(user.getEmail())
@@ -53,6 +87,7 @@ public class UserController {
                 .createdAt(user.getCreatedAt())
                 .contractStartDate(user.getContractStartDate())
                 .contractEndDate(user.getContractEndDate())
+                .preferredSubjects(preferredSubjects)
                 .build();
 
         return ResponseEntity.ok(profile);
@@ -79,20 +114,109 @@ public class UserController {
                                     .orElse(null))
                             .filter(name -> name != null)
                             .collect(Collectors.toList());
+                    if (preferredSubjects.isEmpty() && u.getSpecialization() != null && !u.getSpecialization().isBlank()) {
+                        preferredSubjects = List.of(u.getSpecialization().split("\\s*,\\s*"));
+                    }
+
+                    String mentorId = u.getMentorId() != null ? u.getMentorId().toString() : null;
+                    String mentorName = null;
+                    if (u.getMentorId() != null) {
+                        mentorName = userRepository.findById(u.getMentorId())
+                                .map(User::getFullName)
+                                .orElse(null);
+                    }
 
                     return UserProfileResponse.builder()
                             .id(u.getId().toString())
                             .fullName(u.getFullName())
                             .email(u.getEmail())
                             .mobile(u.getMobile())
+                            .specialization(u.getSpecialization())
                             .contractStartDate(u.getContractStartDate())
                             .contractEndDate(u.getContractEndDate())
                             .preferredSubjects(preferredSubjects)
+                            .mentorId(mentorId)
+                            .mentorName(mentorName)
                             .build();
                 })
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * PUT /api/user/me/preferred-subjects
+     * Temporary staff can update their preferred subjects (used when initial module matching failed).
+     */
+    @PutMapping("/me/preferred-subjects")
+    @PreAuthorize("hasRole('STAFF')")
+    public ResponseEntity<UserProfileResponse> updateMyPreferredSubjects(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestBody com.tempstaff.dto.request.UpdatePreferredSubjectsRequest request) {
+
+        User user = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        List<String> desired = (request == null || request.getPreferredSubjects() == null)
+                ? List.of()
+                : request.getPreferredSubjects().stream()
+                .filter(s -> s != null && !s.isBlank())
+                .map(String::trim)
+                .distinct()
+                .collect(Collectors.toList());
+
+        userSubjectRepository.deleteByUserIdAndIsPreferred(user.getId(), true);
+
+        for (String subjectName : desired) {
+            List<com.tempstaff.entity.Module> modules = moduleRepository.findByNameContainingIgnoreCase(subjectName);
+            com.tempstaff.entity.Module moduleToUse;
+            if (!modules.isEmpty()) {
+                moduleToUse = modules.get(0);
+            } else {
+                moduleToUse = moduleRepository.save(com.tempstaff.entity.Module.builder()
+                        .code("USR-" + java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase())
+                        .name(subjectName)
+                        .department("Industrial Management")
+                        .credits(3)
+                        .isActive(true)
+                        .build());
+            }
+
+            userSubjectRepository.save(UserSubject.builder()
+                    .userId(user.getId())
+                    .moduleId(moduleToUse.getId())
+                    .isPreferred(true)
+                    .build());
+        }
+
+        String raw = String.join(", ", desired);
+        user.setSpecialization(raw.isBlank() ? null : raw);
+        userRepository.save(user);
+
+        return getMyProfile(userDetails);
+    }
+
+    /**
+     * PUT /api/user/me/specialization
+     * Senior academic staff (mentor/coordinator/hod) can update their specialization areas (comma-separated text).
+     */
+    @PutMapping("/me/specialization")
+    @PreAuthorize("hasAnyRole('HOD', 'COORDINATOR', 'MENTOR')")
+    public ResponseEntity<UserProfileResponse> updateMySpecialization(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestBody UpdateSpecializationRequest request) {
+
+        User user = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        String specialization = request != null ? request.getSpecialization() : null;
+        if (specialization != null) specialization = specialization.trim();
+        if (specialization != null && specialization.isBlank()) specialization = null;
+
+        user.setSpecialization(specialization);
+        userRepository.save(user);
+
+        return getMyProfile(userDetails);
     }
 
     /**
@@ -205,12 +329,15 @@ public class UserController {
 
     /**
      * GET /api/user/mentors
-     * Returns approved mentors with specialization (for mentor assignment).
+     * Returns approved mentor candidates (Mentor/HOD/Coordinator) with specialization (for mentor assignment).
      */
     @GetMapping("/mentors")
     @PreAuthorize("hasAnyRole('HOD', 'COORDINATOR')")
     public ResponseEntity<List<UserProfileResponse>> getApprovedMentors() {
-        List<User> mentors = userRepository.findByStatusAndRole(UserStatus.approved, UserRole.mentor);
+        List<User> mentors = userRepository.findByStatusAndRoleIn(
+                UserStatus.approved,
+                List.of(UserRole.mentor, UserRole.hod, UserRole.coordinator)
+        );
         List<UserProfileResponse> response = mentors.stream()
                 .map(u -> UserProfileResponse.builder()
                         .id(u.getId().toString())
@@ -222,8 +349,132 @@ public class UserController {
                         .profileImageUrl(u.getProfileImageUrl())
                         .specialization(u.getSpecialization())
                         .createdAt(u.getCreatedAt())
+                        .menteesCount((int) userRepository.countByStatusAndRoleAndMentorId(UserStatus.approved, UserRole.staff, u.getId()))
                         .build())
                 .collect(Collectors.toList());
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * PUT /api/user/staff/{staffUserId}/mentor
+     * Assign a mentor to a staff member (HOD/Coordinator).
+     */
+    @PutMapping("/staff/{staffUserId}/mentor")
+    @PreAuthorize("hasAnyRole('HOD', 'COORDINATOR')")
+    public ResponseEntity<Map<String, Object>> assignMentor(
+            @PathVariable UUID staffUserId,
+            @RequestBody AssignMentorRequest request,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        if (request == null || request.getMentorId() == null) {
+            throw new RuntimeException("mentorId is required");
+        }
+
+        User assigner = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        User staff = userRepository.findById(staffUserId)
+                .orElseThrow(() -> new RuntimeException("Staff user not found"));
+        if (staff.getRole() != UserRole.staff) {
+            throw new RuntimeException("Only staff users can be assigned a mentor");
+        }
+
+        User mentor = userRepository.findById(request.getMentorId())
+                .orElseThrow(() -> new RuntimeException("Mentor user not found"));
+        if (!(mentor.getRole() == UserRole.mentor || mentor.getRole() == UserRole.hod || mentor.getRole() == UserRole.coordinator)) {
+            throw new RuntimeException("mentorId must belong to a mentor / HOD / coordinator user");
+        }
+
+        staff.setMentorId(mentor.getId());
+        userRepository.save(staff);
+
+        // Notify staff + mentor
+        notificationService.notifyUser(
+                staff.getId(),
+                "Mentor assigned",
+                String.format("You have been assigned a mentor: %s.", mentor.getFullName()),
+                NotificationType.mentor_assigned,
+                null,
+                null
+        );
+        notificationService.notifyUser(
+                mentor.getId(),
+                "New mentee assigned",
+                String.format("%s assigned %s as your mentee.", assigner.getFullName(), staff.getFullName()),
+                NotificationType.mentor_assigned,
+                null,
+                null
+        );
+
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Mentor assigned",
+                "mentorId", mentor.getId().toString(),
+                "mentorName", mentor.getFullName()
+        ));
+    }
+
+    /**
+     * GET /api/user/mentees/mine
+     * List my mentees (approved staff assigned to me).
+     * Allowed for mentors and management users (if they act as mentors).
+     */
+    @GetMapping("/mentees/mine")
+    @PreAuthorize("hasAnyRole('HOD','COORDINATOR','MENTOR')")
+    public ResponseEntity<List<UserProfileResponse>> getMyMentees(@AuthenticationPrincipal UserDetails userDetails) {
+        User me = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        List<User> mentees = userRepository.findByStatusAndRoleAndMentorId(UserStatus.approved, UserRole.staff, me.getId());
+
+        List<UserProfileResponse> response = mentees.stream()
+                .map(u -> {
+                    List<String> preferredSubjects = userSubjectRepository
+                            .findByUserIdAndIsPreferred(u.getId(), true)
+                            .stream()
+                            .map(UserSubject::getModuleId)
+                            .map(moduleId -> moduleRepository.findById(moduleId)
+                                    .map(m -> m.getName())
+                                    .orElse(null))
+                            .filter(name -> name != null)
+                            .collect(Collectors.toList());
+                    if (preferredSubjects.isEmpty() && u.getSpecialization() != null && !u.getSpecialization().isBlank()) {
+                        preferredSubjects = List.of(u.getSpecialization().split("\\s*,\\s*"));
+                    }
+
+                    return UserProfileResponse.builder()
+                            .id(u.getId().toString())
+                            .fullName(u.getFullName())
+                            .email(u.getEmail())
+                            .mobile(u.getMobile())
+                            .role(u.getRole().name())
+                            .status(u.getStatus().name())
+                            .profileImageUrl(u.getProfileImageUrl())
+                            .specialization(u.getSpecialization())
+                            .createdAt(u.getCreatedAt())
+                            .contractStartDate(u.getContractStartDate())
+                            .contractEndDate(u.getContractEndDate())
+                            .preferredSubjects(preferredSubjects)
+                            .mentorId(u.getMentorId() != null ? u.getMentorId().toString() : null)
+                            .mentorName(me.getFullName())
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * GET /api/user/mentees/mine/count
+     * Returns the count of approved staff assigned to me.
+     */
+    @GetMapping("/mentees/mine/count")
+    @PreAuthorize("hasAnyRole('HOD','COORDINATOR','MENTOR')")
+    public ResponseEntity<Map<String, Object>> getMyMenteesCount(@AuthenticationPrincipal UserDetails userDetails) {
+        User me = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        long count = userRepository.countByStatusAndRoleAndMentorId(UserStatus.approved, UserRole.staff, me.getId());
+        return ResponseEntity.ok(Map.of("count", count));
     }
 }

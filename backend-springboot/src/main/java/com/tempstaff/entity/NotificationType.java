@@ -5,6 +5,7 @@ public enum NotificationType {
     research_applied,
     research_accepted,
     research_rejected,
+    mentor_assigned,
     info
 }
 

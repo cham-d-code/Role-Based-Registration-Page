@@ -39,6 +39,11 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     // Find pending users by specific role
     List<User> findByStatusAndRole(UserStatus status, UserRole role);
 
+    // Find approved staff mentees for a mentor
+    List<User> findByStatusAndRoleAndMentorId(UserStatus status, UserRole role, java.util.UUID mentorId);
+
+    long countByStatusAndRoleAndMentorId(UserStatus status, UserRole role, java.util.UUID mentorId);
+
     // Update user status
     @Modifying
     @Query("UPDATE User u SET u.status = :status WHERE u.id = :userId")

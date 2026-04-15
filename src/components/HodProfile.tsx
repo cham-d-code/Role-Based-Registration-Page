@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { LayoutDashboard, Users, ClipboardCheck, FileText, BellRing, UserIcon, ChevronDown, Settings, LogOut, Mail, Phone, Calendar, Eye, Clock, Archive, Edit, DollarSign, CheckCircle, XCircle, BarChart2, Loader2 } from 'lucide-react';
-import { getInterviewReport, InterviewReport } from '../services/api';
+import { createResearchOpportunity, deleteResearchOpportunity, getInterviewReport, getMyMentees, getMyResearchOpportunities, InterviewReport, ResearchOpportunityDto, updateResearchOpportunity, UserProfile } from '../services/api';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -18,6 +18,9 @@ import HodManageInterviewsPage from './HodManageInterviewsPage';
 import ViewJobDescriptionDialog from './ViewJobDescriptionDialog';
 import AttendanceAndSalariesPage from './AttendanceAndSalariesPage';
 import EditProfileDialog from './EditProfileDialog';
+import ResearchDetailsDialog from './ResearchDetailsDialog';
+import AddResearchDialog from './AddResearchDialog';
+import EditResearchDialog from './EditResearchDialog';
 
 interface HodProfileProps {
   onLogout: () => void;
@@ -46,6 +49,17 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
   const [reportInterviewId, setReportInterviewId] = useState<string | null>(null);
   const [loadingReport, setLoadingReport] = useState(false);
   const [reportError, setReportError] = useState('');
+
+  // Research + Mentees (backend)
+  const [myResearch, setMyResearch] = useState<ResearchOpportunityDto[]>([]);
+  const [loadingResearch, setLoadingResearch] = useState(false);
+  const [showAddResearchDialog, setShowAddResearchDialog] = useState(false);
+  const [showEditResearchDialog, setShowEditResearchDialog] = useState(false);
+  const [showResearchDialog, setShowResearchDialog] = useState(false);
+  const [selectedResearch, setSelectedResearch] = useState<ResearchOpportunityDto | null>(null);
+
+  const [myMentees, setMyMentees] = useState<UserProfile[]>([]);
+  const [loadingMentees, setLoadingMentees] = useState(false);
 
   // Fetch real profile data from backend on mount
   useEffect(() => {
@@ -321,12 +335,32 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'manageInterviews', label: 'Manage Interviews', icon: Calendar },
     { id: 'staff', label: 'Temporary Staff List', icon: Users },
+    { id: 'mentees', label: 'My Mentees', icon: Users },
+    { id: 'research', label: 'Research Opportunities', icon: FileText },
     { id: 'approve', label: 'Approve Registrations', icon: ClipboardCheck },
     { id: 'interviews', label: 'Interview Reports', icon: FileText },
     { id: 'attendance', label: 'Attendance & Salaries', icon: DollarSign },
     { id: 'notifications', label: 'Notifications', icon: BellRing },
     { id: 'profile', label: 'Profile', icon: UserIcon },
   ];
+
+  useEffect(() => {
+    if (activeMenu !== 'research') return;
+    setLoadingResearch(true);
+    getMyResearchOpportunities()
+      .then(setMyResearch)
+      .catch((e) => console.error('Failed to load research opportunities', e))
+      .finally(() => setLoadingResearch(false));
+  }, [activeMenu]);
+
+  useEffect(() => {
+    if (activeMenu !== 'mentees') return;
+    setLoadingMentees(true);
+    getMyMentees()
+      .then(setMyMentees)
+      .catch((e) => console.error('Failed to load mentees', e))
+      .finally(() => setLoadingMentees(false));
+  }, [activeMenu]);
 
   const statsCards = [
     { title: 'Total Temporary Staff', value: '42', color: '#4db4ac' },
@@ -672,6 +706,128 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                     </Card>
                   );
                 })}
+              </div>
+            </>
+          )}
+
+          {/* My Mentees */}
+          {activeMenu === 'mentees' && (
+            <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
+                  My Mentees
+                </h3>
+              </div>
+              <Separator className="mb-4" />
+
+              {loadingMentees && (
+                <div className="flex items-center justify-center py-8 gap-3 text-[#4db4ac]">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span style={{ fontSize: '14px' }}>Loading mentees…</span>
+                </div>
+              )}
+
+              {!loadingMentees && myMentees.length === 0 && (
+                <div className="text-center py-10 text-[#999999]" style={{ fontSize: '14px' }}>
+                  No mentees assigned to you yet.
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {myMentees.map((m) => (
+                  <Card key={m.id} className="border border-[#e0e0e0] rounded-lg p-4 bg-white">
+                    <div className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 700 }}>{m.fullName}</div>
+                    <div className="text-[#555555]" style={{ fontSize: '13px' }}>{m.email}</div>
+                    {m.mobile && <div className="text-[#555555]" style={{ fontSize: '13px' }}>{m.mobile}</div>}
+                  </Card>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Research Opportunities */}
+          {activeMenu === 'research' && (
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
+                  Research Opportunities
+                </h2>
+                <Button
+                  className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg"
+                  style={{ fontWeight: 600 }}
+                  onClick={() => setShowAddResearchDialog(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add New Research
+                </Button>
+              </div>
+
+              {loadingResearch && (
+                <Card className="bg-white rounded-xl border-0 p-6 text-center text-[#4db4ac]">
+                  <Loader2 className="h-5 w-5 animate-spin inline mr-2" />
+                  Loading research opportunities…
+                </Card>
+              )}
+
+              <div className="grid grid-cols-1 gap-4">
+                {!loadingResearch && myResearch.map((research) => (
+                  <Card key={research.id} className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6 hover:shadow-lg transition-shadow">
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="text-[#222222] flex-1" style={{ fontSize: '18px', fontWeight: 600 }}>
+                        {research.title}
+                      </h4>
+                      <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '11px' }}>
+                        {research.applicantsCount ?? 0} applicants
+                      </Badge>
+                    </div>
+
+                    <p className="text-[#555555] mb-4" style={{ fontSize: '14px', lineHeight: '1.6' }}>
+                      {research.description || ''}
+                    </p>
+
+                    <div className="flex justify-between items-center">
+                      <span className="text-[#777777]" style={{ fontSize: '12px' }}>
+                        {research.createdAt ? `Posted: ${new Date(research.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
+                      </span>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#4db4ac] hover:text-white rounded-lg"
+                          onClick={() => { setSelectedResearch(research); setShowResearchDialog(true); }}
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          View Details
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#4db4ac] hover:text-white rounded-lg"
+                          onClick={() => { setSelectedResearch(research); setShowEditResearchDialog(true); }}
+                        >
+                          <Edit className="h-3 w-3 mr-1" />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-red-400 text-red-500 hover:bg-red-500 hover:text-white rounded-lg"
+                          onClick={async () => {
+                            if (!confirm('Delete this research opportunity?')) return;
+                            try {
+                              await deleteResearchOpportunity(research.id);
+                              setMyResearch(prev => prev.filter(r => r.id !== research.id));
+                            } catch (e: any) {
+                              alert(`Delete failed: ${e?.message || 'Unknown error'}`);
+                            }
+                          }}
+                        >
+                          <XCircle className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
               </div>
             </>
           )}
@@ -1350,6 +1506,43 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
         onOpenChange={setEditProfileOpen}
         currentProfile={profileData}
         onSave={handleProfileSave}
+      />
+
+      {selectedResearch && (
+        <ResearchDetailsDialog
+          open={showResearchDialog}
+          onOpenChange={setShowResearchDialog}
+          research={selectedResearch}
+        />
+      )}
+
+      <EditResearchDialog
+        open={showEditResearchDialog}
+        onOpenChange={setShowEditResearchDialog}
+        research={selectedResearch}
+        onSubmit={async (updates) => {
+          if (!selectedResearch?.id) return;
+          try {
+            const updated = await updateResearchOpportunity(selectedResearch.id, updates);
+            setMyResearch(prev => prev.map(r => r.id === updated.id ? updated : r));
+            setSelectedResearch(updated);
+          } catch (e: any) {
+            alert(`Edit failed: ${e?.message || 'Unknown error'}`);
+          }
+        }}
+      />
+
+      <AddResearchDialog
+        open={showAddResearchDialog}
+        onOpenChange={setShowAddResearchDialog}
+        onSubmit={async (researchData) => {
+          try {
+            const created = await createResearchOpportunity({ title: researchData.title, description: researchData.description });
+            setMyResearch(prev => [created, ...prev]);
+          } catch (e: any) {
+            alert(`Create failed: ${e?.message || 'Unknown error'}`);
+          }
+        }}
       />
     </div>
   );

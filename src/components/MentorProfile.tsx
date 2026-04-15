@@ -39,7 +39,9 @@ import ResearchDetailsDialog from './ResearchDetailsDialog';
 import AddResearchDialog from './AddResearchDialog';
 import EditResearchDialog from './EditResearchDialog';
 import EditProfileDialog from './EditProfileDialog';
-import { createResearchOpportunity, deleteResearchOpportunity, getInterviews, getInterviewCandidates, getActiveSession, getMarkingScheme, getMyNotifications, getMyResearchOpportunities, MarkingSchemeData, ResearchOpportunityDto, SessionState, updateResearchOpportunity, UserNotificationDto } from '../services/api';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Textarea } from './ui/textarea';
+import { createResearchOpportunity, deleteResearchOpportunity, getInterviews, getInterviewCandidates, getActiveSession, getMarkingScheme, getMyMentees, getMyMenteesCount, getMyNotifications, getMyResearchOpportunities, MarkingSchemeData, ResearchOpportunityDto, SessionState, updateResearchOpportunity, UserNotificationDto, UserProfile } from '../services/api';
 
 interface MentorProfileProps {
   onLogout?: () => void;
@@ -79,15 +81,22 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
   const [showAddResearchDialog, setShowAddResearchDialog] = useState(false);
   const [showEditResearchDialog, setShowEditResearchDialog] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [editSpecOpen, setEditSpecOpen] = useState(false);
+  const [specializationText, setSpecializationText] = useState('');
+  const [savingSpec, setSavingSpec] = useState(false);
   const [myResearch, setMyResearch] = useState<ResearchOpportunityDto[]>([]);
   const [loadingResearch, setLoadingResearch] = useState(false);
   const [notifications, setNotifications] = useState<UserNotificationDto[]>([]);
+  const [myMentees, setMyMentees] = useState<UserProfile[]>([]);
+  const [loadingMentees, setLoadingMentees] = useState(false);
+  const [menteesCount, setMenteesCount] = useState(0);
   const [profileData, setProfileData] = useState({
     name: 'Loading...',
     email: '',
     phone: '',
     avatarUrl: '',
-    initials: '...'
+    initials: '...',
+    specialization: '',
   });
 
   // Live session polling
@@ -114,8 +123,10 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
             email: profile.email,
             phone: profile.mobile || '',
             avatarUrl: profile.profileImageUrl || '',
-            initials
+            initials,
+            specialization: (profile as any).specialization || '',
           });
+          setSpecializationText((profile as any).specialization || '');
         })
         .catch(() => {
           const local = api.getCurrentUser();
@@ -182,9 +193,11 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
     Promise.all([
       getMyResearchOpportunities().catch(() => [] as ResearchOpportunityDto[]),
       getMyNotifications(true).catch(() => [] as UserNotificationDto[]),
-    ]).then(([opps, notifs]) => {
+      getMyMenteesCount().catch(() => ({ count: 0 })),
+    ]).then(([opps, notifs, mentees]) => {
       setMyResearch(opps);
       setNotifications(notifs);
+      setMenteesCount(Number((mentees as any)?.count || 0));
     });
   }, [activeMenu]);
 
@@ -192,78 +205,22 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
   const pendingReviews = myResearch.reduce((sum, r) => sum + (r.applicantsCount ?? 0), 0);
 
   const mentorStats = [
-    // We don't have a backend mentees endpoint yet; keep 0 until implemented
-    { label: 'Total Mentees Assigned', value: '0', color: '#222222' },
+    { label: 'Total Mentees Assigned', value: String(menteesCount), color: '#222222' },
     { label: 'Active Research Posts', value: String(activeResearchPosts), color: '#222222' },
     { label: 'Pending Research Applicants', value: String(pendingReviews), color: pendingReviews > 0 ? '#f7a541' : '#222222' },
   ];
 
-  const mentees: Mentee[] = [
-    {
-      id: 'STAFF001',
-      name: 'Mr. Saman Perera',
-      email: 'saman.perera@kln.ac.lk',
-      phone: '+94 77 123 4567',
-      module: 'Marketing Management',
-      contractExpiry: '2025-12-31',
-      tasksCompleted: 12,
-      lastActivity: 'Oct 18, 2025',
-      jobDescription: {
-        staffId: 'STAFF001',
-        staffName: 'Mr. Saman Perera',
-        tasks: [
-          { id: '1', description: 'Conduct tutorial sessions for Marketing Management (MKT 301)', type: 'academic' },
-          { id: '2', description: 'Prepare and grade assignments for Consumer Behavior course', type: 'academic' },
-          { id: '3', description: 'Assist with student registration and documentation', type: 'administrative' },
-          { id: '4', description: 'Support department events and workshops', type: 'administrative' }
-        ],
-        createdDate: 'Oct 15, 2025',
-        createdBy: 'Dr. Thilini Mahanama (Coordinator)'
-      }
-    },
-    {
-      id: 'STAFF002',
-      name: 'Ms. Nimesha Silva',
-      email: 'nimesha.silva@kln.ac.lk',
-      phone: '+94 76 234 5678',
-      module: 'Consumer Behavior',
-      contractExpiry: '2026-01-15',
-      tasksCompleted: 8,
-      lastActivity: 'Oct 17, 2025',
-      jobDescription: {
-        staffId: 'STAFF002',
-        staffName: 'Ms. Nimesha Silva',
-        tasks: [
-          { id: '1', description: 'Conduct laboratory sessions for Consumer Behavior (CB 202)', type: 'academic' },
-          { id: '2', description: 'Grade mid-term examination papers', type: 'academic' },
-          { id: '3', description: 'Coordinate with department for course materials', type: 'administrative' }
-        ],
-        createdDate: 'Oct 12, 2025',
-        createdBy: 'Dr. Thilini Mahanama (Coordinator)'
-      }
-    },
-    {
-      id: 'STAFF003',
-      name: 'Mr. Kavinda Jayasuriya',
-      email: 'kavinda.j@kln.ac.lk',
-      phone: '+94 75 345 6789',
-      module: 'Brand Management',
-      contractExpiry: '2025-11-30',
-      tasksCompleted: 15,
-      lastActivity: 'Oct 19, 2025',
-      jobDescription: {
-        staffId: 'STAFF003',
-        staffName: 'Mr. Kavinda Jayasuriya',
-        tasks: [
-          { id: '1', description: 'Conduct tutorial sessions for Brand Management (BM 305)', type: 'academic' },
-          { id: '2', description: 'Supervise student projects and presentations', type: 'academic' },
-          { id: '3', description: 'Maintain course records and attendance', type: 'administrative' }
-        ],
-        createdDate: 'Oct 10, 2025',
-        createdBy: 'Dr. Thilini Mahanama (Coordinator)'
-      }
-    },
-  ];
+  useEffect(() => {
+    if (activeMenu !== 'mentees') return;
+    setLoadingMentees(true);
+    getMyMentees()
+      .then(setMyMentees)
+      .catch((e) => {
+        console.error('Failed to load mentees', e);
+        setMyMentees([]);
+      })
+      .finally(() => setLoadingMentees(false));
+  }, [activeMenu]);
 
   const upcomingInterviews = [
     {
@@ -322,12 +279,21 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
     return { activity: n.title, detail: n.message, time, date };
   });
 
+  const parseLocalDate = (isoDate: string) => {
+    // Backend sends LocalDate like "2026-10-14". Parsing with new Date(string) can shift by timezone.
+    const [y, m, d] = isoDate.split('-').map(Number);
+    return new Date(y, (m || 1) - 1, d || 1);
+  };
+
   const calculateDaysUntilExpiry = (expiryDate: string) => {
-    const today = new Date('2025-10-20'); // Current date for demo
-    const expiry = new Date(expiryDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const expiry = parseLocalDate(expiryDate);
+    expiry.setHours(0, 0, 0, 0);
+
     const diffTime = expiry.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   };
 
   const getExpiryBadgeColor = (days: number) => {
@@ -554,13 +520,27 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                   My Mentees
                 </h2>
                 <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '12px' }}>
-                  {mentees.length} Total Mentees
+                  {myMentees.length} Total Mentees
                 </Badge>
               </div>
 
               <div className="space-y-4">
-                {mentees.map((mentee) => {
-                  const daysUntilExpiry = calculateDaysUntilExpiry(mentee.contractExpiry);
+                {loadingMentees && (
+                  <Card className="bg-white rounded-xl border-0 p-6 text-center text-[#4db4ac]">
+                    <Loader2 className="h-5 w-5 animate-spin inline mr-2" />
+                    Loading mentees…
+                  </Card>
+                )}
+
+                {!loadingMentees && myMentees.length === 0 && (
+                  <Card className="bg-white rounded-xl border-0 p-6 text-center text-[#999999]">
+                    No mentees assigned to you yet.
+                  </Card>
+                )}
+
+                {!loadingMentees && myMentees.map((mentee: any) => {
+                  const contractExpiry = mentee.contractEndDate || '';
+                  const daysUntilExpiry = contractExpiry ? calculateDaysUntilExpiry(contractExpiry) : 0;
                   const expiryColor = getExpiryBadgeColor(daysUntilExpiry);
 
                   return (
@@ -574,12 +554,12 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                           <div className="flex items-start gap-4">
                             <Avatar className="h-16 w-16 border-2 border-[#4db4ac]">
                               <AvatarFallback className="bg-[#4db4ac] text-white" style={{ fontSize: '18px', fontWeight: 600 }}>
-                                {mentee.name.split(' ').map(n => n[0]).join('')}
+                                {String(mentee.fullName || '').split(' ').filter(Boolean).map((n: string) => n[0]).join('')}
                               </AvatarFallback>
                             </Avatar>
                             <div className="flex-1">
                               <h3 className="text-[#222222] mb-1" style={{ fontSize: '18px', fontWeight: 700 }}>
-                                {mentee.name}
+                                {mentee.fullName}
                               </h3>
 
                               <div className="flex flex-wrap gap-3 text-[#555555]" style={{ fontSize: '13px' }}>
@@ -587,11 +567,23 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                                   <Mail className="h-3 w-3 text-[#4db4ac]" />
                                   {mentee.email}
                                 </div>
-                                <div className="flex items-center gap-1">
-                                  <Phone className="h-3 w-3 text-[#4db4ac]" />
-                                  {mentee.phone}
-                                </div>
+                                {mentee.mobile && (
+                                  <div className="flex items-center gap-1">
+                                    <Phone className="h-3 w-3 text-[#4db4ac]" />
+                                    {mentee.mobile}
+                                  </div>
+                                )}
                               </div>
+
+                              {Array.isArray(mentee.preferredSubjects) && mentee.preferredSubjects.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-3">
+                                  {mentee.preferredSubjects.slice(0, 6).map((s: string, idx: number) => (
+                                    <Badge key={idx} className="bg-[#e6f7f6] text-[#4db4ac] border border-[#4db4ac]" style={{ fontSize: '11px' }}>
+                                      {s}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -606,27 +598,35 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                                 Contract Expiry
                               </p>
                             </div>
-                            <p style={{ fontSize: '24px', fontWeight: 700 }}>
-                              {Math.abs(daysUntilExpiry)} days
-                            </p>
-                            <p style={{ fontSize: '11px' }} className="mt-1">
-                              Expires: {new Date(mentee.contractExpiry).toLocaleDateString('en-US', {
-                                month: 'short',
-                                day: 'numeric',
-                                year: 'numeric'
-                              })}
-                            </p>
-                            <Progress
-                              value={Math.max(0, Math.min(100, (daysUntilExpiry / 90) * 100))}
-                              className="h-2 mt-2"
-                            />
+                          {contractExpiry ? (
+                            <>
+                              <p style={{ fontSize: '24px', fontWeight: 700 }}>
+                                {Math.abs(daysUntilExpiry)} days
+                              </p>
+                              <p style={{ fontSize: '11px' }} className="mt-1">
+                                Expires: {parseLocalDate(contractExpiry).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                })}
+                              </p>
+                              <Progress
+                                value={Math.max(0, Math.min(100, (daysUntilExpiry / 90) * 100))}
+                                className="h-2 mt-2"
+                              />
+                            </>
+                          ) : (
+                            <p className="text-[#999999]" style={{ fontSize: '12px' }}>—</p>
+                          )}
                           </Card>
 
                           {/* Action Button */}
                           <Button
                             className="w-full bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
                             onClick={() => {
-                              setSelectedMentee(mentee);
+                              // This feature still uses the older job description modal data shape
+                              // (we can wire real JDs later if needed).
+                              setSelectedMentee(null);
                               setShowJdDialog(true);
                             }}
                           >
@@ -1030,23 +1030,29 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                   </div>
 
                   <div>
-                    <h3 className="text-[#222222] mb-4" style={{ fontWeight: 600, fontSize: '16px' }}>
-                      Mentorship Statistics
-                    </h3>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[#555555]" style={{ fontSize: '14px' }}>Active Mentees</span>
-                        <span className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>3</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[#555555]" style={{ fontSize: '14px' }}>Mentorship Years</span>
-                        <span className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>5</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[#555555]" style={{ fontSize: '14px' }}>Total Mentees Guided</span>
-                        <span className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>12</span>
-                      </div>
+                    <div className="flex items-center justify-between gap-4 mb-3">
+                      <h3 className="text-[#222222]" style={{ fontWeight: 600, fontSize: '16px' }}>
+                        Specialization Areas
+                      </h3>
+                      <Button
+                        variant="outline"
+                        className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#e6f7f6]"
+                        onClick={() => setEditSpecOpen(true)}
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit
+                      </Button>
                     </div>
+
+                    {profileData.specialization ? (
+                      <p className="text-[#555555]" style={{ fontSize: '13px' }}>
+                        {profileData.specialization}
+                      </p>
+                    ) : (
+                      <p className="text-[#999999]" style={{ fontSize: '13px' }}>
+                        —
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1140,6 +1146,61 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
         currentProfile={profileData}
         onSave={handleProfileSave}
       />
+
+      <Dialog open={editSpecOpen} onOpenChange={setEditSpecOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-[#222222]" style={{ fontSize: '20px', fontWeight: 700 }}>
+              Edit Specialization Areas
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="text-[#555555]" style={{ fontSize: '13px' }}>
+              Add your areas separated by commas.
+            </div>
+
+            <Textarea
+              value={specializationText}
+              onChange={(e) => setSpecializationText(e.target.value)}
+              className="min-h-[120px] border-[#e0e0e0] focus:border-[#4db4ac]"
+              placeholder="e.g., Data Science, Machine Learning, Business Intelligence"
+            />
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSpecializationText(profileData.specialization || '');
+                  setEditSpecOpen(false);
+                }}
+                disabled={savingSpec}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
+                disabled={savingSpec}
+                onClick={async () => {
+                  setSavingSpec(true);
+                  try {
+                    const api = await import('../services/api');
+                    const updated = await api.updateMySpecialization(specializationText);
+                    const nextSpec = (updated as any).specialization || '';
+                    setProfileData((prev) => ({ ...prev, specialization: nextSpec }));
+                    setSpecializationText(nextSpec);
+                    setEditSpecOpen(false);
+                  } finally {
+                    setSavingSpec(false);
+                  }
+                }}
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -95,12 +95,52 @@ public class ImStaffDirectoryService {
     }
 
     private int indexOfLine(List<String> lines, String fullName) {
-        String needle = fullName.toLowerCase(Locale.ROOT).trim();
+        String needleRaw = fullName.toLowerCase(Locale.ROOT).trim();
+        String needle = normalizeName(needleRaw);
+        if (needle.isBlank()) needle = needleRaw;
+
         for (int i = 0; i < lines.size(); i++) {
-            String l = lines.get(i).toLowerCase(Locale.ROOT).trim();
-            if (l.equals(needle)) return i;
+            String lRaw = lines.get(i).toLowerCase(Locale.ROOT).trim();
+            String l = normalizeName(lRaw);
+
+            // Exact match (raw or normalized)
+            if (lRaw.equals(needleRaw) || l.equals(needle)) return i;
+
+            // Fuzzy match: all tokens of the shorter name appear in the longer name
+            if (tokenSubsetMatch(needle, l) || tokenSubsetMatch(l, needle)) return i;
         }
         return -1;
+    }
+
+    private String normalizeName(String s) {
+        if (s == null) return "";
+        String out = s.toLowerCase(Locale.ROOT);
+        // remove common titles/prefixes found on the IM staff page
+        out = out.replaceAll("\\bdr\\b\\.?"," ");
+        out = out.replaceAll("\\bprof\\b\\.?"," ");
+        out = out.replaceAll("\\bmr\\b\\.?"," ");
+        out = out.replaceAll("\\bms\\b\\.?"," ");
+        out = out.replaceAll("\\bmiss\\b\\.?"," ");
+        out = out.replaceAll("\\(ms\\)"," ");
+        out = out.replaceAll("[^a-z\\s]", " ");
+        out = out.replaceAll("\\s+", " ").trim();
+        return out;
+    }
+
+    private boolean tokenSubsetMatch(String a, String b) {
+        if (a == null || b == null) return false;
+        String aa = a.trim();
+        String bb = b.trim();
+        if (aa.isBlank() || bb.isBlank()) return false;
+
+        String[] tokens = aa.split("\\s+");
+        // require at least 2 tokens to reduce false positives
+        if (tokens.length < 2) return false;
+        for (String t : tokens) {
+            if (t.length() < 2) continue;
+            if (!bb.contains(t)) return false;
+        }
+        return true;
     }
 
     private boolean looksLikeSpecializationLine(String line) {

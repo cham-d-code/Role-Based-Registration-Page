@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -6,8 +6,9 @@ import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Calendar, User, Sparkles } from 'lucide-react';
+import { Calendar, Sparkles } from 'lucide-react';
 import { Separator } from './ui/separator';
+import { getApprovedStaff } from '../services/api';
 
 interface SubstituteStaff {
   id: string;
@@ -37,33 +38,28 @@ export default function LeaveApplicationDialog({
     substituteId: ''
   });
 
-  // Simulated substitute staff data
-  const allSubstituteStaff: SubstituteStaff[] = [
-    {
-      id: 'SUB001',
-      name: 'A.B. Perera',
-      availableSubjects: ['Marketing Management', 'Consumer Behavior', 'Brand Management'],
-      currentLoad: 2
-    },
-    {
-      id: 'SUB002',
-      name: 'N.P. Jayawardena',
-      availableSubjects: ['Operations Management', 'Supply Chain Management'],
-      currentLoad: 1
-    },
-    {
-      id: 'SUB003',
-      name: 'S.K. Fernando',
-      availableSubjects: ['Marketing Management', 'Digital Marketing'],
-      currentLoad: 3
-    },
-    {
-      id: 'SUB004',
-      name: 'R.T. Silva',
-      availableSubjects: ['Human Resource Management', 'Organizational Behavior'],
-      currentLoad: 2
-    }
-  ];
+  const [allSubstituteStaff, setAllSubstituteStaff] = useState<SubstituteStaff[]>([]);
+  const [loadingSubs, setLoadingSubs] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setLoadingSubs(true);
+    getApprovedStaff()
+      .then((staff) => {
+        const mapped: SubstituteStaff[] = staff.map((s) => ({
+          id: s.id,
+          name: s.fullName,
+          availableSubjects: s.preferredSubjects ?? [],
+          currentLoad: 0,
+        }));
+        setAllSubstituteStaff(mapped);
+      })
+      .catch((e) => {
+        console.error('Failed to load substitute staff', e);
+        setAllSubstituteStaff([]);
+      })
+      .finally(() => setLoadingSubs(false));
+  }, [open]);
 
   // FR19: Automatic filtering of substitute staff based on subject matching
   const calculateMatchScore = (staff: SubstituteStaff) => {
@@ -76,19 +72,21 @@ export default function LeaveApplicationDialog({
     return matches.length;
   };
 
-  const filteredSubstitutes = allSubstituteStaff
-    .map(staff => ({
-      ...staff,
-      matchScore: calculateMatchScore(staff)
-    }))
-    .filter(staff => staff.matchScore! > 0) // Only show staff with matching subjects
-    .sort((a, b) => {
-      // Sort by match score first, then by current load (lower is better)
-      if (b.matchScore! !== a.matchScore!) {
-        return b.matchScore! - a.matchScore!;
-      }
-      return a.currentLoad - b.currentLoad;
-    });
+  const filteredSubstitutes = useMemo(() => {
+    return allSubstituteStaff
+      .map(staff => ({
+        ...staff,
+        matchScore: calculateMatchScore(staff)
+      }))
+      .filter(staff => staff.matchScore! > 0) // Only show staff with matching subjects
+      .sort((a, b) => {
+        // Sort by match score first, then by current load (lower is better)
+        if (b.matchScore! !== a.matchScore!) {
+          return b.matchScore! - a.matchScore!;
+        }
+        return a.currentLoad - b.currentLoad;
+      });
+  }, [allSubstituteStaff, currentUserSubjects]);
 
   const bestMatch = filteredSubstitutes[0];
 
@@ -135,21 +133,6 @@ export default function LeaveApplicationDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="bg-[#e6f7f6] p-4 rounded-lg">
-            <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
-              Your Teaching Subjects
-            </p>
-            <div className="flex flex-wrap gap-1 mt-2">
-              {currentUserSubjects.map((subject, idx) => (
-                <Badge key={idx} className="bg-[#4db4ac] text-white" style={{ fontSize: '11px' }}>
-                  {subject}
-                </Badge>
-              ))}
-            </div>
-          </div>
-
-          <Separator />
-
           {/* Leave Dates */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -241,6 +224,11 @@ export default function LeaveApplicationDialog({
             <Label className="text-[#555555] mb-2 block">
               Select Substitute Staff Member *
             </Label>
+            {loadingSubs && (
+              <p className="text-[#999999] mb-2" style={{ fontSize: '12px' }}>
+                Loading substitute staff…
+              </p>
+            )}
             <Select value={formData.substituteId} onValueChange={(value) => handleChange('substituteId', value)}>
               <SelectTrigger className="h-12 border-[#d0d0d0] rounded-lg focus:border-[#4db4ac]">
                 <SelectValue placeholder="Choose a substitute staff member" />
@@ -250,7 +238,10 @@ export default function LeaveApplicationDialog({
                   filteredSubstitutes.map((staff) => (
                     <SelectItem key={staff.id} value={staff.id}>
                       <div className="flex items-center justify-between gap-4">
-                        <span>{staff.name}</span>
+                        <span>
+                          {staff.name}
+                          {staff.availableSubjects.length > 0 ? ` — ${staff.availableSubjects.join(', ')}` : ''}
+                        </span>
                         <Badge className="bg-[#4db4ac] text-white ml-2" style={{ fontSize: '10px' }}>
                           {staff.matchScore} match(es)
                         </Badge>
@@ -267,7 +258,7 @@ export default function LeaveApplicationDialog({
             
             {filteredSubstitutes.length === 0 && (
               <p className="text-red-600 mt-2" style={{ fontSize: '12px' }}>
-                ⚠ No substitute staff members match your teaching subjects. Please contact the coordinator.
+                ⚠ No substitute staff members match your specializations. Please contact the coordinator.
               </p>
             )}
           </div>

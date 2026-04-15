@@ -8,7 +8,12 @@ export interface UserProfile {
     role: string;
     status: string;
     profileImageUrl?: string;
+    specialization?: string;
+    preferredSubjects?: string[];
     createdAt?: string;
+    contractStartDate?: string;
+    contractEndDate?: string;
+    menteesCount?: number;
 }
 // Backend port can vary in local dev; default to 8081 (matches our current Spring Boot run).
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081/api';
@@ -314,6 +319,26 @@ export async function getUserProfile(): Promise<UserProfile> {
     return fetchWithAuth(`${API_BASE_URL}/user/me`);
 }
 
+export async function updateMyPreferredSubjects(preferredSubjects: string[]): Promise<UserProfile> {
+    return fetchWithAuth(`${API_BASE_URL}/user/me/preferred-subjects`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ preferredSubjects }),
+    });
+}
+
+export async function updateMySpecialization(specialization: string): Promise<UserProfile> {
+    return fetchWithAuth(`${API_BASE_URL}/user/me/specialization`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ specialization }),
+    });
+}
+
 export async function getUserProfileById(userId: string): Promise<UserProfile> {
     return fetchWithAuth(`${API_BASE_URL}/user/${userId}`);
 }
@@ -327,6 +352,24 @@ export async function getApprovedMentors(): Promise<UserProfile[]> {
     return fetchWithAuth(`${API_BASE_URL}/user/mentors`);
 }
 
+export async function assignMentorToStaff(
+    staffUserId: string,
+    mentorId: string
+): Promise<{ success: boolean; message?: string; mentorId?: string; mentorName?: string }> {
+    return fetchWithAuth(`${API_BASE_URL}/user/staff/${staffUserId}/mentor`, {
+        method: 'PUT',
+        body: JSON.stringify({ mentorId }),
+    });
+}
+
+export async function getMyMentees(): Promise<UserProfile[]> {
+    return fetchWithAuth(`${API_BASE_URL}/user/mentees/mine`);
+}
+
+export async function getMyMenteesCount(): Promise<{ count: number }> {
+    return fetchWithAuth(`${API_BASE_URL}/user/mentees/mine/count`);
+}
+
 // Get all approved temporary staff members
 export async function getApprovedStaff(): Promise<{
     id: string;
@@ -336,6 +379,8 @@ export async function getApprovedStaff(): Promise<{
     contractStartDate?: string;
     contractEndDate?: string;
     preferredSubjects?: string[];
+    mentorId?: string;
+    mentorName?: string;
 }[]> {
     return fetchWithAuth(`${API_BASE_URL}/user/staff`);
 }

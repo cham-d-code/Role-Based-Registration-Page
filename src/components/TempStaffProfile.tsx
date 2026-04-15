@@ -33,6 +33,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Separator } from './ui/separator';
 import { Progress } from './ui/progress';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Checkbox } from './ui/checkbox';
 import SystemNotices from './SystemNotices';
 import ViewJobDescriptionDialog from './ViewJobDescriptionDialog';
 import LeaveApplicationDialog from './LeaveApplicationDialog';
@@ -51,6 +53,9 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
   const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [editSubjectsOpen, setEditSubjectsOpen] = useState(false);
+  const [preferredSubjects, setPreferredSubjects] = useState<string[]>([]);
+  const [subjectsSaving, setSubjectsSaving] = useState(false);
   const [profileData, setProfileData] = useState({
     name: 'Loading...',
     email: '',
@@ -58,6 +63,29 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
     avatarUrl: '',
     initials: '...'
   });
+
+  const availableSubjects = [
+    'Core AI & Machine Learning',
+    'Advanced AI Systems',
+    'Data Science & Analytics',
+    'Computer Vision & Image Processing',
+    'Internet of Things (IoT) & Automation',
+    'Communication Networks & Information Systems',
+    'Software Engineering & System Architecture',
+    'Operations & Logistics Management',
+    'Supply Chain & Transportation',
+    'Process Optimization & Industry 4.0',
+    'Total Quality Management (TQM)',
+    'Sustainability & Green Logistics',
+    'Digital Transformation & ERP Systems',
+    'Business Systems Engineering & Business Law',
+    'Digital & Social Media Marketing',
+    'Consumer Behavior & Financial Fitness',
+    'English Language Teaching (ELT/ESL)',
+    'Gender & Postcolonial Studies',
+    'Psychology (Abnormal & Social)',
+    'International Protection of Human Rights',
+  ];
 
   // Fetch real profile data from backend on mount
   useEffect(() => {
@@ -77,6 +105,7 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
             avatarUrl: profile.profileImageUrl || '',
             initials
           });
+          setPreferredSubjects(profile.preferredSubjects ?? []);
         })
         .catch(() => {
           const local = api.getCurrentUser();
@@ -890,6 +919,39 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
 
                 <Separator className="my-6" />
 
+                <div className="mb-6">
+                  <div className="flex items-center justify-between gap-4 mb-2">
+                    <h3 className="text-[#222222]" style={{ fontWeight: 600, fontSize: '16px' }}>
+                      Preferred Subjects
+                    </h3>
+                    <Button
+                      variant="outline"
+                      className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#e6f7f6]"
+                      onClick={() => setEditSubjectsOpen(true)}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Subjects
+                    </Button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {preferredSubjects.length > 0 ? (
+                      preferredSubjects.map((s, idx) => (
+                        <Badge
+                          key={`${s}-${idx}`}
+                          className="bg-[#e6f7f6] text-[#4db4ac] border border-[#4db4ac]"
+                          style={{ fontSize: '11px' }}
+                        >
+                          {s}
+                        </Badge>
+                      ))
+                    ) : (
+                      <span className="text-[#999999]" style={{ fontSize: '13px' }}>
+                        —
+                      </span>
+                    )}
+                  </div>
+                </div>
+
                 <Button 
                   className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg px-6 py-2"
                   onClick={() => setEditProfileOpen(true)}
@@ -996,6 +1058,69 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
         currentProfile={profileData}
         onSave={handleProfileSave}
       />
+
+      <Dialog open={editSubjectsOpen} onOpenChange={setEditSubjectsOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-[#222222]" style={{ fontSize: '20px', fontWeight: 700 }}>
+              Edit Preferred Subjects
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {availableSubjects.map((subject) => (
+                <div key={subject} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`pref-${subject}`}
+                    checked={preferredSubjects.includes(subject)}
+                    onCheckedChange={() => {
+                      setPreferredSubjects((prev) =>
+                        prev.includes(subject) ? prev.filter((s) => s !== subject) : [...prev, subject]
+                      );
+                    }}
+                    className="border-[#4db4ac] data-[state=checked]:bg-[#4db4ac] data-[state=checked]:border-[#4db4ac]"
+                  />
+                  <label
+                    htmlFor={`pref-${subject}`}
+                    className="text-[#555555] cursor-pointer"
+                    style={{ fontSize: '14px' }}
+                  >
+                    {subject}
+                  </label>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setEditSubjectsOpen(false)}
+                disabled={subjectsSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
+                disabled={subjectsSaving}
+                onClick={async () => {
+                  setSubjectsSaving(true);
+                  try {
+                    const api = await import('../services/api');
+                    const updated = await api.updateMyPreferredSubjects(preferredSubjects);
+                    setPreferredSubjects(updated.preferredSubjects ?? preferredSubjects);
+                    setEditSubjectsOpen(false);
+                  } finally {
+                    setSubjectsSaving(false);
+                  }
+                }}
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

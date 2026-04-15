@@ -29,4 +29,7 @@ public class UserProfileResponse {
     private LocalDate contractStartDate;
     private LocalDate contractEndDate;
     private List<String> preferredSubjects;
+    private Integer menteesCount;
+    private String mentorId;
+    private String mentorName;
 }
