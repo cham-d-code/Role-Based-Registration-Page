@@ -26,7 +26,8 @@ import {
   Download,
   CalendarCheck,
   Clock,
-  Loader2
+  Loader2,
+  Trash2
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -643,6 +644,13 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
     if (days < 30) return 'bg-red-100 text-red-700 border-red-300';
     if (days < 60) return 'bg-orange-100 text-orange-700 border-orange-300';
     return 'bg-green-100 text-green-700 border-green-300';
+  };
+
+  const formatPostedDate = (iso?: string | null) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
   const getRemainingContractDaysLabel = (contractEndDate?: string) => {
@@ -1913,7 +1921,7 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
 
                     <div className="flex justify-between items-center">
                       <span className="text-[#777777]" style={{ fontSize: '12px' }}>
-                        {research.createdAt ? `Posted: ${new Date(research.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
+                        {formatPostedDate(research.createdAt) ? `Posted: ${formatPostedDate(research.createdAt)}` : ''}
                       </span>
                       <div className="flex gap-2">
                         <Button

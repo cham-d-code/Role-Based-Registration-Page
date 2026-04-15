@@ -6,6 +6,7 @@ import CoordinatorProfile from './components/CoordinatorProfile';
 import HodProfile from './components/HodProfile';
 import TempStaffProfile from './components/TempStaffProfile';
 import MentorProfile from './components/MentorProfile';
+import ErrorBoundary from './components/ErrorBoundary';
 
 type UserRole = 'hod' | 'coordinator' | 'mentor' | 'staff';
 
@@ -54,7 +55,9 @@ export default function App() {
           onBackToSignIn={() => setCurrentPage('signin')}
         />
       ) : (
-        renderDashboard()
+        <ErrorBoundary>
+          {renderDashboard()}
+        </ErrorBoundary>
       )}
     </div>
   );
