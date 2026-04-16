@@ -192,9 +192,13 @@ export default function EditProfileDialog({
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  disabled
                   className="border-[#e0e0e0] focus:border-[#4db4ac]"
                   placeholder="Enter your email"
                 />
+                <p className="text-[#999999] mt-2" style={{ fontSize: '12px' }}>
+                  Email cannot be changed.
+                </p>
               </div>
 
               <div>
