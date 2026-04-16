@@ -110,10 +110,20 @@ public class CurriculumModuleController {
             throw new RuntimeException("One or more module ids are invalid");
         }
 
-        List<User> staff = userRepository.findByStatusAndRoleIn(UserStatus.approved, List.of(UserRole.staff));
+        List<User> staff;
+        if (request.getStaffId() != null) {
+            User s = userRepository.findById(request.getStaffId())
+                    .orElseThrow(() -> new RuntimeException("Staff user not found"));
+            if (s.getRole() != UserRole.staff || s.getStatus() != UserStatus.approved) {
+                throw new RuntimeException("staffId must belong to an approved staff user");
+            }
+            staff = List.of(s);
+        } else {
+            staff = userRepository.findByStatusAndRoleIn(UserStatus.approved, List.of(UserRole.staff));
+        }
 
         // Persist the request and notify staff via in-app notifications
-        modulePreferenceService.createRequest(sender.getId(), request);
+        modulePreferenceService.createRequest(sender.getId(), request, staff);
 
         Map<String, Object> body = new HashMap<>();
         body.put("success", true);

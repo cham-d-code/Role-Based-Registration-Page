@@ -472,11 +472,12 @@ export async function updateCurriculumModule(
 
 export async function notifyCurriculumModules(
     moduleIds: string[],
-    message?: string
+    message?: string,
+    staffId?: string
 ): Promise<{ success: boolean; message: string; moduleCount: number; staffNotified: number }> {
     return fetchWithAuth(`${API_BASE_URL}/curriculum-modules/notify`, {
         method: 'POST',
-        body: JSON.stringify({ moduleIds, message: message ?? null }),
+        body: JSON.stringify({ moduleIds, message: message ?? null, staffId: staffId ?? null }),
     });
 }
 

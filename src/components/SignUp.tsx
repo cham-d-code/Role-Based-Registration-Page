@@ -539,8 +539,8 @@ export default function SignUp({ onSwitchToSignIn }: SignUpProps) {
               <SelectContent>
                 <SelectItem value="hod">Head of Department</SelectItem>
                 <SelectItem value="coordinator">Temporary Staff Coordinator</SelectItem>
-                <SelectItem value="mentor">Senior Lecturer (Mentor)</SelectItem>
-                <SelectItem value="staff">Temporary Staff</SelectItem>
+                <SelectItem value="mentor">Senior Academic Staff</SelectItem>
+                <SelectItem value="staff">Temporary Academic Staff</SelectItem>
               </SelectContent>
             </Select>
             {touched.role && errors.role && (

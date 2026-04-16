@@ -127,11 +127,22 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
 
   const formatReceptionTime = (t: any) => {
     const day = t?.day || '';
-    const hh = t?.hour || '';
-    const mm = t?.minute || '';
-    const ap = t?.ampm || '';
-    const time = hh && mm ? `${hh}:${mm}` : '';
-    return [day, [time, ap].filter(Boolean).join(' ')].filter(Boolean).join(' ');
+    // Backward-compatible: older JDs used hour/minute/ampm (single time)
+    const fromH = t?.fromHour ?? t?.hour ?? '';
+    const fromM = t?.fromMinute ?? t?.minute ?? '';
+    const fromAp = t?.fromAmpm ?? t?.ampm ?? '';
+    const toH = t?.toHour ?? '';
+    const toM = t?.toMinute ?? '';
+    const toAp = t?.toAmpm ?? '';
+
+    const fromTime = fromH && fromM ? `${fromH}:${fromM}` : '';
+    const toTime = toH && toM ? `${toH}:${toM}` : '';
+
+    const fromLabel = [fromTime, fromAp].filter(Boolean).join(' ');
+    const toLabel = [toTime, toAp].filter(Boolean).join(' ');
+    const range = toLabel ? `${fromLabel} – ${toLabel}` : fromLabel;
+
+    return [day, range].filter(Boolean).join(' ');
   };
 
   const [leaveRequests, setLeaveRequests] = useState([
@@ -237,6 +248,13 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
     { label: 'Leave Days Remaining', value: '2', color: '#4db4ac' },
     { label: 'Days to Contract End', value: '45', color: '#555555' },
   ];
+
+  // Load latest module preference request so we can show a sidebar badge
+  useEffect(() => {
+    getLatestModulePreferenceRequest()
+      .then((req) => setModulePrefRequest(req))
+      .catch(() => setModulePrefRequest(null));
+  }, []);
 
   useEffect(() => {
     if (activeMenu !== 'research') return;
@@ -376,6 +394,8 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeMenu === item.id;
+              const showModulePrefsBadge =
+                item.id === 'modulePreferences' && !!modulePrefRequest && modulePrefRequest.submittedByMe !== true;
               return (
                 <button
                   key={item.id}
@@ -387,11 +407,32 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                   }`}
                 >
                   <Icon className="h-5 w-5" />
-                  <span
-                    className="whitespace-nowrap overflow-hidden text-ellipsis"
-                    style={{ fontSize: '14px', fontWeight: isActive ? 600 : 500 }}
-                  >
-                    {item.label}
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span
+                      className="whitespace-nowrap overflow-hidden text-ellipsis"
+                      style={{ fontSize: '14px', fontWeight: isActive ? 600 : 500 }}
+                    >
+                      {item.label}
+                    </span>
+                    {showModulePrefsBadge && (
+                      <span
+                        className="flex items-center justify-center flex-shrink-0"
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 9999,
+                          backgroundColor: '#dc2626', // red-600 (forced, not Tailwind-dependent)
+                          color: '#ffffff',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          lineHeight: 1,
+                        }}
+                        aria-label="New module preference request"
+                        title="New module preference request"
+                      >
+                        1
+                      </span>
+                    )}
                   </span>
                 </button>
               );

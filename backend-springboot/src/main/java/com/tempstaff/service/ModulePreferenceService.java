@@ -7,6 +7,7 @@ import com.tempstaff.dto.response.ModulePreferenceRequestResponse;
 import com.tempstaff.entity.*;
 import com.tempstaff.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,8 +26,40 @@ public class ModulePreferenceService {
     private final UserRepository userRepository;
     private final NotificationService notificationService;
 
+    private Map<UUID, UUID> latestRequestIdByStaff(Collection<UUID> staffIds) {
+        if (staffIds == null || staffIds.isEmpty()) return Map.of();
+
+        List<ModulePreferenceRequest> requests = requestRepo.findAll(Sort.by(Sort.Direction.DESC, "createdAt"));
+        if (requests.isEmpty()) return Map.of();
+
+        Map<UUID, UUID> out = new HashMap<>();
+        Set<UUID> remaining = new HashSet<>(staffIds);
+
+        for (ModulePreferenceRequest r : requests) {
+            if (remaining.isEmpty()) break;
+
+            UUID target = r.getTargetStaffId();
+            if (target != null) {
+                if (remaining.contains(target)) {
+                    out.put(target, r.getId());
+                    remaining.remove(target);
+                }
+                continue;
+            }
+
+            // Broadcast request: applies to everyone not already matched by a newer targeted request
+            for (UUID sid : remaining) {
+                out.put(sid, r.getId());
+            }
+            remaining.clear();
+            break;
+        }
+
+        return out;
+    }
+
     @Transactional
-    public ModulePreferenceRequest createRequest(UUID createdBy, NotifyCurriculumModulesRequest req) {
+    public ModulePreferenceRequest createRequest(UUID createdBy, NotifyCurriculumModulesRequest req, List<User> recipients) {
         if (req.getModuleIds() == null || req.getModuleIds().isEmpty()) {
             throw new RuntimeException("moduleIds are required");
         }
@@ -38,6 +71,7 @@ public class ModulePreferenceService {
 
         ModulePreferenceRequest r = ModulePreferenceRequest.builder()
                 .createdBy(createdBy)
+                .targetStaffId(req.getStaffId())
                 .message(req.getMessage())
                 .build();
         r = requestRepo.save(r);
@@ -49,8 +83,8 @@ public class ModulePreferenceService {
                     .build());
         }
 
-        // Notify all approved staff (in-app notifications inbox)
-        List<User> staff = userRepository.findByStatusAndRoleIn(UserStatus.approved, List.of(UserRole.staff));
+        // Notify recipients (in-app notifications inbox)
+        List<User> staff = (recipients == null) ? List.of() : recipients;
         String moduleCodes = modules.stream().map(CurriculumModule::getCode).sorted().collect(Collectors.joining(", "));
         String msg = (req.getMessage() == null || req.getMessage().isBlank())
                 ? ("Please submit your preferred modules. Modules: " + moduleCodes)
@@ -72,10 +106,10 @@ public class ModulePreferenceService {
 
     @Transactional(readOnly = true)
     public Optional<ModulePreferenceRequestResponse> getLatestRequestForStaff(UUID staffId) {
-        Optional<ModulePreferenceRequest> latest = requestRepo.findFirstByOrderByCreatedAtDesc();
+        List<ModulePreferenceRequest> latest = requestRepo.findLatestForStaff(staffId, org.springframework.data.domain.PageRequest.of(0, 1));
         if (latest.isEmpty()) return Optional.empty();
 
-        ModulePreferenceRequest r = latest.get();
+        ModulePreferenceRequest r = latest.get(0);
         boolean submitted = submissionRepo.findByRequestIdAndStaffId(r.getId(), staffId).isPresent();
 
         List<UUID> moduleIds = requestModuleRepo.findByRequestId(r.getId()).stream()
@@ -147,112 +181,150 @@ public class ModulePreferenceService {
 
     @Transactional(readOnly = true)
     public Map<UUID, List<String>> getLatestPreferredModuleCodesForStaff(Collection<UUID> staffIds) {
-        Optional<ModulePreferenceRequest> latestReq = requestRepo.findFirstByOrderByCreatedAtDesc();
-        if (latestReq.isEmpty() || staffIds == null || staffIds.isEmpty()) return Map.of();
-        UUID reqId = latestReq.get().getId();
+        if (staffIds == null || staffIds.isEmpty()) return Map.of();
 
-        // Load submissions for latest request
-        List<ModulePreferenceSubmission> subs = submissionRepo.findByRequestIdAndStaffIdIn(reqId, staffIds);
+        Map<UUID, UUID> staffToReq = latestRequestIdByStaff(staffIds);
+        if (staffToReq.isEmpty()) return Map.of();
 
-        if (subs.isEmpty()) return Map.of();
-
-        Map<UUID, UUID> staffToSubmission = subs.stream()
-                .collect(Collectors.toMap(ModulePreferenceSubmission::getStaffId, ModulePreferenceSubmission::getId));
-
-        List<UUID> submissionIds = new ArrayList<>(staffToSubmission.values());
-        Map<UUID, List<UUID>> submissionToModules = new HashMap<>();
-        for (UUID sid : submissionIds) {
-            List<UUID> mids = submissionModuleRepo.findBySubmissionId(sid).stream()
-                    .map(ModulePreferenceSubmissionModule::getModuleId)
-                    .collect(Collectors.toList());
-            submissionToModules.put(sid, mids);
+        // Group staff by request id
+        Map<UUID, List<UUID>> reqToStaff = new HashMap<>();
+        for (var e : staffToReq.entrySet()) {
+            reqToStaff.computeIfAbsent(e.getValue(), k -> new ArrayList<>()).add(e.getKey());
         }
-
-        // Load curriculum module codes
-        Set<UUID> allModuleIds = submissionToModules.values().stream().flatMap(List::stream).collect(Collectors.toSet());
-        Map<UUID, CurriculumModule> moduleMap = curriculumModuleRepository.findAllById(allModuleIds).stream()
-                .collect(Collectors.toMap(CurriculumModule::getId, m -> m));
 
         Map<UUID, List<String>> out = new HashMap<>();
-        for (var e : staffToSubmission.entrySet()) {
-            UUID staffId = e.getKey();
-            UUID submissionId = e.getValue();
-            List<String> codes = submissionToModules.getOrDefault(submissionId, List.of()).stream()
-                    .map(moduleMap::get)
-                    .filter(Objects::nonNull)
-                    .map(CurriculumModule::getCode)
-                    .sorted()
-                    .collect(Collectors.toList());
-            out.put(staffId, codes);
+
+        for (var e : reqToStaff.entrySet()) {
+            UUID reqId = e.getKey();
+            List<UUID> groupStaff = e.getValue();
+
+            List<ModulePreferenceSubmission> subs = submissionRepo.findByRequestIdAndStaffIdIn(reqId, groupStaff);
+            if (subs.isEmpty()) continue;
+
+            Map<UUID, UUID> staffToSubmission = subs.stream()
+                    .collect(Collectors.toMap(ModulePreferenceSubmission::getStaffId, ModulePreferenceSubmission::getId));
+
+            List<UUID> submissionIds = new ArrayList<>(staffToSubmission.values());
+            Map<UUID, List<UUID>> submissionToModules = new HashMap<>();
+            for (UUID sid : submissionIds) {
+                List<UUID> mids = submissionModuleRepo.findBySubmissionId(sid).stream()
+                        .map(ModulePreferenceSubmissionModule::getModuleId)
+                        .collect(Collectors.toList());
+                submissionToModules.put(sid, mids);
+            }
+
+            Set<UUID> allModuleIds = submissionToModules.values().stream().flatMap(List::stream).collect(Collectors.toSet());
+            Map<UUID, CurriculumModule> moduleMap = curriculumModuleRepository.findAllById(allModuleIds).stream()
+                    .collect(Collectors.toMap(CurriculumModule::getId, m -> m));
+
+            for (var se : staffToSubmission.entrySet()) {
+                UUID staffId = se.getKey();
+                UUID submissionId = se.getValue();
+                List<String> codes = submissionToModules.getOrDefault(submissionId, List.of()).stream()
+                        .map(moduleMap::get)
+                        .filter(Objects::nonNull)
+                        .map(CurriculumModule::getCode)
+                        .sorted()
+                        .collect(Collectors.toList());
+                out.put(staffId, codes);
+            }
         }
+
         return out;
     }
 
     @Transactional(readOnly = true)
     public Map<UUID, List<CurriculumModuleResponse>> getLatestPreferredModulesForStaff(Collection<UUID> staffIds) {
-        Optional<ModulePreferenceRequest> latestReq = requestRepo.findFirstByOrderByCreatedAtDesc();
-        if (latestReq.isEmpty() || staffIds == null || staffIds.isEmpty()) return Map.of();
-        UUID reqId = latestReq.get().getId();
+        if (staffIds == null || staffIds.isEmpty()) return Map.of();
 
-        List<ModulePreferenceSubmission> subs = submissionRepo.findByRequestIdAndStaffIdIn(reqId, staffIds);
-        if (subs.isEmpty()) return Map.of();
+        Map<UUID, UUID> staffToReq = latestRequestIdByStaff(staffIds);
+        if (staffToReq.isEmpty()) return Map.of();
 
-        Map<UUID, UUID> staffToSubmission = subs.stream()
-                .collect(Collectors.toMap(ModulePreferenceSubmission::getStaffId, ModulePreferenceSubmission::getId));
-
-        List<UUID> submissionIds = new ArrayList<>(staffToSubmission.values());
-        Map<UUID, List<UUID>> submissionToModules = new HashMap<>();
-        for (UUID sid : submissionIds) {
-            List<UUID> mids = submissionModuleRepo.findBySubmissionId(sid).stream()
-                    .map(ModulePreferenceSubmissionModule::getModuleId)
-                    .collect(Collectors.toList());
-            submissionToModules.put(sid, mids);
+        Map<UUID, List<UUID>> reqToStaff = new HashMap<>();
+        for (var e : staffToReq.entrySet()) {
+            reqToStaff.computeIfAbsent(e.getValue(), k -> new ArrayList<>()).add(e.getKey());
         }
-
-        Set<UUID> allModuleIds = submissionToModules.values().stream().flatMap(List::stream).collect(Collectors.toSet());
-        Map<UUID, CurriculumModule> moduleMap = curriculumModuleRepository.findAllById(allModuleIds).stream()
-                .collect(Collectors.toMap(CurriculumModule::getId, m -> m));
 
         Map<UUID, List<CurriculumModuleResponse>> out = new HashMap<>();
-        for (var e : staffToSubmission.entrySet()) {
-            UUID staffId = e.getKey();
-            UUID submissionId = e.getValue();
 
-            List<CurriculumModuleResponse> modules = submissionToModules.getOrDefault(submissionId, List.of()).stream()
-                    .map(moduleMap::get)
-                    .filter(Objects::nonNull)
-                    .sorted(Comparator.comparing(CurriculumModule::getAcademicLevel).thenComparing(CurriculumModule::getCode))
-                    .map(m -> CurriculumModuleResponse.builder()
-                            .id(m.getId().toString())
-                            .code(m.getCode())
-                            .name(m.getName())
-                            .chiefTutor(m.getChiefTutor())
-                            .academicLevel(m.getAcademicLevel())
-                            .semesterLabel(m.getSemesterLabel())
-                            .credits(m.getCredits())
-                            .compulsoryOptional(m.getCompulsoryOptional())
-                            .programKind(m.getProgramKind())
-                            .mitTrack(m.getMitTrack())
-                            .build())
-                    .collect(Collectors.toList());
+        for (var e : reqToStaff.entrySet()) {
+            UUID reqId = e.getKey();
+            List<UUID> groupStaff = e.getValue();
 
-            out.put(staffId, modules);
+            List<ModulePreferenceSubmission> subs = submissionRepo.findByRequestIdAndStaffIdIn(reqId, groupStaff);
+            if (subs.isEmpty()) continue;
+
+            Map<UUID, UUID> staffToSubmission = subs.stream()
+                    .collect(Collectors.toMap(ModulePreferenceSubmission::getStaffId, ModulePreferenceSubmission::getId));
+
+            List<UUID> submissionIds = new ArrayList<>(staffToSubmission.values());
+            Map<UUID, List<UUID>> submissionToModules = new HashMap<>();
+            for (UUID sid : submissionIds) {
+                List<UUID> mids = submissionModuleRepo.findBySubmissionId(sid).stream()
+                        .map(ModulePreferenceSubmissionModule::getModuleId)
+                        .collect(Collectors.toList());
+                submissionToModules.put(sid, mids);
+            }
+
+            Set<UUID> allModuleIds = submissionToModules.values().stream().flatMap(List::stream).collect(Collectors.toSet());
+            Map<UUID, CurriculumModule> moduleMap = curriculumModuleRepository.findAllById(allModuleIds).stream()
+                    .collect(Collectors.toMap(CurriculumModule::getId, m -> m));
+
+            for (var se : staffToSubmission.entrySet()) {
+                UUID staffId = se.getKey();
+                UUID submissionId = se.getValue();
+
+                List<CurriculumModuleResponse> modules = submissionToModules.getOrDefault(submissionId, List.of()).stream()
+                        .map(moduleMap::get)
+                        .filter(Objects::nonNull)
+                        .sorted(Comparator.comparing(CurriculumModule::getAcademicLevel).thenComparing(CurriculumModule::getCode))
+                        .map(m -> CurriculumModuleResponse.builder()
+                                .id(m.getId().toString())
+                                .code(m.getCode())
+                                .name(m.getName())
+                                .chiefTutor(m.getChiefTutor())
+                                .academicLevel(m.getAcademicLevel())
+                                .semesterLabel(m.getSemesterLabel())
+                                .credits(m.getCredits())
+                                .compulsoryOptional(m.getCompulsoryOptional())
+                                .programKind(m.getProgramKind())
+                                .mitTrack(m.getMitTrack())
+                                .build())
+                        .collect(Collectors.toList());
+
+                out.put(staffId, modules);
+            }
         }
+
         return out;
     }
 
     @Transactional(readOnly = true)
     public Set<UUID> staffMissingSubmissionForLatestRequest(Collection<UUID> staffIds) {
-        Optional<ModulePreferenceRequest> latestReq = requestRepo.findFirstByOrderByCreatedAtDesc();
-        if (latestReq.isEmpty() || staffIds == null || staffIds.isEmpty()) return Set.of();
-        UUID reqId = latestReq.get().getId();
+        if (staffIds == null || staffIds.isEmpty()) return Set.of();
 
-        Set<UUID> submitted = submissionRepo.findByRequestIdAndStaffIdIn(reqId, staffIds).stream()
-                .map(ModulePreferenceSubmission::getStaffId)
-                .collect(Collectors.toSet());
+        Map<UUID, UUID> staffToReq = latestRequestIdByStaff(staffIds);
+        if (staffToReq.isEmpty()) return Set.of();
 
-        Set<UUID> missing = new HashSet<>(staffIds);
-        missing.removeAll(submitted);
+        Map<UUID, List<UUID>> reqToStaff = new HashMap<>();
+        for (var e : staffToReq.entrySet()) {
+            reqToStaff.computeIfAbsent(e.getValue(), k -> new ArrayList<>()).add(e.getKey());
+        }
+
+        Set<UUID> missing = new HashSet<>();
+        for (var e : reqToStaff.entrySet()) {
+            UUID reqId = e.getKey();
+            List<UUID> groupStaff = e.getValue();
+
+            Set<UUID> submitted = submissionRepo.findByRequestIdAndStaffIdIn(reqId, groupStaff).stream()
+                    .map(ModulePreferenceSubmission::getStaffId)
+                    .collect(Collectors.toSet());
+
+            for (UUID sid : groupStaff) {
+                if (!submitted.contains(sid)) missing.add(sid);
+            }
+        }
+
         return missing;
     }
 }

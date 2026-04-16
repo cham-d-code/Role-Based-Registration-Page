@@ -13,4 +13,10 @@ public class NotifyCurriculumModulesRequest {
     private List<UUID> moduleIds;
 
     private String message;
+
+    /**
+     * Optional: if provided, send the request only to this staff member.
+     * If null, request is broadcast to all approved staff.
+     */
+    private UUID staffId;
 }

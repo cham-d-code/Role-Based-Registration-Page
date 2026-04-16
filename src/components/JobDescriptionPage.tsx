@@ -212,12 +212,27 @@ export default function JobDescriptionPage(props: {
     Array<{
       id: string;
       day: (typeof DAYS_OF_WEEK)[number];
-      hour: string;
-      minute: string;
-      ampm: (typeof AM_PM)[number];
+      fromHour: string;
+      fromMinute: string;
+      fromAmpm: (typeof AM_PM)[number];
+      toHour: string;
+      toMinute: string;
+      toAmpm: (typeof AM_PM)[number];
       notes: string;
     }>
-  >([{ id: 'rec-1', day: 'MONDAY', hour: '09', minute: '00', ampm: 'AM', notes: '' }]);
+  >([
+    {
+      id: 'rec-1',
+      day: 'MONDAY',
+      fromHour: '09',
+      fromMinute: '00',
+      fromAmpm: 'AM',
+      toHour: '10',
+      toMinute: '00',
+      toAmpm: 'AM',
+      notes: '',
+    },
+  ]);
 
   useEffect(() => {
     let mounted = true;
@@ -301,9 +316,12 @@ export default function JobDescriptionPage(props: {
       }),
       receptionTasks: receptionFilled.map((r) => ({
         day: r.day,
-        hour: r.hour,
-        minute: r.minute,
-        ampm: r.ampm,
+        fromHour: r.fromHour,
+        fromMinute: r.fromMinute,
+        fromAmpm: r.fromAmpm,
+        toHour: r.toHour,
+        toMinute: r.toMinute,
+        toAmpm: r.toAmpm,
         notes: r.notes.trim(),
       })),
     };
@@ -863,7 +881,17 @@ export default function JobDescriptionPage(props: {
                 onClick={() =>
                   setReceptionRows((prev) => [
                     ...prev,
-                    { id: `rec-${Date.now()}`, day: 'MONDAY', hour: '09', minute: '00', ampm: 'AM', notes: '' },
+                    {
+                      id: `rec-${Date.now()}`,
+                      day: 'MONDAY',
+                      fromHour: '09',
+                      fromMinute: '00',
+                      fromAmpm: 'AM',
+                      toHour: '10',
+                      toMinute: '00',
+                      toAmpm: 'AM',
+                      notes: '',
+                    },
                   ])
                 }
                 className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white px-3 py-1 h-auto"
@@ -899,13 +927,18 @@ export default function JobDescriptionPage(props: {
 
                     <div className="space-y-1 md:col-span-2">
                       <Label className="text-[#555555]" style={{ fontSize: '12px', fontWeight: 600 }}>
-                        Time
+                        Time (From → To)
                       </Label>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[#555555]" style={{ fontSize: '12px', fontWeight: 600 }}>
+                          From
+                        </span>
                         <select
-                          value={r.hour}
+                          value={r.fromHour}
                           onChange={(e) =>
-                            setReceptionRows((prev) => prev.map((x) => (x.id === r.id ? { ...x, hour: e.target.value } : x)))
+                            setReceptionRows((prev) =>
+                              prev.map((x) => (x.id === r.id ? { ...x, fromHour: e.target.value } : x))
+                            )
                           }
                           className="rounded-md border border-[#e0e0e0] bg-white px-3 py-2 text-sm"
                         >
@@ -916,9 +949,11 @@ export default function JobDescriptionPage(props: {
                           ))}
                         </select>
                         <select
-                          value={r.minute}
+                          value={r.fromMinute}
                           onChange={(e) =>
-                            setReceptionRows((prev) => prev.map((x) => (x.id === r.id ? { ...x, minute: e.target.value } : x)))
+                            setReceptionRows((prev) =>
+                              prev.map((x) => (x.id === r.id ? { ...x, fromMinute: e.target.value } : x))
+                            )
                           }
                           className="rounded-md border border-[#e0e0e0] bg-white px-3 py-2 text-sm"
                         >
@@ -929,9 +964,56 @@ export default function JobDescriptionPage(props: {
                           ))}
                         </select>
                         <select
-                          value={r.ampm}
+                          value={r.fromAmpm}
                           onChange={(e) =>
-                            setReceptionRows((prev) => prev.map((x) => (x.id === r.id ? { ...x, ampm: e.target.value as any } : x)))
+                            setReceptionRows((prev) =>
+                              prev.map((x) => (x.id === r.id ? { ...x, fromAmpm: e.target.value as any } : x))
+                            )
+                          }
+                          className="rounded-md border border-[#e0e0e0] bg-white px-3 py-2 text-sm"
+                        >
+                          {AM_PM.map((p) => (
+                            <option key={p} value={p}>
+                              {p}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="text-[#999999] px-1" style={{ fontSize: '14px', fontWeight: 700 }}>
+                          →
+                        </span>
+                        <span className="text-[#555555]" style={{ fontSize: '12px', fontWeight: 600 }}>
+                          To
+                        </span>
+                        <select
+                          value={r.toHour}
+                          onChange={(e) =>
+                            setReceptionRows((prev) => prev.map((x) => (x.id === r.id ? { ...x, toHour: e.target.value } : x)))
+                          }
+                          className="rounded-md border border-[#e0e0e0] bg-white px-3 py-2 text-sm"
+                        >
+                          {Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')).map((h) => (
+                            <option key={h} value={h}>
+                              {h}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={r.toMinute}
+                          onChange={(e) =>
+                            setReceptionRows((prev) => prev.map((x) => (x.id === r.id ? { ...x, toMinute: e.target.value } : x)))
+                          }
+                          className="rounded-md border border-[#e0e0e0] bg-white px-3 py-2 text-sm"
+                        >
+                          {Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0')).map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={r.toAmpm}
+                          onChange={(e) =>
+                            setReceptionRows((prev) => prev.map((x) => (x.id === r.id ? { ...x, toAmpm: e.target.value as any } : x)))
                           }
                           className="rounded-md border border-[#e0e0e0] bg-white px-3 py-2 text-sm"
                         >

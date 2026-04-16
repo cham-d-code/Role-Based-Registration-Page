@@ -260,9 +260,9 @@ export default function SignIn({ onSwitchToSignUp, onSignIn, onForgotPassword }:
               </SelectTrigger>
               <SelectContent className="border border-[#e0e0e0] rounded-xl">
                 <SelectItem value="hod">Head of Department</SelectItem>
-                <SelectItem value="coordinator">Coordinator</SelectItem>
-                <SelectItem value="mentor">Mentor</SelectItem>
-                <SelectItem value="staff">Staff</SelectItem>
+                <SelectItem value="coordinator">Temporary Staff Coordinator</SelectItem>
+                <SelectItem value="mentor">Senior Academic Staff</SelectItem>
+                <SelectItem value="staff">Temporary Academic Staff</SelectItem>
               </SelectContent>
             </Select>
             {touched.role && errors.role && (

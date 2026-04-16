@@ -526,9 +526,13 @@ CREATE INDEX IF NOT EXISTS idx_curriculum_modules_kind ON curriculum_modules(pro
 CREATE TABLE IF NOT EXISTS module_preference_requests (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    target_staff_id UUID,
     message TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );;
+
+-- Safe migration for existing DBs
+ALTER TABLE IF EXISTS module_preference_requests ADD COLUMN IF NOT EXISTS target_staff_id UUID;;
 
 CREATE TABLE IF NOT EXISTS module_preference_request_modules (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -538,6 +542,7 @@ CREATE TABLE IF NOT EXISTS module_preference_request_modules (
 );;
 
 CREATE INDEX IF NOT EXISTS idx_modpref_req_created_at ON module_preference_requests(created_at);;
+CREATE INDEX IF NOT EXISTS idx_modpref_req_target_staff ON module_preference_requests(target_staff_id);;
 CREATE INDEX IF NOT EXISTS idx_modpref_req_modules_req ON module_preference_request_modules(request_id);;
 
 CREATE TABLE IF NOT EXISTS module_preference_submissions (

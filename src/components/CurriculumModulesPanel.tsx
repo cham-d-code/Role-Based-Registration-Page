@@ -44,7 +44,13 @@ function chiefDisplay(t?: string | null) {
   return t;
 }
 
-export default function CurriculumModulesPanel() {
+export default function CurriculumModulesPanel(props: {
+  targetStaffId?: string | null;
+  targetStaffName?: string | null;
+  onSent?: () => void;
+  onClearTarget?: () => void;
+} = {}) {
+  const { targetStaffId, targetStaffName, onSent, onClearTarget } = props;
   const [modules, setModules] = useState<CurriculumModuleDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [semesterFilter, setSemesterFilter] = useState<string>('all');
@@ -187,11 +193,16 @@ export default function CurriculumModulesPanel() {
       return;
     }
     try {
-      const res = await notifyCurriculumModules(Array.from(selected), notifyMessage.trim() || undefined);
+      const res = await notifyCurriculumModules(
+        Array.from(selected),
+        notifyMessage.trim() || undefined,
+        targetStaffId || undefined
+      );
       alert(`${res.message}\nStaff count: ${res.staffNotified}\nModules: ${res.moduleCount}`);
       setNotifyOpen(false);
       setNotifyMessage('');
       clearSelection();
+      onSent?.();
     } catch (e: unknown) {
       alert(e instanceof Error ? e.message : 'Notification failed');
     }
@@ -346,7 +357,9 @@ export default function CurriculumModulesPanel() {
               Send module notification
             </DialogTitle>
             <DialogDescription>
-              Notify approved temporary staff about {selected.size} selected module(s). Optional message below.
+              {targetStaffId
+                ? `Notify ${targetStaffName || 'selected staff'} about ${selected.size} selected module(s). Optional message below.`
+                : `Notify approved temporary staff about ${selected.size} selected module(s). Optional message below.`}
             </DialogDescription>
           </DialogHeader>
           <Textarea
@@ -356,6 +369,16 @@ export default function CurriculumModulesPanel() {
             className="min-h-[100px]"
           />
           <DialogFooter>
+            {targetStaffId && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  onClearTarget?.();
+                }}
+              >
+                Clear target
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setNotifyOpen(false)}>
               Cancel
             </Button>

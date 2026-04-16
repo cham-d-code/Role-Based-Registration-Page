@@ -158,6 +158,7 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
   });
   const [showAttendanceDialog, setShowAttendanceDialog] = useState(false);
   const [selectedStaffForAttendance, setSelectedStaffForAttendance] = useState<StaffMember | null>(null);
+  const [moduleNotifyTarget, setModuleNotifyTarget] = useState<{ id: string; name: string } | null>(null);
   const [contractFilter, setContractFilter] = useState<'all' | 'remaining' | 'expired'>('all');
   const [extendContractOpen, setExtendContractOpen] = useState(false);
   const [selectedStaffForContract, setSelectedStaffForContract] = useState<StaffMember | null>(null);
@@ -558,10 +559,9 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
 
   // Handle asking for module preferences
   const handleAskPreferences = (staffId: string) => {
-    setStaffMembers(prev =>
-      prev.map(staff => staff.id === staffId ? { ...staff, preferencesRequested: true } : staff)
-    );
-    alert('Module preference request sent to temporary staff!');
+    const staff = staffMembers.find((s) => s.id === staffId);
+    setModuleNotifyTarget(staff ? { id: staff.id, name: staff.name } : { id: staffId, name: 'Selected staff' });
+    setActiveMenu('modules');
   };
 
   const menuItems = [
@@ -1744,7 +1744,18 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                 Department programme modules by level. Filter, select modules, and notify approved temporary staff.
               </p>
               <Separator className="mb-4" />
-              <CurriculumModulesPanel />
+              <CurriculumModulesPanel
+                targetStaffId={moduleNotifyTarget?.id || null}
+                targetStaffName={moduleNotifyTarget?.name || null}
+                onClearTarget={() => setModuleNotifyTarget(null)}
+                onSent={() => {
+                  if (moduleNotifyTarget?.id) {
+                    setStaffMembers((prev) =>
+                      prev.map((s) => (s.id === moduleNotifyTarget.id ? { ...s, preferencesRequested: true } : s))
+                    );
+                  }
+                }}
+              />
             </Card>
           )}
 

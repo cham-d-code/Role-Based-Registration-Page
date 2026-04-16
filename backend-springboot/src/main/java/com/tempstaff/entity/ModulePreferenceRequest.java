@@ -18,6 +18,9 @@ public class ModulePreferenceRequest {
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;
 
+    @Column(name = "target_staff_id")
+    private UUID targetStaffId;
+
     @Column(name = "message")
     private String message;
 

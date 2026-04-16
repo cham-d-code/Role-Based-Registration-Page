@@ -6,11 +6,22 @@ import { ChevronLeft } from 'lucide-react';
 
 function formatReceptionTime(t: any) {
   const day = t?.day || '';
-  const hh = t?.hour || '';
-  const mm = t?.minute || '';
-  const ap = t?.ampm || '';
-  const time = hh && mm ? `${hh}:${mm}` : '';
-  return [day, [time, ap].filter(Boolean).join(' ')].filter(Boolean).join(' ');
+  // Backward-compatible: older JDs used hour/minute/ampm (single time)
+  const fromH = t?.fromHour ?? t?.hour ?? '';
+  const fromM = t?.fromMinute ?? t?.minute ?? '';
+  const fromAp = t?.fromAmpm ?? t?.ampm ?? '';
+  const toH = t?.toHour ?? '';
+  const toM = t?.toMinute ?? '';
+  const toAp = t?.toAmpm ?? '';
+
+  const fromTime = fromH && fromM ? `${fromH}:${fromM}` : '';
+  const toTime = toH && toM ? `${toH}:${toM}` : '';
+
+  const fromLabel = [fromTime, fromAp].filter(Boolean).join(' ');
+  const toLabel = [toTime, toAp].filter(Boolean).join(' ');
+
+  const range = toLabel ? `${fromLabel} – ${toLabel}` : fromLabel;
+  return [day, range].filter(Boolean).join(' ');
 }
 
 export default function StructuredJobDescriptionPage(props: {
