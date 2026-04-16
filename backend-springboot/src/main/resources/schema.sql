@@ -49,6 +49,11 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;;
 
 DO $$ BEGIN
+    CREATE TYPE salary_report_status AS ENUM ('draft', 'sent_to_hod', 'approved', 'rejected');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;;
+
+DO $$ BEGIN
     CREATE TYPE task_category AS ENUM ('academic', 'administrative');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;;
@@ -295,6 +300,55 @@ CREATE TABLE IF NOT EXISTS salary_records (
 
 CREATE INDEX IF NOT EXISTS idx_salary_user ON salary_records(user_id);;
 CREATE INDEX IF NOT EXISTS idx_salary_month ON salary_records(month_year);;
+
+-- Coordinator-managed salary templates (per pay period)
+CREATE TABLE IF NOT EXISTS salary_templates (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    period_key VARCHAR(7) NOT NULL, -- YYYY-MM (period start month)
+    period_start DATE NOT NULL,      -- usually 10th
+    period_end DATE NOT NULL,        -- next month 10th
+    day_rate DECIMAL(12,2) NOT NULL,
+    extra_leave_day_deduction DECIMAL(12,2) NOT NULL,
+    total_workable_days INT NOT NULL,
+    created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(period_key)
+);;
+
+CREATE INDEX IF NOT EXISTS idx_salary_templates_period ON salary_templates(period_key);;
+
+-- Generated salary reports per staff per pay period
+CREATE TABLE IF NOT EXISTS salary_reports (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    template_id UUID REFERENCES salary_templates(id) ON DELETE SET NULL,
+    staff_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    period_key VARCHAR(7) NOT NULL,
+    period_start DATE NOT NULL,
+    period_end DATE NOT NULL,
+    total_workable_days INT NOT NULL,
+    present_days DECIMAL(6,2) NOT NULL DEFAULT 0,
+    leave_days DECIMAL(6,2) NOT NULL DEFAULT 0,
+    absent_days DECIMAL(6,2) NOT NULL DEFAULT 0,
+    free_leave_days DECIMAL(6,2) NOT NULL DEFAULT 2,
+    extra_leave_days DECIMAL(6,2) NOT NULL DEFAULT 0,
+    day_rate DECIMAL(12,2) NOT NULL,
+    gross_salary DECIMAL(12,2) NOT NULL,
+    deduction_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+    net_salary DECIMAL(12,2) NOT NULL,
+    status salary_report_status DEFAULT 'draft',
+    sent_to_hod_at TIMESTAMP,
+    reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    reviewed_at TIMESTAMP,
+    review_note TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(staff_id, period_key)
+);;
+
+CREATE INDEX IF NOT EXISTS idx_salary_reports_period ON salary_reports(period_key);;
+CREATE INDEX IF NOT EXISTS idx_salary_reports_staff ON salary_reports(staff_id);;
+CREATE INDEX IF NOT EXISTS idx_salary_reports_status ON salary_reports(status);;
 
 -- ============================================
 -- 6. TASKS & JOB DESCRIPTIONS

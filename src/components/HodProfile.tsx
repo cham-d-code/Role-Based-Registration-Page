@@ -8,19 +8,17 @@ import { Badge } from './ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Separator } from './ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
-import AttendanceSummaryDialog from './AttendanceSummaryDialog';
-import SalaryReportsDialog from './SalaryReportsDialog';
 import ArchivedStaffDialog from './ArchivedStaffDialog';
 import SystemNotices from './SystemNotices';
 import SendNoticeDialog from './SendNoticeDialog';
 import HodEndedInterviewApprovalPage from './HodEndedInterviewApprovalPage';
 import HodManageInterviewsPage from './HodManageInterviewsPage';
-import AttendanceAndSalariesPage from './AttendanceAndSalariesPage';
 import EditProfileDialog from './EditProfileDialog';
 import ResearchDetailsDialog from './ResearchDetailsDialog';
 import AddResearchDialog from './AddResearchDialog';
 import EditResearchDialog from './EditResearchDialog';
 import StructuredJobDescriptionPage from './StructuredJobDescriptionPage';
+import SalaryManagementPage from './SalaryManagementPage';
 
 interface HodProfileProps {
   onLogout: () => void;
@@ -39,11 +37,9 @@ function formatPostedDate(input?: string | null): string {
 
 export default function HodProfile({ onLogout }: HodProfileProps) {
   const [activeMenu, setActiveMenu] = useState('dashboard');
-  const [attendanceSummaryOpen, setAttendanceSummaryOpen] = useState(false);
-  const [salaryReportsOpen, setSalaryReportsOpen] = useState(false);
   const [archivedStaffOpen, setArchivedStaffOpen] = useState(false);
   const [sendNoticeOpen, setSendNoticeOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState<'dashboard' | 'approvalPage' | 'manageInterviews' | 'attendanceSalaries'>('dashboard');
+  const [currentPage, setCurrentPage] = useState<'dashboard' | 'approvalPage' | 'manageInterviews'>('dashboard');
   const [selectedInterview, setSelectedInterview] = useState<any>(null);
   const [selectedStaffForJd, setSelectedStaffForJd] = useState<any>(null);
   const [showStaffJdPage, setShowStaffJdPage] = useState(false);
@@ -513,18 +509,6 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     );
   }
 
-  // Show Attendance and Salaries Page
-  if (currentPage === 'attendanceSalaries') {
-    return (
-      <AttendanceAndSalariesPage
-        onBack={() => {
-          setCurrentPage('dashboard');
-          setActiveMenu('dashboard');
-        }}
-      />
-    );
-  }
-
   // Show Approval Page for Ended Interviews
   if (currentPage === 'approvalPage' && selectedInterview) {
     return (
@@ -589,8 +573,6 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                   onClick={() => {
                     if (item.id === 'manageInterviews') {
                       setCurrentPage('manageInterviews');
-                    } else if (item.id === 'attendance') {
-                      setCurrentPage('attendanceSalaries');
                     } else {
                       setActiveMenu(item.id);
                     }
@@ -1125,63 +1107,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                   Attendance & Salaries
                 </h2>
               </div>
-
-              {/* Quick Access Cards for FR20, FR21, FR22 */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card
-                  className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-5 hover:shadow-lg transition-shadow cursor-pointer"
-                  onClick={() => setAttendanceSummaryOpen(true)}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="p-3 bg-[#e6f7f6] rounded-lg">
-                      <Calendar className="h-6 w-6 text-[#4db4ac]" />
-                    </div>
-                    <Badge className="bg-[#4db4ac] text-white">FR20</Badge>
-                  </div>
-                  <h3 className="text-[#222222] mb-2" style={{ fontSize: '16px', fontWeight: 600 }}>
-                    Attendance Summary
-                  </h3>
-                  <p className="text-[#555555]" style={{ fontSize: '13px', lineHeight: '1.5' }}>
-                    View and monitor attendance summaries and task completion of all temporary staff
-                  </p>
-                </Card>
-
-                <Card
-                  className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-5 hover:shadow-lg transition-shadow cursor-pointer"
-                  onClick={() => setSalaryReportsOpen(true)}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="p-3 bg-[#e6f7f6] rounded-lg">
-                      <DollarSign className="h-6 w-6 text-[#4db4ac]" />
-                    </div>
-                    <Badge className="bg-[#4db4ac] text-white">FR21</Badge>
-                  </div>
-                  <h3 className="text-[#222222] mb-2" style={{ fontSize: '16px', fontWeight: 600 }}>
-                    Salary Reports
-                  </h3>
-                  <p className="text-[#555555]" style={{ fontSize: '13px', lineHeight: '1.5' }}>
-                    Review and approve automatically generated salary reports for temporary staff
-                  </p>
-                </Card>
-
-                <Card
-                  className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-5 hover:shadow-lg transition-shadow cursor-pointer"
-                  onClick={() => setArchivedStaffOpen(true)}
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="p-3 bg-[#e6f7f6] rounded-lg">
-                      <Archive className="h-6 w-6 text-[#4db4ac]" />
-                    </div>
-                    <Badge className="bg-[#4db4ac] text-white">FR22</Badge>
-                  </div>
-                  <h3 className="text-[#222222] mb-2" style={{ fontSize: '16px', fontWeight: 600 }}>
-                    Archived Staff Records
-                  </h3>
-                  <p className="text-[#555555]" style={{ fontSize: '13px', lineHeight: '1.5' }}>
-                    Access records and reports for staff with ended contracts
-                  </p>
-                </Card>
-              </div>
+              <SalaryManagementPage userRole="hod" />
             </>
           )}
 
@@ -1762,16 +1688,6 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
       </div>
 
       {/* Dialogs */}
-      <AttendanceSummaryDialog
-        open={attendanceSummaryOpen}
-        onOpenChange={setAttendanceSummaryOpen}
-        userRole="hod"
-      />
-      <SalaryReportsDialog
-        open={salaryReportsOpen}
-        onOpenChange={setSalaryReportsOpen}
-        userRole="hod"
-      />
       <ArchivedStaffDialog
         open={archivedStaffOpen}
         onOpenChange={setArchivedStaffOpen}

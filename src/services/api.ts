@@ -819,3 +819,89 @@ export interface InterviewReport {
 export async function getInterviewReport(interviewId: string): Promise<InterviewReport> {
     return fetchWithAuth(`${API_BASE_URL}/interviews/${interviewId}/report`);
 }
+
+// ─── Salary Management ────────────────────────────────────────────────────────
+
+export interface SalaryTemplateDto {
+    id: string;
+    periodKey: string;
+    periodStart: string;
+    periodEnd: string;
+    dayRate: number;
+    extraLeaveDayDeduction: number;
+    totalWorkableDays: number;
+    createdBy?: string | null;
+    updatedAt?: string | null;
+}
+
+export interface SalaryReportDto {
+    id: string;
+    staffId: string;
+    staffName?: string | null;
+    staffEmail?: string | null;
+    periodKey: string;
+    periodStart: string;
+    periodEnd: string;
+    totalWorkableDays: number;
+    presentDays: number;
+    leaveDays: number;
+    absentDays: number;
+    freeLeaveDays: number;
+    extraLeaveDays: number;
+    dayRate: number;
+    grossSalary: number;
+    deductionAmount: number;
+    netSalary: number;
+    status: 'draft' | 'sent_to_hod' | 'approved' | 'rejected';
+    sentToHodAt?: string | null;
+    reviewedById?: string | null;
+    reviewedByName?: string | null;
+    reviewedAt?: string | null;
+    reviewNote?: string | null;
+}
+
+export async function upsertSalaryTemplate(body: {
+    periodKey: string;
+    dayRate: number;
+    extraLeaveDayDeduction: number;
+    totalWorkableDays: number;
+}): Promise<SalaryTemplateDto> {
+    return fetchWithAuth(`${API_BASE_URL}/salary/templates`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+    });
+}
+
+export async function getSalaryTemplate(periodKey: string): Promise<SalaryTemplateDto> {
+    return fetchWithAuth(`${API_BASE_URL}/salary/templates/${periodKey}`);
+}
+
+export async function generateSalaryReports(periodKey: string): Promise<SalaryReportDto[]> {
+    return fetchWithAuth(`${API_BASE_URL}/salary/reports/generate/${periodKey}`, {
+        method: 'POST',
+    });
+}
+
+export async function getSalaryReports(periodKey: string): Promise<SalaryReportDto[]> {
+    return fetchWithAuth(`${API_BASE_URL}/salary/reports/${periodKey}`);
+}
+
+export async function sendSalaryReportsToHod(periodKey: string): Promise<void> {
+    return fetchWithAuth(`${API_BASE_URL}/salary/reports/${periodKey}/send-to-hod`, {
+        method: 'POST',
+    });
+}
+
+export async function approveSalaryReport(reportId: string, note?: string): Promise<SalaryReportDto> {
+    return fetchWithAuth(`${API_BASE_URL}/salary/reports/${reportId}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({ note: note ?? '' }),
+    });
+}
+
+export async function rejectSalaryReport(reportId: string, note?: string): Promise<SalaryReportDto> {
+    return fetchWithAuth(`${API_BASE_URL}/salary/reports/${reportId}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ note: note ?? '' }),
+    });
+}

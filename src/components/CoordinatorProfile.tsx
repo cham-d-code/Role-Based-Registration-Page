@@ -57,6 +57,7 @@ import StaffAttendanceDialog from './StaffAttendanceDialog';
 import ResearchDetailsDialog from './ResearchDetailsDialog';
 import AddResearchDialog from './AddResearchDialog';
 import EditResearchDialog from './EditResearchDialog';
+import SalaryManagementPage from './SalaryManagementPage';
 import logo from 'figma:asset/39b6269214ec5f8a015cd1f1a1adaa157fd5d025.png';
 import {
   approveLeave,
@@ -583,6 +584,7 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
     { id: 'research', label: 'Research Opportunities', icon: FileText },
     { id: 'staff', label: 'Temporary Staff List', icon: Users },
     { id: 'modules', label: 'Module Notifications', icon: BellRing },
+    { id: 'salary', label: 'Salary Reports', icon: CalendarCheck },
     { id: 'leave', label: 'Leave Requests', icon: FileText },
     { id: 'profile', label: 'Profile', icon: UserIcon },
   ];
@@ -2158,6 +2160,8 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
               )}
             </Card>
           )}
+
+          {activeMenu === 'salary' && <SalaryManagementPage userRole="coordinator" />}
 
           {/* Profile View */}
           {activeMenu === 'profile' && (
