@@ -107,6 +107,7 @@ public class UserController {
 
         List<UUID> staffIds = staffUsers.stream().map(User::getId).collect(Collectors.toList());
         var preferredModulesByStaff = modulePreferenceService.getLatestPreferredModuleCodesForStaff(staffIds);
+        var preferredModuleDetailsByStaff = modulePreferenceService.getLatestPreferredModulesForStaff(staffIds);
         var missingSubmission = modulePreferenceService.staffMissingSubmissionForLatestRequest(staffIds);
 
         List<UserProfileResponse> response = staffUsers.stream()
@@ -144,6 +145,7 @@ public class UserController {
                             .mentorId(mentorId)
                             .mentorName(mentorName)
                             .preferredModules(preferredModulesByStaff.get(u.getId()))
+                            .preferredModuleDetails(preferredModuleDetailsByStaff.get(u.getId()))
                             .preferencesRequested(missingSubmission.contains(u.getId()))
                             .build();
                 })

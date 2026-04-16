@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, ClipboardCheck, FileText, BellRing, UserIcon, ChevronDown, Settings, LogOut, Mail, Phone, Calendar, Eye, Clock, Archive, Edit, DollarSign, CheckCircle, XCircle, BarChart2, Loader2 } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardCheck, FileText, BellRing, UserIcon, ChevronDown, Settings, LogOut, Mail, Phone, Calendar, Eye, Clock, Archive, Edit, DollarSign, CheckCircle, XCircle, BarChart2, Loader2, Plus } from 'lucide-react';
 import { createResearchOpportunity, deleteResearchOpportunity, getInterviewReport, getMyMentees, getMyResearchOpportunities, InterviewReport, ResearchOpportunityDto, updateResearchOpportunity, UserProfile } from '../services/api';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
@@ -24,6 +24,17 @@ import EditResearchDialog from './EditResearchDialog';
 
 interface HodProfileProps {
   onLogout: () => void;
+}
+
+function formatPostedDate(input?: string | null): string {
+  if (!input) return '';
+  const d = new Date(input);
+  if (Number.isNaN(d.getTime())) return '';
+  try {
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return '';
+  }
 }
 
 export default function HodProfile({ onLogout }: HodProfileProps) {
@@ -787,7 +798,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
 
                     <div className="flex justify-between items-center">
                       <span className="text-[#777777]" style={{ fontSize: '12px' }}>
-                        {research.createdAt ? `Posted: ${new Date(research.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
+                        {formatPostedDate(research.createdAt) ? `Posted: ${formatPostedDate(research.createdAt)}` : ''}
                       </span>
                       <div className="flex gap-2">
                         <Button

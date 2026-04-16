@@ -37,11 +37,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Checkbox } from './ui/checkbox';
 import SystemNotices from './SystemNotices';
-import ViewJobDescriptionDialog from './ViewJobDescriptionDialog';
 import LeaveApplicationDialog from './LeaveApplicationDialog';
-import AddTaskDialog from './AddTaskDialog';
 import EditProfileDialog from './EditProfileDialog';
-import { applyToResearchOpportunity, getLatestModulePreferenceRequest, getMyResearchApplications, listOpenResearchOpportunities, MyResearchApplicationDto, ResearchOpportunityDto, submitModulePreferences, type ModulePreferenceRequestDto } from '../services/api';
+import { applyToResearchOpportunity, getLatestModulePreferenceRequest, getMyJobDescription, getMyResearchApplications, listOpenResearchOpportunities, MyResearchApplicationDto, ResearchOpportunityDto, submitModulePreferences, type ModulePreferenceRequestDto } from '../services/api';
 import logo from 'figma:asset/39b6269214ec5f8a015cd1f1a1adaa157fd5d025.png';
 
 interface TempStaffProfileProps {
@@ -50,9 +48,7 @@ interface TempStaffProfileProps {
 
 export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {}) {
   const [activeMenu, setActiveMenu] = useState('dashboard');
-  const [showJdDialog, setShowJdDialog] = useState(false);
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
-  const [showAddTaskDialog, setShowAddTaskDialog] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [editSubjectsOpen, setEditSubjectsOpen] = useState(false);
   const [preferredSubjects, setPreferredSubjects] = useState<string[]>([]);
@@ -61,6 +57,8 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
   const [loadingModulePrefs, setLoadingModulePrefs] = useState(false);
   const [selectedPrefModuleIds, setSelectedPrefModuleIds] = useState<Set<string>>(new Set());
   const [submittingModulePrefs, setSubmittingModulePrefs] = useState(false);
+  const [myJdContent, setMyJdContent] = useState<any | null>(null);
+  const [loadingMyJd, setLoadingMyJd] = useState(false);
   const [profileData, setProfileData] = useState({
     name: 'Loading...',
     email: '',
@@ -127,23 +125,13 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
     });
   }, []);
 
-  // Sample data
-  const currentUser = {
-    name: 'K.M. Silva',
-    preferredSubjects: ['Marketing Management', 'Brand Management', 'Consumer Behavior']
-  };
-
-  const myJobDescription = {
-    staffId: 'STAFF001',
-    staffName: 'K.M. Silva',
-    tasks: [
-      { id: '1', description: 'Conduct tutorial sessions for Marketing Management (MKT 301)', type: 'academic' as const },
-      { id: '2', description: 'Prepare and grade assignments for Consumer Behavior course', type: 'academic' as const },
-      { id: '3', description: 'Assist with student registration and documentation', type: 'administrative' as const },
-      { id: '4', description: 'Support department events and workshops', type: 'administrative' as const }
-    ],
-    createdDate: 'Oct 15, 2025',
-    createdBy: 'Dr. Thilini Mahanama (Coordinator)'
+  const formatReceptionTime = (t: any) => {
+    const day = t?.day || '';
+    const hh = t?.hour || '';
+    const mm = t?.minute || '';
+    const ap = t?.ampm || '';
+    const time = hh && mm ? `${hh}:${mm}` : '';
+    return [day, [time, ap].filter(Boolean).join(' ')].filter(Boolean).join(' ');
   };
 
   const [leaveRequests, setLeaveRequests] = useState([
@@ -207,19 +195,6 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
     alert('Leave request submitted successfully!');
   };
 
-  const handleTaskSubmit = (taskData: any) => {
-    const newTask = {
-      title: taskData.title,
-      category: taskData.category,
-      day: taskData.day,
-      timeFrom: taskData.timeFrom,
-      timeTo: taskData.timeTo,
-      deadline: '',
-      status: taskData.status
-    };
-    setWeeklyTasks([newTask, ...weeklyTasks]);
-  };
-
   const handleResearchApply = async (opportunityId: string) => {
     try {
       await applyToResearchOpportunity(opportunityId);
@@ -248,7 +223,7 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'tasks', label: 'My Tasks', icon: ClipboardList },
+    { id: 'myJd', label: 'My JD', icon: ClipboardList },
     { id: 'leave', label: 'Leave Requests', icon: Calendar },
     { id: 'research', label: 'Research Opportunities', icon: FileText },
     { id: 'modulePreferences', label: 'Module Preferences', icon: BookOpen },
@@ -289,6 +264,26 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
         setModulePrefRequest(null);
       })
       .finally(() => setLoadingModulePrefs(false));
+  }, [activeMenu]);
+
+  useEffect(() => {
+    if (activeMenu !== 'myJd') return;
+    setLoadingMyJd(true);
+    getMyJobDescription()
+      .then((dto) => {
+        try {
+          const parsed = dto?.content ? JSON.parse(dto.content) : null;
+          setMyJdContent(parsed);
+        } catch (e) {
+          console.error('Failed to parse job description content', e);
+          setMyJdContent(null);
+        }
+      })
+      .catch((e) => {
+        console.error('Failed to load my job description', e);
+        setMyJdContent(null);
+      })
+      .finally(() => setLoadingMyJd(false));
   }, [activeMenu]);
 
   const upcomingReminders = [
@@ -405,7 +400,7 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 ml-64 mr-80 p-6 space-y-6 pb-20">
+        <main className="flex-1 ml-64 p-6 space-y-6 pb-20">
           {/* Dashboard View */}
           {activeMenu === 'dashboard' && (
             <>
@@ -515,139 +510,200 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
             </>
           )}
 
-          {/* My Tasks View (FR13: View JD) */}
-          {activeMenu === 'tasks' && (
-            <>
-              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
-                      My Job Description
-                    </h3>
-                    <Badge className="bg-[#4db4ac] text-white">FR13</Badge>
-                  </div>
-                  <Button
-                    onClick={() => setShowJdDialog(true)}
-                    className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
-                  >
-                    <Eye className="h-4 w-4 mr-2" />
-                    View Full JD
-                  </Button>
-                </div>
-                <Separator className="mb-4" />
+          {/* My JD View */}
+          {activeMenu === 'myJd' && (
+            <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+              <div className="flex items-center gap-2 mb-4">
+                <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
+                  My JD
+                </h3>
+                <Badge className="bg-[#4db4ac] text-white">FR13</Badge>
+              </div>
+              <Separator className="mb-4" />
 
-                <div className="bg-[#e6f7f6] p-4 rounded-lg mb-4">
-                  <p className="text-[#555555]" style={{ fontSize: '13px' }}>
-                    Your assigned tasks and responsibilities as a temporary staff member
-                  </p>
+              {loadingMyJd && (
+                <div className="text-center py-10 text-[#4db4ac]" style={{ fontSize: '14px' }}>
+                  Loading your job description…
                 </div>
+              )}
 
-                <div className="grid grid-cols-2 gap-4">
-                  <Card className="bg-white border border-[#4db4ac] p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <GraduationCap className="h-5 w-5 text-[#4db4ac]" />
-                      <h4 className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 600 }}>
-                        Academic Tasks
-                      </h4>
-                    </div>
-                    <p className="text-[#4db4ac]" style={{ fontSize: '32px', fontWeight: 700 }}>
-                      {myJobDescription.tasks.filter(t => t.type === 'academic').length}
+              {!loadingMyJd && !myJdContent && (
+                <div className="text-center py-10 text-[#999999]" style={{ fontSize: '14px' }}>
+                  No job description has been assigned to you yet.
+                </div>
+              )}
+
+              {!loadingMyJd && myJdContent && (
+                <div className="space-y-6">
+                  {/* 1) Academic year */}
+                  <Card className="bg-[#f9f9f9] border border-[#e0e0e0] p-4">
+                    <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 700 }}>
+                      Academic Year
                     </p>
                     <p className="text-[#555555]" style={{ fontSize: '13px' }}>
-                      Teaching & Research
+                      {myJdContent.academicYear || '—'}
                     </p>
                   </Card>
 
-                  <Card className="bg-white border border-[#f59e0b] p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <Briefcase className="h-5 w-5 text-[#f59e0b]" />
-                      <h4 className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 600 }}>
-                        Administrative Tasks
-                      </h4>
-                    </div>
-                    <p className="text-[#f59e0b]" style={{ fontSize: '32px', fontWeight: 700 }}>
-                      {myJobDescription.tasks.filter(t => t.type === 'administrative').length}
+                  {/* 2) Semester */}
+                  <Card className="bg-[#f9f9f9] border border-[#e0e0e0] p-4">
+                    <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 700 }}>
+                      Semester
                     </p>
                     <p className="text-[#555555]" style={{ fontSize: '13px' }}>
-                      Support & Documentation
+                      {myJdContent.semester || '—'}
                     </p>
                   </Card>
-                </div>
-              </Card>
 
-              {/* Weekly Task List Section */}
-              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '18px' }}>
-                    Weekly Task List
-                  </h3>
-                  <Button 
-                    onClick={() => setShowAddTaskDialog(true)}
-                    className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Task
-                  </Button>
-                </div>
-                <Separator className="mb-4" />
-                
-                <div className="space-y-3">
-                  {weeklyTasks.map((task, index) => (
-                    <Card key={index} className="border border-[#e0e0e0] p-4 hover:shadow-md transition-shadow">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <h4 className="text-[#222222] mb-1" style={{ fontSize: '15px', fontWeight: 600 }}>
-                            {task.title}
-                          </h4>
-                          <div className="flex items-center gap-3 mb-2 flex-wrap">
-                            {(() => {
-                              const categoryStyle = getCategoryStyle(task.category);
-                              const CategoryIcon = categoryStyle.icon;
-                              return (
-                                <Badge 
-                                  className={categoryStyle.className} 
-                                  style={{ fontSize: '11px' }}
-                                >
-                                  <CategoryIcon className="h-3 w-3 mr-1 inline" />
-                                  {task.category}
-                                </Badge>
-                              );
-                            })()}
-                            {task.day && (
-                              <div className="flex items-center gap-1 text-[#555555]" style={{ fontSize: '12px' }}>
-                                <Calendar className="h-3 w-3" />
-                                <span>{task.day}</span>
-                              </div>
-                            )}
-                            {task.timeFrom && task.timeTo && (
-                              <div className="flex items-center gap-1 text-[#555555]" style={{ fontSize: '12px' }}>
-                                <Clock className="h-3 w-3" />
-                                <span>{task.timeFrom} - {task.timeTo}</span>
-                              </div>
-                            )}
-                            {task.deadline && (
-                              <div className="flex items-center gap-1 text-[#999999]" style={{ fontSize: '12px' }}>
-                                <span>Due: {task.deadline}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <Badge 
-                          className={`${
-                            task.status === 'Completed' 
-                              ? 'bg-green-100 text-green-700 border-green-300' 
-                              : 'bg-orange-100 text-orange-700 border-orange-300'
-                          } border`}
-                          style={{ fontSize: '12px' }}
-                        >
-                          {task.status}
-                        </Badge>
-                      </div>
+                  {/* 3) Semester start date */}
+                  <Card className="bg-[#f9f9f9] border border-[#e0e0e0] p-4">
+                    <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 700 }}>
+                      Semester Start Date
+                    </p>
+                    <p className="text-[#555555]" style={{ fontSize: '13px' }}>
+                      {myJdContent.semesterStartDate || '—'}
+                    </p>
+                  </Card>
+
+                  {/* 4) End date */}
+                  <Card className="bg-[#f9f9f9] border border-[#e0e0e0] p-4">
+                    <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 700 }}>
+                      Semester End Date
+                    </p>
+                    <p className="text-[#555555]" style={{ fontSize: '13px' }}>
+                      {myJdContent.semesterEndDate || '—'}
+                    </p>
+                  </Card>
+
+                  {/* 5) Primary responsibilities */}
+                  <div>
+                    <h4 className="text-[#222222] mb-2" style={{ fontSize: '16px', fontWeight: 700 }}>
+                      Primary Responsibilities
+                    </h4>
+                    <Card className="bg-white border border-[#e0e0e0] p-4">
+                      <pre className="whitespace-pre-wrap text-[#222222]" style={{ fontSize: '13px', lineHeight: '1.7', fontFamily: 'inherit' }}>
+                        {myJdContent.primaryResponsibilities || '—'}
+                      </pre>
                     </Card>
-                  ))}
+                  </div>
+
+                  {/* 6) DIM academic tasks */}
+                  <div>
+                    <h4 className="text-[#222222] mb-2" style={{ fontSize: '16px', fontWeight: 700 }}>
+                      DIM Academic Tasks
+                    </h4>
+                    <div className="overflow-x-auto rounded-md border border-[#e0e0e0] bg-white">
+                      <table className="w-full text-sm border-collapse">
+                        <thead>
+                          <tr className="bg-[#f5f5f5] text-[#222222]">
+                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Course code</th>
+                            <th className="px-3 py-2 text-left font-semibold min-w-[240px]">Module name</th>
+                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Chief tutor</th>
+                            <th className="px-3 py-2 text-left font-semibold min-w-[220px]">Main duty</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(myJdContent.dimAcademicTasks || []).map((t: any, idx: number) => (
+                            <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'}>
+                              <td className="px-3 py-2 font-medium text-[#222222] whitespace-nowrap">{t.courseCode || '—'}</td>
+                              <td className="px-3 py-2 text-[#333333]">{t.moduleName || '—'}</td>
+                              <td className="px-3 py-2 text-[#555555] whitespace-nowrap">{t.chiefTutor || '—'}</td>
+                              <td className="px-3 py-2 text-[#555555]">{t.mainDuty || '—'}</td>
+                            </tr>
+                          ))}
+                          {(!myJdContent.dimAcademicTasks || myJdContent.dimAcademicTasks.length === 0) && (
+                            <tr>
+                              <td className="px-3 py-3 text-[#999999]" colSpan={4}>—</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* 7) FOS academic tasks */}
+                  <div>
+                    <h4 className="text-[#222222] mb-2" style={{ fontSize: '16px', fontWeight: 700 }}>
+                      FOS Academic Tasks
+                    </h4>
+                    <div className="overflow-x-auto rounded-md border border-[#e0e0e0] bg-white">
+                      <table className="w-full text-sm border-collapse">
+                        <thead>
+                          <tr className="bg-[#f5f5f5] text-[#222222]">
+                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Course code</th>
+                            <th className="px-3 py-2 text-left font-semibold min-w-[240px]">Module name</th>
+                            <th className="px-3 py-2 text-left font-semibold whitespace-nowrap">Tutor</th>
+                            <th className="px-3 py-2 text-left font-semibold min-w-[220px]">Main duty</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(myJdContent.fosAcademicTasks || []).map((t: any, idx: number) => (
+                            <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-[#fafafa]'}>
+                              <td className="px-3 py-2 font-medium text-[#222222] whitespace-nowrap">{t.courseCode || '—'}</td>
+                              <td className="px-3 py-2 text-[#333333]">{t.moduleName || '—'}</td>
+                              <td className="px-3 py-2 text-[#555555] whitespace-nowrap">{t.tutorName || '—'}</td>
+                              <td className="px-3 py-2 text-[#555555]">{t.mainDuty || '—'}</td>
+                            </tr>
+                          ))}
+                          {(!myJdContent.fosAcademicTasks || myJdContent.fosAcademicTasks.length === 0) && (
+                            <tr>
+                              <td className="px-3 py-3 text-[#999999]" colSpan={4}>—</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* 8) Administrative tasks assigned (with coordinator + description) */}
+                  <div>
+                    <h4 className="text-[#222222] mb-2" style={{ fontSize: '16px', fontWeight: 700 }}>
+                      Administrative Tasks Assigned
+                    </h4>
+                    <div className="space-y-2">
+                      {(myJdContent.administrativeTasks || []).map((t: any, idx: number) => (
+                        <Card key={idx} className="bg-white border border-[#e0e0e0] p-4">
+                          <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 700 }}>
+                            {t.taskName || 'Administrative task'}
+                          </p>
+                          <p className="text-[#555555]" style={{ fontSize: '13px', fontWeight: 600 }}>
+                            Coordinator: {t.coordinator || '—'}
+                          </p>
+                          <pre className="whitespace-pre-wrap text-[#333333] mt-2" style={{ fontSize: '13px', lineHeight: '1.7', fontFamily: 'inherit' }}>
+                            {t.description || '—'}
+                          </pre>
+                        </Card>
+                      ))}
+                      {(!myJdContent.administrativeTasks || myJdContent.administrativeTasks.length === 0) && (
+                        <p className="text-[#999999]" style={{ fontSize: '13px' }}>—</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 9) Reception task */}
+                  <div>
+                    <h4 className="text-[#222222] mb-2" style={{ fontSize: '16px', fontWeight: 700 }}>
+                      Reception Task
+                    </h4>
+                    <div className="space-y-2">
+                      {(myJdContent.receptionTasks || []).map((t: any, idx: number) => (
+                        <Card key={idx} className="bg-white border border-[#e0e0e0] p-4">
+                          <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 700 }}>
+                            {formatReceptionTime(t) || '—'}
+                          </p>
+                          <p className="text-[#555555] mt-1" style={{ fontSize: '13px' }}>
+                            {t.notes || '—'}
+                          </p>
+                        </Card>
+                      ))}
+                      {(!myJdContent.receptionTasks || myJdContent.receptionTasks.length === 0) && (
+                        <p className="text-[#999999]" style={{ fontSize: '13px' }}>—</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </Card>
-            </>
+              )}
+            </Card>
           )}
 
           {/* Leave Requests View (FR18, FR19) */}
@@ -1092,91 +1148,15 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
           )}
         </main>
 
-        {/* Right Sidebar - Reminders */}
-        <aside className="fixed right-0 top-16 bottom-0 w-80 bg-white shadow-lg overflow-y-auto p-6">
-          <h3 className="text-[#222222] mb-4" style={{ fontWeight: 700, fontSize: '18px' }}>
-            Upcoming Tasks
-          </h3>
-          <Separator className="mb-4" />
-          
-          <div className="space-y-3">
-            {weeklyTasks
-              .filter(task => task.status !== 'Completed')
-              .slice(0, 5)
-              .map((task, index) => (
-              <Card 
-                key={index} 
-                className="bg-[#f9f9f9] border border-[#e0e0e0] rounded-lg p-4 hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <p className="text-[#222222] flex-1" style={{ fontSize: '14px', fontWeight: 600 }}>
-                    {task.title}
-                  </p>
-                  <Badge 
-                    className="bg-[#e6f7f6] text-[#4db4ac] border-[#4db4ac] border flex-shrink-0"
-                    style={{ fontSize: '9px' }}
-                  >
-                    {task.category}
-                  </Badge>
-                </div>
-                
-                {task.day && (
-                  <div className="flex items-center gap-1 text-[#555555] mb-1" style={{ fontSize: '12px' }}>
-                    <Calendar className="h-3 w-3 text-[#4db4ac]" />
-                    <span>{task.day}</span>
-                  </div>
-                )}
-                
-                {task.timeFrom && task.timeTo && (
-                  <div className="flex items-center gap-1 text-[#555555] mb-1" style={{ fontSize: '12px' }}>
-                    <Clock className="h-3 w-3 text-[#4db4ac]" />
-                    <span>{task.timeFrom} - {task.timeTo}</span>
-                  </div>
-                )}
-                
-                {task.deadline && (
-                  <div className="flex items-center gap-1 text-[#999999] mt-2" style={{ fontSize: '11px' }}>
-                    <span>Due: {task.deadline}</span>
-                  </div>
-                )}
-              </Card>
-            ))}
-            
-            {weeklyTasks.filter(task => task.status !== 'Completed').length === 0 && (
-              <div className="text-center py-8 text-[#999999]">
-                <CheckCircle className="h-10 w-10 mx-auto mb-2 opacity-50" />
-                <p style={{ fontSize: '13px' }}>All tasks completed!</p>
-              </div>
-            )}
-          </div>
-
-          <Button className="w-full mt-6 bg-white border-2 border-[#4db4ac] text-[#4db4ac] hover:bg-[#4db4ac] hover:text-white rounded-lg">
-            <ClipboardList className="h-4 w-4 mr-2" />
-            View All Tasks
-          </Button>
-        </aside>
       </div>
 
       {/* View Job Description Dialog */}
-      <ViewJobDescriptionDialog
-        open={showJdDialog}
-        onOpenChange={setShowJdDialog}
-        jobDescription={myJobDescription}
-      />
-
       {/* Leave Application Dialog */}
       <LeaveApplicationDialog
         open={showLeaveDialog}
         onOpenChange={setShowLeaveDialog}
-        currentUserSubjects={currentUser.preferredSubjects}
+        currentUserSubjects={preferredSubjects}
         onSubmit={handleLeaveSubmit}
-      />
-
-      {/* Add Task Dialog */}
-      <AddTaskDialog
-        open={showAddTaskDialog}
-        onOpenChange={setShowAddTaskDialog}
-        onSubmit={handleTaskSubmit}
       />
 
       {/* Edit Profile Dialog */}

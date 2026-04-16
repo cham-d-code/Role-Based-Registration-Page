@@ -324,6 +324,9 @@ CREATE TABLE IF NOT EXISTS job_descriptions (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );;
 
+-- Payload storage for structured JD page (idempotent migration)
+ALTER TABLE IF EXISTS job_descriptions ADD COLUMN IF NOT EXISTS content TEXT;;
+
 CREATE INDEX IF NOT EXISTS idx_job_desc_user ON job_descriptions(user_id);;
 
 CREATE TABLE IF NOT EXISTS job_description_tasks (

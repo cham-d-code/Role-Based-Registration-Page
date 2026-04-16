@@ -3,6 +3,7 @@ import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
 import { BookOpen, Briefcase, User } from 'lucide-react';
 import { Card } from './ui/card';
+import { loadPrimaryResponsibilitiesText } from './EditPrimaryResponsibilitiesDialog';
 
 interface Task {
   id: string;
@@ -33,6 +34,7 @@ export default function ViewJobDescriptionDialog({
 
   const academicTasks = jobDescription.tasks.filter(t => t.type === 'academic');
   const administrativeTasks = jobDescription.tasks.filter(t => t.type === 'administrative');
+  const primaryResponsibilities = loadPrimaryResponsibilitiesText();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -58,6 +60,24 @@ export default function ViewJobDescriptionDialog({
               <p>Created by: {jobDescription.createdBy}</p>
               <p>Date: {jobDescription.createdDate}</p>
             </div>
+          </div>
+
+          <Separator />
+
+          {/* Primary responsibilities (DIM) */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <BookOpen className="h-5 w-5 text-[#4db4ac]" />
+              <h4 className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 600 }}>
+                Primary Responsibilities (DIM)
+              </h4>
+            </div>
+
+            <Card className="bg-white border border-[#e0e0e0] p-4">
+              <pre className="whitespace-pre-wrap text-[#222222]" style={{ fontSize: '13px', lineHeight: '1.7', fontFamily: 'inherit' }}>
+                {primaryResponsibilities}
+              </pre>
+            </Card>
           </div>
 
           <Separator />

@@ -45,6 +45,7 @@ import { jsPDF } from 'jspdf';
 
 import MentorAssignmentDialog from './MentorAssignmentDialog';
 import JobDescriptionDialog from './JobDescriptionDialog';
+import JobDescriptionPage from './JobDescriptionPage';
 import CurriculumModulesPanel from './CurriculumModulesPanel';
 import EndedInterviewDetailsDialog from './EndedInterviewDetailsDialog';
 import InterviewMarkingPage from './InterviewMarkingPage';
@@ -116,6 +117,7 @@ interface StaffMember {
   mentor?: string;
   hasJobDescription: boolean;
   preferredModules?: string[];
+  preferredModuleDetails?: any[];
   preferencesRequested?: boolean;
 }
 
@@ -138,6 +140,7 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
 
   const [showMentorDialog, setShowMentorDialog] = useState(false);
   const [showJdDialog, setShowJdDialog] = useState(false);
+  const [showJdPage, setShowJdPage] = useState(false);
   const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
   const [showEndedInterviews, setShowEndedInterviews] = useState(true);
   const [expandedInterviewId, setExpandedInterviewId] = useState<string | null>(null);
@@ -407,6 +410,7 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                 preferencesRequested: u.preferencesRequested ?? existingMap[u.id]?.preferencesRequested ?? false,
                 mentor: u.mentorName ?? existingMap[u.id]?.mentor,
                 preferredModules: u.preferredModules ?? existingMap[u.id]?.preferredModules,
+                preferredModuleDetails: (u as any).preferredModuleDetails ?? (existingMap[u.id] as any)?.preferredModuleDetails,
               }));
             });
           })
@@ -548,6 +552,8 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
       prev.map(staff => staff.id === staffId ? { ...staff, hasJobDescription: true } : staff)
     );
     alert('Job Description created successfully!');
+    setShowJdDialog(false);
+    setShowJdPage(false);
   };
 
   // Handle asking for module preferences
@@ -1525,6 +1531,19 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
 
           {/* Staff List with JD Creation (FR12) */}
           {activeMenu === 'staff' && (
+            showJdPage && selectedStaff ? (
+              <JobDescriptionPage
+                staffMember={{
+                  id: selectedStaff.id,
+                  name: selectedStaff.name,
+                  preferredSubjects: selectedStaff.preferredSubjects,
+                  preferredModules: (selectedStaff as any).preferredModules,
+                  preferredModuleDetails: (selectedStaff as any).preferredModuleDetails,
+                }}
+                onBack={() => setShowJdPage(false)}
+                onSave={handleSaveJobDescription}
+              />
+            ) : (
             <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
               <div className="flex items-center gap-2 mb-4">
                 <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
@@ -1630,7 +1649,7 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                         <Button
                           onClick={() => {
                             setSelectedStaff(staff);
-                            setShowJdDialog(true);
+                            setShowJdPage(true);
                           }}
                           className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
                         >
@@ -1705,25 +1724,12 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                         </div>
                       )}
 
-                      {staff.preferredModules && staff.preferredModules.length > 0 && (
-                        <div className="bg-[#e6f7f6] border border-[#4db4ac] rounded-lg px-3 py-2">
-                          <p className="text-[#4db4ac] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
-                            Preferred Modules Received:
-                          </p>
-                          <div className="flex flex-wrap gap-1">
-                            {staff.preferredModules.map((module, idx) => (
-                              <Badge key={idx} className="bg-[#4db4ac] text-white border-0" style={{ fontSize: '10px' }}>
-                                {module}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </Card>
                 ))}
               </div>
             </Card>
+            )
           )}
 
           {/* FR11: Module Notifications View */}

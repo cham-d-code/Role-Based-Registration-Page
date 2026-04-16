@@ -33,5 +33,6 @@ public class UserProfileResponse {
     private String mentorId;
     private String mentorName;
     private List<String> preferredModules;
+    private List<CurriculumModuleResponse> preferredModuleDetails;
     private Boolean preferencesRequested;
 }

@@ -14,6 +14,9 @@ export interface UserProfile {
     contractStartDate?: string;
     contractEndDate?: string;
     menteesCount?: number;
+    preferredModules?: string[];
+    preferredModuleDetails?: CurriculumModuleDto[];
+    preferencesRequested?: boolean;
 }
 // Backend port can vary in local dev; default to 8081 (matches our current Spring Boot run).
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081/api';
@@ -475,6 +478,29 @@ export async function notifyCurriculumModules(
         method: 'POST',
         body: JSON.stringify({ moduleIds, message: message ?? null }),
     });
+}
+
+// ─── Job descriptions ───────────────────────────────────────────────
+
+export interface JobDescriptionDto {
+    userId: string;
+    content: string;
+    createdAt?: string;
+}
+
+export async function upsertJobDescriptionForStaff(staffId: string, content: string): Promise<JobDescriptionDto> {
+    return fetchWithAuth(`${API_BASE_URL}/job-descriptions/staff/${staffId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ content }),
+    });
+}
+
+export async function getMyJobDescription(): Promise<JobDescriptionDto> {
+    return fetchWithAuth(`${API_BASE_URL}/job-descriptions/mine`);
+}
+
+export async function getJobDescriptionForStaff(staffId: string): Promise<JobDescriptionDto> {
+    return fetchWithAuth(`${API_BASE_URL}/job-descriptions/staff/${staffId}`);
 }
 
 // ─── Module preferences (staff submits from requested module list) ────────────

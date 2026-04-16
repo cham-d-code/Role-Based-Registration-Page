@@ -32,7 +32,7 @@ import { Separator } from './ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Progress } from './ui/progress';
 import SystemNotices from './SystemNotices';
-import ViewJobDescriptionDialog from './ViewJobDescriptionDialog';
+import StructuredJobDescriptionPage from './StructuredJobDescriptionPage';
 import UpcomingInterviewDetailsDialog from './UpcomingInterviewDetailsDialog';
 import InterviewMarkingPage from './InterviewMarkingPage';
 import ResearchDetailsDialog from './ResearchDetailsDialog';
@@ -41,7 +41,7 @@ import EditResearchDialog from './EditResearchDialog';
 import EditProfileDialog from './EditProfileDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Textarea } from './ui/textarea';
-import { createResearchOpportunity, deleteResearchOpportunity, getInterviews, getInterviewCandidates, getActiveSession, getMarkingScheme, getMyMentees, getMyMenteesCount, getMyNotifications, getMyResearchOpportunities, MarkingSchemeData, ResearchOpportunityDto, SessionState, updateResearchOpportunity, UserNotificationDto, UserProfile } from '../services/api';
+import { createResearchOpportunity, deleteResearchOpportunity, getActiveSession, getInterviews, getInterviewCandidates, getJobDescriptionForStaff, getMarkingScheme, getMyMentees, getMyMenteesCount, getMyNotifications, getMyResearchOpportunities, MarkingSchemeData, ResearchOpportunityDto, SessionState, updateResearchOpportunity, UserNotificationDto, UserProfile } from '../services/api';
 
 interface MentorProfileProps {
   onLogout?: () => void;
@@ -71,8 +71,10 @@ interface Mentee {
 
 export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
   const [activeMenu, setActiveMenu] = useState('dashboard');
-  const [showJdDialog, setShowJdDialog] = useState(false);
   const [selectedMentee, setSelectedMentee] = useState<Mentee | null>(null);
+  const [selectedMenteeJd, setSelectedMenteeJd] = useState<any | null>(null);
+  const [showMenteeJdPage, setShowMenteeJdPage] = useState(false);
+  const [loadingMenteeJd, setLoadingMenteeJd] = useState(false);
   const [showInterviewDialog, setShowInterviewDialog] = useState(false);
   const [selectedInterview, setSelectedInterview] = useState<any>(null);
   const [currentPage, setCurrentPage] = useState<'main' | 'interviewMarking'>('main');
@@ -515,30 +517,39 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
           {/* My Mentees View */}
           {activeMenu === 'mentees' && (
             <>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
-                  My Mentees
-                </h2>
-                <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '12px' }}>
-                  {myMentees.length} Total Mentees
-                </Badge>
-              </div>
+              {showMenteeJdPage && selectedMentee ? (
+                <StructuredJobDescriptionPage
+                  staffName={(selectedMentee as any).fullName || selectedMentee.name || 'Mentee'}
+                  jd={selectedMenteeJd}
+                  loading={loadingMenteeJd}
+                  onBack={() => setShowMenteeJdPage(false)}
+                />
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
+                      My Mentees
+                    </h2>
+                    <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '12px' }}>
+                      {myMentees.length} Total Mentees
+                    </Badge>
+                  </div>
 
-              <div className="space-y-4">
-                {loadingMentees && (
-                  <Card className="bg-white rounded-xl border-0 p-6 text-center text-[#4db4ac]">
-                    <Loader2 className="h-5 w-5 animate-spin inline mr-2" />
-                    Loading mentees…
-                  </Card>
-                )}
+                  <div className="space-y-4">
+                    {loadingMentees && (
+                      <Card className="bg-white rounded-xl border-0 p-6 text-center text-[#4db4ac]">
+                        <Loader2 className="h-5 w-5 animate-spin inline mr-2" />
+                        Loading mentees…
+                      </Card>
+                    )}
 
-                {!loadingMentees && myMentees.length === 0 && (
-                  <Card className="bg-white rounded-xl border-0 p-6 text-center text-[#999999]">
-                    No mentees assigned to you yet.
-                  </Card>
-                )}
+                    {!loadingMentees && myMentees.length === 0 && (
+                      <Card className="bg-white rounded-xl border-0 p-6 text-center text-[#999999]">
+                        No mentees assigned to you yet.
+                      </Card>
+                    )}
 
-                {!loadingMentees && myMentees.map((mentee: any) => {
+                    {!loadingMentees && myMentees.map((mentee: any) => {
                   const contractExpiry = mentee.contractEndDate || '';
                   const daysUntilExpiry = contractExpiry ? calculateDaysUntilExpiry(contractExpiry) : 0;
                   const expiryColor = getExpiryBadgeColor(daysUntilExpiry);
@@ -624,10 +635,25 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                           <Button
                             className="w-full bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
                             onClick={() => {
-                              // This feature still uses the older job description modal data shape
-                              // (we can wire real JDs later if needed).
-                              setSelectedMentee(null);
-                              setShowJdDialog(true);
+                              setSelectedMentee(mentee as any);
+                              setSelectedMenteeJd(null);
+                              setShowMenteeJdPage(true);
+                              setLoadingMenteeJd(true);
+                              getJobDescriptionForStaff((mentee as any).id)
+                                .then((dto) => {
+                                  try {
+                                    const parsed = dto?.content ? JSON.parse(dto.content) : null;
+                                    setSelectedMenteeJd(parsed);
+                                  } catch (e) {
+                                    console.error('Failed to parse mentee JD content', e);
+                                    setSelectedMenteeJd(null);
+                                  }
+                                })
+                                .catch((e) => {
+                                  console.error('Failed to load mentee JD', e);
+                                  setSelectedMenteeJd(null);
+                                })
+                                .finally(() => setLoadingMenteeJd(false));
                             }}
                           >
                             <FileText className="h-4 w-4 mr-2" />
@@ -638,7 +664,9 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                     </Card>
                   );
                 })}
-              </div>
+                  </div>
+                </>
+              )}
             </>
           )}
 
@@ -1074,13 +1102,6 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
       </div>
 
       {/* Dialogs */}
-      {selectedMentee && (
-        <ViewJobDescriptionDialog
-          open={showJdDialog}
-          onOpenChange={setShowJdDialog}
-          jobDescription={selectedMentee.jobDescription}
-        />
-      )}
 
       {selectedInterview && (
         <UpcomingInterviewDetailsDialog

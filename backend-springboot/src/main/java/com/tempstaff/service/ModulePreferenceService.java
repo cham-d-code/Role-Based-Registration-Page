@@ -189,6 +189,59 @@ public class ModulePreferenceService {
     }
 
     @Transactional(readOnly = true)
+    public Map<UUID, List<CurriculumModuleResponse>> getLatestPreferredModulesForStaff(Collection<UUID> staffIds) {
+        Optional<ModulePreferenceRequest> latestReq = requestRepo.findFirstByOrderByCreatedAtDesc();
+        if (latestReq.isEmpty() || staffIds == null || staffIds.isEmpty()) return Map.of();
+        UUID reqId = latestReq.get().getId();
+
+        List<ModulePreferenceSubmission> subs = submissionRepo.findByRequestIdAndStaffIdIn(reqId, staffIds);
+        if (subs.isEmpty()) return Map.of();
+
+        Map<UUID, UUID> staffToSubmission = subs.stream()
+                .collect(Collectors.toMap(ModulePreferenceSubmission::getStaffId, ModulePreferenceSubmission::getId));
+
+        List<UUID> submissionIds = new ArrayList<>(staffToSubmission.values());
+        Map<UUID, List<UUID>> submissionToModules = new HashMap<>();
+        for (UUID sid : submissionIds) {
+            List<UUID> mids = submissionModuleRepo.findBySubmissionId(sid).stream()
+                    .map(ModulePreferenceSubmissionModule::getModuleId)
+                    .collect(Collectors.toList());
+            submissionToModules.put(sid, mids);
+        }
+
+        Set<UUID> allModuleIds = submissionToModules.values().stream().flatMap(List::stream).collect(Collectors.toSet());
+        Map<UUID, CurriculumModule> moduleMap = curriculumModuleRepository.findAllById(allModuleIds).stream()
+                .collect(Collectors.toMap(CurriculumModule::getId, m -> m));
+
+        Map<UUID, List<CurriculumModuleResponse>> out = new HashMap<>();
+        for (var e : staffToSubmission.entrySet()) {
+            UUID staffId = e.getKey();
+            UUID submissionId = e.getValue();
+
+            List<CurriculumModuleResponse> modules = submissionToModules.getOrDefault(submissionId, List.of()).stream()
+                    .map(moduleMap::get)
+                    .filter(Objects::nonNull)
+                    .sorted(Comparator.comparing(CurriculumModule::getAcademicLevel).thenComparing(CurriculumModule::getCode))
+                    .map(m -> CurriculumModuleResponse.builder()
+                            .id(m.getId().toString())
+                            .code(m.getCode())
+                            .name(m.getName())
+                            .chiefTutor(m.getChiefTutor())
+                            .academicLevel(m.getAcademicLevel())
+                            .semesterLabel(m.getSemesterLabel())
+                            .credits(m.getCredits())
+                            .compulsoryOptional(m.getCompulsoryOptional())
+                            .programKind(m.getProgramKind())
+                            .mitTrack(m.getMitTrack())
+                            .build())
+                    .collect(Collectors.toList());
+
+            out.put(staffId, modules);
+        }
+        return out;
+    }
+
+    @Transactional(readOnly = true)
     public Set<UUID> staffMissingSubmissionForLatestRequest(Collection<UUID> staffIds) {
         Optional<ModulePreferenceRequest> latestReq = requestRepo.findFirstByOrderByCreatedAtDesc();
         if (latestReq.isEmpty() || staffIds == null || staffIds.isEmpty()) return Set.of();
