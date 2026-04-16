@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { LayoutDashboard, Users, ClipboardCheck, FileText, BellRing, UserIcon, ChevronDown, Settings, LogOut, Mail, Phone, Calendar, Eye, Clock, Archive, Edit, DollarSign, CheckCircle, XCircle, BarChart2, Loader2, Plus } from 'lucide-react';
-import { createResearchOpportunity, deleteResearchOpportunity, getInterviewReport, getMyMentees, getMyResearchOpportunities, InterviewReport, ResearchOpportunityDto, updateResearchOpportunity, UserProfile } from '../services/api';
+import { approveLeave, createResearchOpportunity, deleteResearchOpportunity, getInterviewReport, getMyMentees, getMyLeaveRequests, getMyResearchOpportunities, getPendingLeaveRequests, rejectLeave, InterviewReport, ResearchOpportunityDto, updateResearchOpportunity, UserProfile, type LeaveRequestDto } from '../services/api';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -71,6 +71,10 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
 
   const [myMentees, setMyMentees] = useState<UserProfile[]>([]);
   const [loadingMentees, setLoadingMentees] = useState(false);
+
+  // Leave approvals (pending)
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequestDto[]>([]);
+  const [loadingLeaveApprovals, setLoadingLeaveApprovals] = useState(false);
 
   // Fetch real profile data from backend on mount
   useEffect(() => {
@@ -342,11 +346,42 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     alert('Profile updated successfully!');
   };
 
+  // Leave request handlers (pending approvals)
+  const handleApproveLeave = async (leaveRequestId: string) => {
+    try {
+      setLoadingLeaveApprovals(true);
+      await approveLeave(leaveRequestId);
+      const pending = await getPendingLeaveRequests();
+      setLeaveRequests(pending);
+      alert('Leave request approved successfully!');
+    } catch (e: any) {
+      alert(e?.message || 'Failed to approve leave request');
+    } finally {
+      setLoadingLeaveApprovals(false);
+    }
+  };
+
+  const handleRejectLeave = async (leaveRequestId: string) => {
+    if (!confirm('Reject this leave request?')) return;
+    try {
+      setLoadingLeaveApprovals(true);
+      await rejectLeave(leaveRequestId);
+      const pending = await getPendingLeaveRequests();
+      setLeaveRequests(pending);
+      alert('Leave request rejected.');
+    } catch (e: any) {
+      alert(e?.message || 'Failed to reject leave request');
+    } finally {
+      setLoadingLeaveApprovals(false);
+    }
+  };
+
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'manageInterviews', label: 'Manage Interviews', icon: Calendar },
     { id: 'staff', label: 'Temporary Staff List', icon: Users },
     { id: 'mentees', label: 'My Mentees', icon: Users },
+    { id: 'leave', label: 'Leave Requests', icon: FileText },
     { id: 'research', label: 'Research Opportunities', icon: FileText },
     { id: 'approve', label: 'Approve Registrations', icon: ClipboardCheck },
     { id: 'interviews', label: 'Interview Reports', icon: FileText },
@@ -371,6 +406,18 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
       .then(setMyMentees)
       .catch((e) => console.error('Failed to load mentees', e))
       .finally(() => setLoadingMentees(false));
+  }, [activeMenu]);
+
+  useEffect(() => {
+    if (activeMenu !== 'leave') return;
+    setLoadingLeaveApprovals(true);
+    getPendingLeaveRequests()
+      .then(setLeaveRequests)
+      .catch((e) => {
+        console.error('Failed to load leave approvals', e);
+        setLeaveRequests([]);
+      })
+      .finally(() => setLoadingLeaveApprovals(false));
   }, [activeMenu]);
 
   const statsCards = [
@@ -753,6 +800,88 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                   </Card>
                 ))}
               </div>
+            </Card>
+          )}
+
+          {/* Leave Requests */}
+          {activeMenu === 'leave' && (
+            <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
+                  Leave Requests
+                </h3>
+                <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '12px' }}>
+                  Pending: {leaveRequests.length}
+                </Badge>
+              </div>
+              <Separator className="mb-4" />
+
+              {loadingLeaveApprovals ? (
+                <div className="flex items-center justify-center py-10 text-[#4db4ac]" style={{ fontSize: '14px' }}>
+                  Loading leave requests…
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {leaveRequests.length === 0 ? (
+                    <div className="text-center py-12 text-[#999999]">
+                      <p style={{ fontSize: '14px' }}>No pending leave requests</p>
+                    </div>
+                  ) : (
+                    leaveRequests.map((request) => (
+                      <Card key={request.id} className="bg-white border border-[#e0e0e0] rounded-lg p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h4 className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 700 }}>
+                                {request.staffName}
+                              </h4>
+                              <Badge className="bg-orange-100 text-orange-700 border-orange-300 border" style={{ fontSize: '10px' }}>
+                                PENDING
+                              </Badge>
+                            </div>
+
+                            <div className="space-y-1">
+                              <p className="text-[#555555]" style={{ fontSize: '13px' }}>{request.staffEmail || '—'}</p>
+                              <p className="text-[#555555]" style={{ fontSize: '13px' }}>
+                                Substitute: {request.substituteName || '—'}
+                              </p>
+                              <p className="text-[#555555]" style={{ fontSize: '13px' }}>
+                                Date:{' '}
+                                {request.leaveDate
+                                  ? new Date(request.leaveDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                  : '—'}
+                              </p>
+                            </div>
+
+                            <div className="mt-2">
+                              <p className="text-[#555555]" style={{ fontSize: '12px', fontWeight: 600 }}>Reason</p>
+                              <p className="text-[#222222] bg-[#f9f9f9] border border-[#e0e0e0] rounded-lg p-2" style={{ fontSize: '14px' }}>
+                                {request.reason}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col gap-2">
+                            <Button
+                              className="bg-green-600 hover:bg-green-700 text-white px-4"
+                              onClick={() => handleApproveLeave(request.id)}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="border-red-600 text-red-600 hover:bg-red-50 px-4"
+                              onClick={() => handleRejectLeave(request.id)}
+                            >
+                              Reject
+                            </Button>
+                          </div>
+                        </div>
+                      </Card>
+                    ))
+                  )}
+                </div>
+              )}
             </Card>
           )}
 

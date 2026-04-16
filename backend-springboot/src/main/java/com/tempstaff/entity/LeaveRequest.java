@@ -28,7 +28,9 @@ public class LeaveRequest {
     @Column(name = "leave_type", nullable = false)
     private String leaveType;
 
-    private String substitute;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "substitute_id")
+    private User substitute;
 
     @Column(name = "start_date", nullable = false)
     private LocalDate startDate;
@@ -44,10 +46,17 @@ public class LeaveRequest {
     @Builder.Default
     private RequestStatus status = RequestStatus.pending;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "approved_by")
+    private User approvedBy;
+
+    @Column(name = "approved_at")
+    private LocalDateTime approvedAt;
+
     @Column(name = "rejection_reason")
     private String rejectionReason;
 
     @CreationTimestamp
-    @Column(name = "submitted_date", updatable = false)
-    private LocalDateTime submittedDate;
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
 }

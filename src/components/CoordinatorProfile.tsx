@@ -58,7 +58,20 @@ import ResearchDetailsDialog from './ResearchDetailsDialog';
 import AddResearchDialog from './AddResearchDialog';
 import EditResearchDialog from './EditResearchDialog';
 import logo from 'figma:asset/39b6269214ec5f8a015cd1f1a1adaa157fd5d025.png';
-import { createResearchOpportunity, deleteResearchOpportunity, getMyMentees, getMyResearchOpportunities, ResearchOpportunityDto, updateResearchOpportunity, UserProfile } from '../services/api';
+import {
+  approveLeave,
+  createResearchOpportunity,
+  deleteResearchOpportunity,
+  getMyMentees,
+  getMyLeaveRequests,
+  getPendingLeaveRequests,
+  getMyResearchOpportunities,
+  rejectLeave,
+  ResearchOpportunityDto,
+  updateResearchOpportunity,
+  type LeaveRequestDto,
+  UserProfile,
+} from '../services/api';
 
 interface CoordinatorProfileProps {
   onLogout: () => void;
@@ -321,45 +334,22 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
     }
   ]);
 
-  // Leave requests data
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([
-    {
-      id: 'LR001',
-      staffName: 'K.M. Silva',
-      staffEmail: 'km.silva@kln.ac.lk',
-      leaveType: 'Annual Leave',
-      substitute: 'R.P. Fernando',
-      startDate: 'Oct 25, 2025',
-      endDate: 'Oct 30, 2025',
-      reason: 'Family vacation',
-      submittedDate: 'Oct 18, 2025',
-      status: 'pending'
-    },
-    {
-      id: 'LR002',
-      staffName: 'R.P. Fernando',
-      staffEmail: 'rp.fernando@kln.ac.lk',
-      leaveType: 'Medical Leave',
-      substitute: 'A.B. Perera',
-      startDate: 'Oct 22, 2025',
-      endDate: 'Oct 24, 2025',
-      reason: 'Medical treatment',
-      submittedDate: 'Oct 19, 2025',
-      status: 'pending'
-    },
-    {
-      id: 'LR003',
-      staffName: 'A.B. Perera',
-      staffEmail: 'ab.perera@kln.ac.lk',
-      leaveType: 'Emergency Leave',
-      substitute: 'K.M. Silva',
-      startDate: 'Oct 15, 2025',
-      endDate: 'Oct 16, 2025',
-      reason: 'Family emergency',
-      submittedDate: 'Oct 14, 2025',
-      status: 'approved'
-    }
-  ]);
+  // Leave requests data (pending approvals)
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequestDto[]>([]);
+  const [loadingLeaveApprovals, setLoadingLeaveApprovals] = useState(false);
+
+  // Fetch pending leave requests for approvals
+  useEffect(() => {
+    if (activeMenu !== 'leave') return;
+    setLoadingLeaveApprovals(true);
+    getPendingLeaveRequests()
+      .then((items) => setLeaveRequests(items))
+      .catch((e) => {
+        console.error('Failed to load pending leave requests', e);
+        setLeaveRequests([]);
+      })
+      .finally(() => setLoadingLeaveApprovals(false));
+  }, [activeMenu]);
 
   // FR7: Registration requests
   const [registrationRequests, setRegistrationRequests] = useState<any[]>([]);
@@ -473,18 +463,31 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
   };
 
   // Leave request handlers
-  const handleApproveLeave = (id: string) => {
-    setLeaveRequests(prev =>
-      prev.map(req => req.id === id ? { ...req, status: 'approved' as const } : req)
-    );
-    alert('Leave request approved successfully!');
+  const handleApproveLeave = async (id: string) => {
+    try {
+      setLoadingLeaveApprovals(true);
+      await approveLeave(id);
+      setLeaveRequests(await getPendingLeaveRequests());
+      alert('Leave request approved successfully!');
+    } catch (e: any) {
+      alert(e?.message || 'Failed to approve leave request');
+    } finally {
+      setLoadingLeaveApprovals(false);
+    }
   };
 
-  const handleRejectLeave = (id: string) => {
-    setLeaveRequests(prev =>
-      prev.map(req => req.id === id ? { ...req, status: 'rejected' as const } : req)
-    );
-    alert('Leave request rejected.');
+  const handleRejectLeave = async (id: string) => {
+    if (!confirm('Reject this leave request?')) return;
+    try {
+      setLoadingLeaveApprovals(true);
+      await rejectLeave(id);
+      setLeaveRequests(await getPendingLeaveRequests());
+      alert('Leave request rejected.');
+    } catch (e: any) {
+      alert(e?.message || 'Failed to reject leave request');
+    } finally {
+      setLoadingLeaveApprovals(false);
+    }
   };
 
   // FR7: Approve/Reject registration
@@ -1994,6 +1997,11 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
               </div>
               <Separator className="mb-4" />
 
+              {loadingLeaveApprovals ? (
+                <div className="flex items-center justify-center py-10 text-[#4db4ac]" style={{ fontSize: '14px' }}>
+                  Loading leave requests…
+                </div>
+              ) : (
               <div className="space-y-4">
                 {leaveRequests.map((request) => (
                   <Card
@@ -2031,25 +2039,19 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                           </div>
                           <div className="flex items-center gap-2 text-[#555555]" style={{ fontSize: '13px' }}>
                             <UserCheck className="h-4 w-4 text-[#4db4ac]" />
-                            <span>Substitute: {request.substitute}</span>
+                            <span>Substitute: {request.substituteName || '—'}</span>
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4 mb-3">
+                        <div className="grid grid-cols-1 gap-4 mb-3">
                           <div className="bg-white rounded-lg p-3 border border-[#e0e0e0]">
                             <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
-                              Start Date
+                              Leave Date
                             </p>
                             <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
-                              {request.startDate}
-                            </p>
-                          </div>
-                          <div className="bg-white rounded-lg p-3 border border-[#e0e0e0]">
-                            <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
-                              End Date
-                            </p>
-                            <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
-                              {request.endDate}
+                              {request.leaveDate
+                                ? new Date(request.leaveDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                : '—'}
                             </p>
                           </div>
                         </div>
@@ -2064,7 +2066,10 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                         </div>
 
                         <p className="text-[#999999]" style={{ fontSize: '12px' }}>
-                          Submitted: {request.submittedDate}
+                          Submitted:{' '}
+                          {request.submittedAt
+                            ? new Date(request.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            : '—'}
                         </p>
                       </div>
 
@@ -2091,12 +2096,13 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                   </Card>
                 ))}
 
-                {leaveRequests.filter(r => r.status === 'pending').length === 0 && (
+                {leaveRequests.length === 0 && (
                   <div className="text-center py-12 text-[#999999]">
                     <p style={{ fontSize: '14px' }}>No pending leave requests</p>
                   </div>
                 )}
               </div>
+              )}
             </Card>
           )}
 

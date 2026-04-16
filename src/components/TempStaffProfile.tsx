@@ -39,7 +39,21 @@ import { Checkbox } from './ui/checkbox';
 import SystemNotices from './SystemNotices';
 import LeaveApplicationDialog from './LeaveApplicationDialog';
 import EditProfileDialog from './EditProfileDialog';
-import { applyToResearchOpportunity, getLatestModulePreferenceRequest, getMyJobDescription, getMyResearchApplications, listOpenResearchOpportunities, MyResearchApplicationDto, ResearchOpportunityDto, submitModulePreferences, type ModulePreferenceRequestDto } from '../services/api';
+import {
+  applyLeave,
+  applyToResearchOpportunity,
+  getCurrentUser,
+  getLatestModulePreferenceRequest,
+  getMyJobDescription,
+  getMyLeaveRequests,
+  getMyResearchApplications,
+  listOpenResearchOpportunities,
+  MyResearchApplicationDto,
+  ResearchOpportunityDto,
+  submitModulePreferences,
+  type LeaveRequestDto,
+  type ModulePreferenceRequestDto,
+} from '../services/api';
 import logo from 'figma:asset/39b6269214ec5f8a015cd1f1a1adaa157fd5d025.png';
 
 interface TempStaffProfileProps {
@@ -66,6 +80,8 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
     avatarUrl: '',
     initials: '...'
   });
+
+  const currentUserId: string | null = getCurrentUser()?.id ?? null;
 
   const availableSubjects = [
     'Core AI & Machine Learning',
@@ -145,19 +161,8 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
     return [day, range].filter(Boolean).join(' ');
   };
 
-  const [leaveRequests, setLeaveRequests] = useState([
-    {
-      id: 'LV001',
-      startDate: '2025-10-25',
-      endDate: '2025-10-27',
-      reason: 'Personal matter',
-      substituteName: 'A.B. Perera',
-      status: 'approved' as const,
-      submittedDate: 'Oct 18, 2025',
-      approvedBy: 'Dr. Thilini Mahanama',
-      approvedDate: 'Oct 19, 2025'
-    }
-  ]);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequestDto[]>([]);
+  const [loadingLeaves, setLoadingLeaves] = useState(false);
 
   const [weeklyTasks, setWeeklyTasks] = useState([
     { title: 'Conduct Tutorial - Marketing Management', category: 'Teaching', day: 'Monday', timeFrom: '08:00', timeTo: '10:00', deadline: 'Oct 20, 2025', status: 'Pending' },
@@ -196,14 +201,25 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
     }
   };
 
-  const handleLeaveSubmit = (leaveData: any) => {
-    const newLeave = {
-      id: `LV${String(leaveRequests.length + 1).padStart(3, '0')}`,
-      ...leaveData,
-      submittedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    };
-    setLeaveRequests([newLeave, ...leaveRequests]);
-    alert('Leave request submitted successfully!');
+  const handleLeaveSubmit = async (leaveData: any) => {
+    try {
+      setLoadingLeaves(true);
+      const next = await applyLeave({
+        leaveDate: leaveData.leaveDate,
+        reason: leaveData.reason,
+        substituteId: leaveData.substituteId,
+      });
+      alert('Leave request submitted successfully!');
+      // Refresh list from backend (keeps status/substitute consistent)
+      const mine = await getMyLeaveRequests();
+      setLeaveRequests(mine);
+      return next;
+    } catch (e: any) {
+      alert(e?.message || 'Failed to submit leave request');
+      throw e;
+    } finally {
+      setLoadingLeaves(false);
+    }
   };
 
   const handleResearchApply = async (opportunityId: string) => {
@@ -282,6 +298,18 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
         setModulePrefRequest(null);
       })
       .finally(() => setLoadingModulePrefs(false));
+  }, [activeMenu]);
+
+  useEffect(() => {
+    if (activeMenu !== 'leave') return;
+    setLoadingLeaves(true);
+    getMyLeaveRequests()
+      .then((items) => setLeaveRequests(items))
+      .catch((e) => {
+        console.error('Failed to load my leave requests', e);
+        setLeaveRequests([]);
+      })
+      .finally(() => setLoadingLeaves(false));
   }, [activeMenu]);
 
   useEffect(() => {
@@ -768,6 +796,11 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
               </div>
               <Separator className="mb-4" />
 
+              {loadingLeaves ? (
+                <div className="flex items-center justify-center py-10 text-[#4db4ac]" style={{ fontSize: '14px' }}>
+                  Loading leave requests…
+                </div>
+              ) : (
               <div className="space-y-4">
                 {leaveRequests.map((leave) => (
                   <Card 
@@ -803,10 +836,12 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                         <div className="grid grid-cols-2 gap-4 mb-3">
                           <div>
                             <p className="text-[#555555]" style={{ fontSize: '12px', fontWeight: 600 }}>
-                              Duration
+                              Leave Date
                             </p>
                             <p className="text-[#222222]" style={{ fontSize: '14px' }}>
-                              {new Date(leave.startDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - {new Date(leave.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              {leave.leaveDate
+                                ? new Date(leave.leaveDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                                : '—'}
                             </p>
                           </div>
                           <div>
@@ -814,7 +849,7 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                               Substitute Staff
                             </p>
                             <p className="text-[#222222]" style={{ fontSize: '14px' }}>
-                              {leave.substituteName}
+                              {leave.substituteName || '—'}
                             </p>
                           </div>
                         </div>
@@ -831,13 +866,22 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                         {leave.status === 'approved' && (
                           <div className="bg-green-100 border border-green-300 rounded-lg px-3 py-2 mt-3">
                             <p className="text-green-700" style={{ fontSize: '13px' }}>
-                              ✓ Approved by {leave.approvedBy} on {leave.approvedDate}
+                              ✓ Approved by {leave.approvedByName || '—'}
+                              {leave.approvedAt ? ` on ${new Date(leave.approvedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}
+                            </p>
+                          </div>
+                        )}
+
+                        {leave.status === 'rejected' && (
+                          <div className="bg-red-50 border border-red-300 rounded-lg px-3 py-2 mt-3">
+                            <p className="text-red-700" style={{ fontSize: '13px' }}>
+                              ✕ Rejected{leave.rejectionReason ? `: ${leave.rejectionReason}` : ''}
                             </p>
                           </div>
                         )}
 
                         <p className="text-[#999999] mt-2" style={{ fontSize: '12px' }}>
-                          Submitted: {leave.submittedDate}
+                          Submitted: {leave.submittedAt ? new Date(leave.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                         </p>
                       </div>
                     </div>
@@ -851,6 +895,7 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                   </div>
                 )}
               </div>
+              )}
             </Card>
           )}
 
@@ -1197,6 +1242,7 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
         open={showLeaveDialog}
         onOpenChange={setShowLeaveDialog}
         currentUserSubjects={preferredSubjects}
+        currentUserId={currentUserId}
         onSubmit={handleLeaveSubmit}
       />
 

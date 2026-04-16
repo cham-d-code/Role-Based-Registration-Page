@@ -528,6 +528,66 @@ export async function submitModulePreferences(body: {
     });
 }
 
+// ─── Leave Requests (apply + approvals) ───────────────────────────────────
+
+export type LeaveRequestStatus = 'pending' | 'approved' | 'rejected';
+
+export interface LeaveRequestDto {
+    id: string;
+    staffId: string | null;
+    staffName: string;
+    staffEmail: string | null;
+
+    leaveDate: string | null; // YYYY-MM-DD
+    reason: string;
+
+    substituteId: string | null;
+    substituteName: string | null;
+
+    status: LeaveRequestStatus;
+
+    submittedAt: string | null;
+    approvedById: string | null;
+    approvedByName: string | null;
+    approvedAt: string | null;
+
+    rejectionReason: string | null;
+}
+
+export async function applyLeave(body: {
+    leaveDate: string; // YYYY-MM-DD
+    reason: string;
+    substituteId: string;
+}): Promise<LeaveRequestDto> {
+    return fetchWithAuth(`${API_BASE_URL}/leaves/apply`, {
+        method: 'POST',
+        body: JSON.stringify({
+            leaveDate: body.leaveDate,
+            reason: body.reason,
+            substituteId: body.substituteId,
+        }),
+    });
+}
+
+export async function getMyLeaveRequests(): Promise<LeaveRequestDto[]> {
+    return fetchWithAuth(`${API_BASE_URL}/leaves/mine`);
+}
+
+export async function getPendingLeaveRequests(): Promise<LeaveRequestDto[]> {
+    return fetchWithAuth(`${API_BASE_URL}/leaves/pending`);
+}
+
+export async function approveLeave(leaveRequestId: string): Promise<LeaveRequestDto> {
+    return fetchWithAuth(`${API_BASE_URL}/leaves/${leaveRequestId}/approve`, { method: 'POST' });
+}
+
+export async function rejectLeave(leaveRequestId: string, rejectionReason?: string): Promise<LeaveRequestDto> {
+    return fetchWithAuth(`${API_BASE_URL}/leaves/${leaveRequestId}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ rejectionReason: rejectionReason ?? null }),
+    });
+}
+
 // ─── Interview APIs ───────────────────────────────────────────────
 
 export interface InterviewData {

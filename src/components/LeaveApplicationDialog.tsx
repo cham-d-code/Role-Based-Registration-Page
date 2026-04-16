@@ -5,7 +5,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
 import { Badge } from './ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Select, SelectContent, SelectItem, SelectItemRich, SelectTrigger, SelectValue } from './ui/select';
 import { Calendar, Sparkles } from 'lucide-react';
 import { Separator } from './ui/separator';
 import { getApprovedStaff } from '../services/api';
@@ -14,7 +14,7 @@ interface SubstituteStaff {
   id: string;
   name: string;
   availableSubjects: string[];
-  currentLoad: number;
+  matchingSubjects?: string[];
   matchScore?: number;
 }
 
@@ -22,6 +22,7 @@ interface LeaveApplicationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   currentUserSubjects: string[];
+  currentUserId?: string | null;
   onSubmit: (leaveData: any) => void;
 }
 
@@ -29,11 +30,11 @@ export default function LeaveApplicationDialog({
   open, 
   onOpenChange,
   currentUserSubjects,
+  currentUserId,
   onSubmit 
 }: LeaveApplicationDialogProps) {
   const [formData, setFormData] = useState({
-    startDate: '',
-    endDate: '',
+    leaveDate: '',
     reason: '',
     substituteId: ''
   });
@@ -50,7 +51,6 @@ export default function LeaveApplicationDialog({
           id: s.id,
           name: s.fullName,
           availableSubjects: s.preferredSubjects ?? [],
-          currentLoad: 0,
         }));
         setAllSubstituteStaff(mapped);
       })
@@ -61,41 +61,51 @@ export default function LeaveApplicationDialog({
       .finally(() => setLoadingSubs(false));
   }, [open]);
 
-  // FR19: Automatic filtering of substitute staff based on subject matching
-  const calculateMatchScore = (staff: SubstituteStaff) => {
-    const matches = staff.availableSubjects.filter(subject => 
-      currentUserSubjects.some(userSubject => 
-        subject.toLowerCase().includes(userSubject.toLowerCase()) || 
-        userSubject.toLowerCase().includes(subject.toLowerCase())
+  // Subject matching (fuzzy includes) to recommend substitutes
+  const calculateMatchingSubjects = (staff: SubstituteStaff) => {
+    const matching = staff.availableSubjects.filter((subject) =>
+      currentUserSubjects.some(
+        (userSubject) =>
+          subject.toLowerCase().includes(userSubject.toLowerCase()) ||
+          userSubject.toLowerCase().includes(subject.toLowerCase())
       )
     );
-    return matches.length;
+    return Array.from(new Set(matching));
   };
 
-  const filteredSubstitutes = useMemo(() => {
-    return allSubstituteStaff
-      .map(staff => ({
-        ...staff,
-        matchScore: calculateMatchScore(staff)
-      }))
-      .filter(staff => staff.matchScore! > 0) // Only show staff with matching subjects
-      .sort((a, b) => {
-        // Sort by match score first, then by current load (lower is better)
-        if (b.matchScore! !== a.matchScore!) {
-          return b.matchScore! - a.matchScore!;
-        }
-        return a.currentLoad - b.currentLoad;
+  const allSelectableSubstitutes = useMemo(() => {
+    const list = allSubstituteStaff
+      .map((staff) => {
+        const matchingSubjects = calculateMatchingSubjects(staff);
+        return {
+          ...staff,
+          matchingSubjects,
+          matchScore: matchingSubjects.length,
+        };
+      })
+      .filter((staff) => {
+        if (currentUserId && staff.id === currentUserId) return false;
+        return true;
       });
-  }, [allSubstituteStaff, currentUserSubjects]);
 
-  const bestMatch = filteredSubstitutes[0];
+    // Sort by match score first, then by name
+    list.sort((a, b) => {
+      const diff = (b.matchScore ?? 0) - (a.matchScore ?? 0);
+      if (diff !== 0) return diff;
+      return String(a.name).localeCompare(String(b.name));
+    });
+
+    return list;
+  }, [allSubstituteStaff, currentUserSubjects, currentUserId]);
+
+  const bestMatch = allSelectableSubstitutes.find((staff) => (staff.matchScore ?? 0) > 0);
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = () => {
-    if (!formData.startDate || !formData.endDate || !formData.reason || !formData.substituteId) {
+    if (!formData.leaveDate || !formData.reason || !formData.substituteId) {
       alert('Please fill all required fields!');
       return;
     }
@@ -105,13 +115,11 @@ export default function LeaveApplicationDialog({
     onSubmit({
       ...formData,
       substituteName: selectedSubstitute?.name,
-      status: 'pending'
     });
 
     // Reset form
     setFormData({
-      startDate: '',
-      endDate: '',
+      leaveDate: '',
       reason: '',
       substituteId: ''
     });
@@ -133,29 +141,17 @@ export default function LeaveApplicationDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Leave Dates */}
-          <div className="grid grid-cols-2 gap-4">
+          {/* Leave Date */}
+          <div className="grid grid-cols-1 gap-4">
             <div>
-              <Label htmlFor="startDate" className="text-[#555555] mb-2 block" style={{ fontSize: '14px', fontWeight: 500 }}>
-                Start Date *
+              <Label htmlFor="leaveDate" className="text-[#555555] mb-2 block" style={{ fontSize: '14px', fontWeight: 500 }}>
+                Select Date *
               </Label>
               <Input
-                id="startDate"
+                id="leaveDate"
                 type="date"
-                value={formData.startDate}
-                onChange={(e) => handleChange('startDate', e.target.value)}
-                className="h-12 border-[#d0d0d0] rounded-lg focus:border-[#4db4ac]"
-              />
-            </div>
-            <div>
-              <Label htmlFor="endDate" className="text-[#555555] mb-2 block" style={{ fontSize: '14px', fontWeight: 500 }}>
-                End Date *
-              </Label>
-              <Input
-                id="endDate"
-                type="date"
-                value={formData.endDate}
-                onChange={(e) => handleChange('endDate', e.target.value)}
+                value={formData.leaveDate}
+                onChange={(e) => handleChange('leaveDate', e.target.value)}
                 className="h-12 border-[#d0d0d0] rounded-lg focus:border-[#4db4ac]"
               />
             </div>
@@ -185,27 +181,20 @@ export default function LeaveApplicationDialog({
                 <Sparkles className="h-5 w-5 text-[#4db4ac] flex-shrink-0 mt-1" />
                 <div className="flex-1">
                   <p className="text-[#4db4ac]" style={{ fontSize: '14px', fontWeight: 700 }}>
-                    🎯 AI-Suggested Best Substitute
+                    🎯 System suggested substitute
                   </p>
                   <p className="text-[#222222] mt-2" style={{ fontSize: '15px', fontWeight: 600 }}>
                     {bestMatch.name}
                   </p>
-                  <p className="text-[#555555] mt-1" style={{ fontSize: '13px' }}>
-                    Matching Subjects: {bestMatch.matchScore} match(es) • Current Load: {bestMatch.currentLoad} classes
+                  <p className="text-[#555555] mt-1" style={{ fontSize: '13px', fontWeight: 600 }}>
+                    Matching subjects:
                   </p>
                   <div className="flex flex-wrap gap-1 mt-2">
-                    {bestMatch.availableSubjects
-                      .filter(subject => 
-                        currentUserSubjects.some(userSubject => 
-                          subject.toLowerCase().includes(userSubject.toLowerCase()) || 
-                          userSubject.toLowerCase().includes(subject.toLowerCase())
-                        )
-                      )
-                      .map((subject, idx) => (
-                        <Badge key={idx} className="bg-[#4db4ac] text-white" style={{ fontSize: '11px' }}>
-                          {subject}
-                        </Badge>
-                      ))}
+                    {(bestMatch.matchingSubjects ?? []).map((subject: string, idx: number) => (
+                      <Badge key={`${subject}-${idx}`} className="bg-[#4db4ac] text-white" style={{ fontSize: '11px' }}>
+                        {subject}
+                      </Badge>
+                    ))}
                   </div>
                   <Button
                     onClick={() => handleChange('substituteId', bestMatch.id)}
@@ -234,31 +223,40 @@ export default function LeaveApplicationDialog({
                 <SelectValue placeholder="Choose a substitute staff member" />
               </SelectTrigger>
               <SelectContent>
-                {filteredSubstitutes.length > 0 ? (
-                  filteredSubstitutes.map((staff) => (
-                    <SelectItem key={staff.id} value={staff.id}>
-                      <div className="flex items-center justify-between gap-4">
-                        <span>
-                          {staff.name}
-                          {staff.availableSubjects.length > 0 ? ` — ${staff.availableSubjects.join(', ')}` : ''}
-                        </span>
-                        <Badge className="bg-[#4db4ac] text-white ml-2" style={{ fontSize: '10px' }}>
-                          {staff.matchScore} match(es)
-                        </Badge>
-                      </div>
-                    </SelectItem>
-                  ))
+                {allSelectableSubstitutes.length > 0 ? (
+                  allSelectableSubstitutes
+                    .filter((s) => (bestMatch ? s.id !== bestMatch.id : true))
+                    .map((staff) => (
+                      <SelectItemRich
+                        key={staff.id}
+                        value={staff.id}
+                        text={staff.name}
+                      >
+                        <div className="flex flex-col">
+                          <div className="text-[#222222] font-semibold" style={{ fontSize: '13px' }}>
+                            {staff.name}
+                          </div>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {(staff.matchingSubjects ?? []).slice(0, 6).map((subject: string, idx: number) => (
+                              <Badge key={`${staff.id}-${subject}-${idx}`} className="bg-[#e6f7f6] text-[#4db4ac]" style={{ fontSize: '10px' }}>
+                                {subject}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      </SelectItemRich>
+                    ))
                 ) : (
                   <SelectItem value="none" disabled>
-                    No suitable substitute staff available
+                    No substitute staff available
                   </SelectItem>
                 )}
               </SelectContent>
             </Select>
-            
-            {filteredSubstitutes.length === 0 && (
-              <p className="text-red-600 mt-2" style={{ fontSize: '12px' }}>
-                ⚠ No substitute staff members match your specializations. Please contact the coordinator.
+
+            {!loadingSubs && allSelectableSubstitutes.length > 0 && !bestMatch && (
+              <p className="text-[#777777] mt-2" style={{ fontSize: '12px' }}>
+                No subject-based suggestion found. You can still select any substitute staff member.
               </p>
             )}
           </div>
@@ -274,10 +272,7 @@ export default function LeaveApplicationDialog({
                       Selected: {selected.name}
                     </p>
                     <p className="text-[#555555] mt-1" style={{ fontSize: '13px' }}>
-                      Available Subjects: {selected.availableSubjects.join(', ')}
-                    </p>
-                    <p className="text-[#555555]" style={{ fontSize: '13px' }}>
-                      Current Workload: {selected.currentLoad} classes
+                      Matching subjects: {calculateMatchingSubjects(selected).join(', ') || '—'}
                     </p>
                   </>
                 ) : null;
@@ -297,7 +292,7 @@ export default function LeaveApplicationDialog({
           <Button
             onClick={handleSubmit}
             className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
-            disabled={filteredSubstitutes.length === 0}
+            disabled={allSelectableSubstitutes.length === 0}
           >
             Submit Leave Request
           </Button>
