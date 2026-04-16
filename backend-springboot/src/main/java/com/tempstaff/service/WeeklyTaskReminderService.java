@@ -1,6 +1,11 @@
 package com.tempstaff.service;
 
-import com.tempstaff.entity.*;
+import com.tempstaff.entity.NotificationType;
+import com.tempstaff.entity.TaskStatus;
+import com.tempstaff.entity.User;
+import com.tempstaff.entity.UserRole;
+import com.tempstaff.entity.UserStatus;
+import com.tempstaff.entity.WeeklyTask;
 import com.tempstaff.repository.UserNotificationRepository;
 import com.tempstaff.repository.UserRepository;
 import com.tempstaff.repository.WeeklyTaskRepository;
@@ -9,9 +14,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.time.*;
+import java.time.Duration;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.TextStyle;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Sends an in-app notification to each temp staff member 15 minutes before
@@ -39,10 +49,11 @@ public class WeeklyTaskReminderService {
     public void sendUpcomingReminders() {
         ZonedDateTime nowSL = ZonedDateTime.now(SL);
         LocalTime nowTime = nowSL.toLocalTime();
-        DayOfWeek todayDow = DayOfWeek.valueOf(
-                nowSL.getDayOfWeek().getDisplayName(
-                        java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH)
-        );
+
+        // Resolve today as our custom entity enum (not java.time.DayOfWeek)
+        String todayName = nowSL.getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.ENGLISH);
+        com.tempstaff.entity.DayOfWeek todayDow =
+                com.tempstaff.entity.DayOfWeek.valueOf(todayName);
 
         List<User> staffList = userRepository.findByStatusAndRoleIn(
                 UserStatus.approved, List.of(UserRole.staff));
@@ -62,14 +73,13 @@ public class WeeklyTaskReminderService {
                 String dedupKey = String.format("[reminder:%s:%s]",
                         task.getId(), nowSL.toLocalDate());
 
+                String message = buildMessage(task, nowSL, dedupKey);
                 boolean alreadySent = userNotificationRepository
                         .existsByRecipientIdAndTypeAndMessage(
-                                staff.getId(), NotificationType.info, buildMessage(task, nowSL, dedupKey));
+                                staff.getId(), NotificationType.info, message);
                 if (alreadySent) continue;
 
                 String title = "Upcoming task in " + minsUntil + " min";
-                String message = buildMessage(task, nowSL, dedupKey);
-
                 notificationService.notifyUser(
                         staff.getId(), title, message, NotificationType.info, null, null);
 
