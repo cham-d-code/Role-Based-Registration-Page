@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   LayoutDashboard, 
   FileText,
@@ -24,7 +24,11 @@ import {
   Plus,
   UserCheck,
   BookOpen,
-  Send
+  Send,
+  Trash2,
+  ListTodo,
+  Loader2,
+  Save
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -47,6 +51,10 @@ import {
   getMyJobDescription,
   getMyLeaveRequests,
   getMyResearchApplications,
+  getMyWeeklyTasks,
+  getMyNextTask,
+  saveMyWeeklyTasks,
+  updateWeeklyTaskStatus,
   listOpenResearchOpportunities,
   MyResearchApplicationDto,
   ResearchOpportunityDto,
@@ -54,6 +62,8 @@ import {
   updateMyProfile,
   type LeaveRequestDto,
   type ModulePreferenceRequestDto,
+  type WeeklyTaskDto,
+  type NextTaskDto,
 } from '../services/api';
 import logo from 'figma:asset/39b6269214ec5f8a015cd1f1a1adaa157fd5d025.png';
 
@@ -74,6 +84,21 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
   const [submittingModulePrefs, setSubmittingModulePrefs] = useState(false);
   const [myJdContent, setMyJdContent] = useState<any | null>(null);
   const [loadingMyJd, setLoadingMyJd] = useState(false);
+
+  // Weekly tasks
+  const [weeklyTasks, setWeeklyTasks] = useState<WeeklyTaskDto[]>([]);
+  const [loadingWeeklyTasks, setLoadingWeeklyTasks] = useState(false);
+  const [savingWeeklyTasks, setSavingWeeklyTasks] = useState(false);
+  // Editor rows (draft before save)
+  const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
+  type DayName = typeof DAYS[number];
+  const [taskRows, setTaskRows] = useState<{ dayOfWeek: DayName; timeFrom: string; timeTo: string; title: string }[]>([
+    { dayOfWeek: 'Monday', timeFrom: '08:00', timeTo: '09:00', title: '' },
+  ]);
+  // Next task for dashboard
+  const [nextTask, setNextTask] = useState<NextTaskDto | null>(null);
+  const [loadingNextTask, setLoadingNextTask] = useState(false);
+  const nextTaskIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [profileData, setProfileData] = useState({
     name: 'Loading...',
     email: '',
@@ -268,6 +293,7 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'myJd', label: 'My JD', icon: ClipboardList },
+    { id: 'weeklyTasks', label: 'My Weekly Tasks', icon: ListTodo },
     { id: 'leave', label: 'Leave Requests', icon: Calendar },
     { id: 'research', label: 'Research Opportunities', icon: FileText },
     { id: 'modulePreferences', label: 'Module Preferences', icon: BookOpen },
@@ -287,6 +313,42 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
     getLatestModulePreferenceRequest()
       .then((req) => setModulePrefRequest(req))
       .catch(() => setModulePrefRequest(null));
+  }, []);
+
+  // Load weekly tasks when tab opens, and pre-populate editor
+  useEffect(() => {
+    if (activeMenu !== 'weeklyTasks') return;
+    setLoadingWeeklyTasks(true);
+    getMyWeeklyTasks()
+      .then((tasks) => {
+        setWeeklyTasks(tasks);
+        if (tasks.length > 0) {
+          setTaskRows(tasks.map(t => ({
+            dayOfWeek: t.dayOfWeek as DayName,
+            timeFrom: t.timeFrom,
+            timeTo: t.timeTo,
+            title: t.title,
+          })));
+        }
+      })
+      .catch(() => setWeeklyTasks([]))
+      .finally(() => setLoadingWeeklyTasks(false));
+  }, [activeMenu]);
+
+  // Next task: load on mount and poll every minute
+  useEffect(() => {
+    const load = () => {
+      setLoadingNextTask(true);
+      getMyNextTask()
+        .then(setNextTask)
+        .catch(() => setNextTask(null))
+        .finally(() => setLoadingNextTask(false));
+    };
+    load();
+    nextTaskIntervalRef.current = setInterval(load, 60_000);
+    return () => {
+      if (nextTaskIntervalRef.current) clearInterval(nextTaskIntervalRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -543,7 +605,7 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                 </div>
               </Card>
 
-              {/* Quick Stats Section */}
+              {/* Quick Stats + Next Task */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {quickStats.map((stat, index) => (
                   <Card 
@@ -560,6 +622,49 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                   </Card>
                 ))}
               </div>
+
+              {/* Next Task Card */}
+              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <Clock className="h-5 w-5 text-[#4db4ac]" />
+                  <h3 className="text-[#555555]" style={{ fontSize: '14px', fontWeight: 600 }}>
+                    Next Task
+                  </h3>
+                </div>
+                {loadingNextTask ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-[#4db4ac]" />
+                ) : nextTask ? (
+                  <>
+                    <p className="text-[#222222]" style={{ fontSize: '48px', fontWeight: 700, lineHeight: 1 }}>
+                      {nextTask.timeUntil}
+                    </p>
+                    <p className="text-[#555555] mt-3" style={{ fontSize: '14px', fontWeight: 500 }}>
+                      {nextTask.dateTimeLabel}
+                    </p>
+                    <p className="text-[#4db4ac] mt-1" style={{ fontSize: '14px', fontWeight: 600 }}>
+                      {nextTask.title}
+                    </p>
+                    <p className="text-[#999999] mt-1" style={{ fontSize: '12px' }}>
+                      {nextTask.timeFrom} – {nextTask.timeTo}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="mt-3 text-[#4db4ac] hover:text-[#3c9a93] p-0"
+                      onClick={() => setActiveMenu('weeklyTasks')}
+                    >
+                      View weekly timetable →
+                    </Button>
+                  </>
+                ) : (
+                  <p className="text-[#999999]" style={{ fontSize: '14px' }}>
+                    No upcoming tasks this week.{' '}
+                    <button className="text-[#4db4ac] underline" onClick={() => setActiveMenu('weeklyTasks')}>
+                      Set up your timetable
+                    </button>
+                  </p>
+                )}
+              </Card>
 
               {/* Recent Activities Section */}
               <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
@@ -790,6 +895,190 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                 </div>
               )}
             </Card>
+          )}
+
+          {/* ── My Weekly Tasks ─────────────────────────────── */}
+          {activeMenu === 'weeklyTasks' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>My Weekly Tasks</h2>
+                <p className="text-[#777777]" style={{ fontSize: '13px' }}>
+                  Reminders are sent 15 minutes before each task (Sri Lanka time).
+                </p>
+              </div>
+
+              {/* Editor Card */}
+              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                <div className="flex items-center gap-2 mb-4">
+                  <ListTodo className="h-5 w-5 text-[#4db4ac]" />
+                  <h3 className="text-[#222222]" style={{ fontSize: '18px', fontWeight: 700 }}>Edit Timetable</h3>
+                </div>
+                <Separator className="mb-4" />
+
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="text-left bg-[#f9f9f9]">
+                        <th className="px-3 py-2 text-[#555555]" style={{ fontSize: '13px', fontWeight: 600 }}>Day</th>
+                        <th className="px-3 py-2 text-[#555555]" style={{ fontSize: '13px', fontWeight: 600 }}>From</th>
+                        <th className="px-3 py-2 text-[#555555]" style={{ fontSize: '13px', fontWeight: 600 }}>To</th>
+                        <th className="px-3 py-2 text-[#555555]" style={{ fontSize: '13px', fontWeight: 600 }}>Task</th>
+                        <th className="px-3 py-2"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {taskRows.map((row, i) => (
+                        <tr key={i} className="border-t border-[#f0f0f0]">
+                          <td className="px-3 py-2">
+                            <select
+                              value={row.dayOfWeek}
+                              onChange={e => setTaskRows(prev => prev.map((r, idx) => idx === i ? { ...r, dayOfWeek: e.target.value as DayName } : r))}
+                              className="border border-[#e0e0e0] rounded-lg px-2 py-1.5 text-[#222222] focus:border-[#4db4ac] outline-none"
+                              style={{ fontSize: '13px' }}
+                            >
+                              {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+                            </select>
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="time"
+                              value={row.timeFrom}
+                              onChange={e => setTaskRows(prev => prev.map((r, idx) => idx === i ? { ...r, timeFrom: e.target.value } : r))}
+                              className="border border-[#e0e0e0] rounded-lg px-2 py-1.5 text-[#222222] focus:border-[#4db4ac] outline-none"
+                              style={{ fontSize: '13px' }}
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="time"
+                              value={row.timeTo}
+                              onChange={e => setTaskRows(prev => prev.map((r, idx) => idx === i ? { ...r, timeTo: e.target.value } : r))}
+                              className="border border-[#e0e0e0] rounded-lg px-2 py-1.5 text-[#222222] focus:border-[#4db4ac] outline-none"
+                              style={{ fontSize: '13px' }}
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              type="text"
+                              placeholder="Task description"
+                              value={row.title}
+                              onChange={e => setTaskRows(prev => prev.map((r, idx) => idx === i ? { ...r, title: e.target.value } : r))}
+                              className="border border-[#e0e0e0] rounded-lg px-2 py-1.5 text-[#222222] w-full focus:border-[#4db4ac] outline-none"
+                              style={{ fontSize: '13px', minWidth: '200px' }}
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <button
+                              onClick={() => setTaskRows(prev => prev.filter((_, idx) => idx !== i))}
+                              className="text-red-400 hover:text-red-600"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="flex items-center gap-3 mt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setTaskRows(prev => [...prev, { dayOfWeek: 'Monday', timeFrom: '08:00', timeTo: '09:00', title: '' }])}
+                    className="border-[#4db4ac] text-[#4db4ac]"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Row
+                  </Button>
+                  <Button
+                    disabled={savingWeeklyTasks}
+                    onClick={async () => {
+                      const valid = taskRows.filter(r => r.title.trim());
+                      if (valid.length === 0) { alert('Add at least one task with a title.'); return; }
+                      setSavingWeeklyTasks(true);
+                      try {
+                        const saved = await saveMyWeeklyTasks(valid);
+                        setWeeklyTasks(saved);
+                        alert('Weekly timetable saved!');
+                        // Refresh next task
+                        getMyNextTask().then(setNextTask).catch(() => {});
+                      } catch (e: any) {
+                        alert(e?.message || 'Failed to save');
+                      } finally {
+                        setSavingWeeklyTasks(false);
+                      }
+                    }}
+                    className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
+                  >
+                    {savingWeeklyTasks ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                    Save Weekly Timetable
+                  </Button>
+                </div>
+              </Card>
+
+              {/* Saved Timetable grouped by day */}
+              {loadingWeeklyTasks ? (
+                <div className="flex items-center gap-2 text-[#4db4ac]">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading timetable…
+                </div>
+              ) : weeklyTasks.length > 0 ? (
+                <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                  <h3 className="text-[#222222] mb-4" style={{ fontSize: '18px', fontWeight: 700 }}>Saved Weekly Timetable</h3>
+                  <Separator className="mb-4" />
+                  <div className="space-y-5">
+                    {(['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'] as DayName[]).map(day => {
+                      const dayTasks = weeklyTasks.filter(t => t.dayOfWeek === day);
+                      if (dayTasks.length === 0) return null;
+                      return (
+                        <div key={day}>
+                          <p className="text-[#4db4ac] mb-2" style={{ fontSize: '14px', fontWeight: 700 }}>{day}</p>
+                          <div className="space-y-2">
+                            {dayTasks.map(task => (
+                              <div key={task.id} className="flex items-center justify-between bg-[#f9f9f9] border border-[#e0e0e0] rounded-lg px-4 py-3">
+                                <div>
+                                  <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 500 }}>{task.title}</p>
+                                  <p className="text-[#777777]" style={{ fontSize: '12px' }}>{task.timeFrom} – {task.timeTo}</p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {task.status === 'completed' ? (
+                                    <Badge className="bg-green-100 text-green-700 border border-green-300">Done</Badge>
+                                  ) : task.status === 'in_progress' ? (
+                                    <Badge className="bg-blue-100 text-blue-700 border border-blue-300">In Progress</Badge>
+                                  ) : (
+                                    <Badge className="bg-orange-100 text-orange-700 border border-orange-300">Pending</Badge>
+                                  )}
+                                  {task.status !== 'completed' && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-green-700 border-green-300"
+                                      onClick={async () => {
+                                        try {
+                                          const updated = await updateWeeklyTaskStatus(task.id, 'completed');
+                                          setWeeklyTasks(prev => prev.map(t => t.id === task.id ? updated : t));
+                                          getMyNextTask().then(setNextTask).catch(() => {});
+                                        } catch (e: any) {
+                                          alert(e?.message || 'Failed to update');
+                                        }
+                                      }}
+                                    >
+                                      <CheckCircle className="h-4 w-4 mr-1" />
+                                      Done
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Card>
+              ) : (
+                <p className="text-[#999999]" style={{ fontSize: '14px' }}>No tasks saved yet. Add rows above and click Save.</p>
+              )}
+            </div>
           )}
 
           {/* Leave Requests View (FR18, FR19) */}

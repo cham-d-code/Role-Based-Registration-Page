@@ -905,3 +905,63 @@ export async function rejectSalaryReport(reportId: string, note?: string): Promi
         body: JSON.stringify({ note: note ?? '' }),
     });
 }
+
+// ─── Weekly Tasks (Temp Staff) ────────────────────────────────────────────────
+
+export interface WeeklyTaskDto {
+    id: string;
+    dayOfWeek: string;   // e.g. "Monday"
+    timeFrom: string;    // "HH:mm" 24-hour
+    timeTo: string;
+    title: string;
+    status: 'pending' | 'in_progress' | 'completed';
+}
+
+export interface NextTaskDto {
+    id: string;
+    title: string;
+    dayOfWeek: string;
+    timeFrom: string;
+    timeTo: string;
+    timeUntil: string;     // e.g. "45 min"
+    dateTimeLabel: string; // e.g. "Today, 3:30 PM"
+    isToday: boolean;
+}
+
+export async function getMyWeeklyTasks(): Promise<WeeklyTaskDto[]> {
+    return fetchWithAuth(`${API_BASE_URL}/tasks/weekly`);
+}
+
+export async function saveMyWeeklyTasks(tasks: {
+    dayOfWeek: string;
+    timeFrom: string;
+    timeTo: string;
+    title: string;
+}[]): Promise<WeeklyTaskDto[]> {
+    return fetchWithAuth(`${API_BASE_URL}/tasks/weekly`, {
+        method: 'POST',
+        body: JSON.stringify({ tasks }),
+    });
+}
+
+export async function updateWeeklyTaskStatus(
+    taskId: string,
+    status: 'pending' | 'in_progress' | 'completed'
+): Promise<WeeklyTaskDto> {
+    return fetchWithAuth(`${API_BASE_URL}/tasks/weekly/${taskId}/status?status=${status}`, {
+        method: 'PUT',
+    });
+}
+
+export async function getMyNextTask(): Promise<NextTaskDto | null> {
+    const token = getAuthToken();
+    if (!token) return null;
+    const response = await fetch(`${API_BASE_URL}/tasks/weekly/next`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (response.status === 401) { logout(); window.location.href = '/'; return null; }
+    if (response.status === 204 || response.status === 404) return null;
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data ?? null;
+}

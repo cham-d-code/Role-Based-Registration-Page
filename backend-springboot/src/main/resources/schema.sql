@@ -370,6 +370,21 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE INDEX IF NOT EXISTS idx_tasks_user ON tasks(user_id);;
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);;
 
+-- Weekly tasks created by staff (repeated every week by day)
+CREATE TABLE IF NOT EXISTS weekly_tasks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    day_of_week day_of_week NOT NULL,
+    time_from TIME NOT NULL,
+    time_to TIME NOT NULL,
+    title TEXT NOT NULL,
+    status task_status DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);;
+
+CREATE INDEX IF NOT EXISTS idx_weekly_tasks_user ON weekly_tasks(user_id);;
+
 CREATE TABLE IF NOT EXISTS job_descriptions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
