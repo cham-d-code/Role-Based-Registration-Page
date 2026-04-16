@@ -18,8 +18,9 @@ export interface UserProfile {
     preferredModuleDetails?: CurriculumModuleDto[];
     preferencesRequested?: boolean;
 }
-// Backend port can vary in local dev; default to 8081 (matches our current Spring Boot run).
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8081/api';
+// API base URL for the backend.
+// In production you should set `VITE_API_BASE_URL`; otherwise we fall back to the production URL.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://dimtscs.me/api';
 
 export interface LoginData {
     email: string;

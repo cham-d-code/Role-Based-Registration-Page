@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { LayoutDashboard, Users, ClipboardCheck, FileText, BellRing, UserIcon, ChevronDown, Settings, LogOut, Mail, Phone, Calendar, Eye, Clock, Archive, Edit, DollarSign, CheckCircle, XCircle, BarChart2, Loader2, Plus } from 'lucide-react';
-import { approveLeave, createResearchOpportunity, deleteResearchOpportunity, getInterviewReport, getMyMentees, getMyLeaveRequests, getMyResearchOpportunities, getPendingLeaveRequests, rejectLeave, InterviewReport, ResearchOpportunityDto, updateResearchOpportunity, UserProfile, type LeaveRequestDto } from '../services/api';
+import { approveLeave, createResearchOpportunity, deleteResearchOpportunity, getInterviewReport, getMyMentees, getMyLeaveRequests, getMyNotifications, getMyResearchOpportunities, getPendingLeaveRequests, markNotificationRead, rejectLeave, InterviewReport, ResearchOpportunityDto, updateResearchOpportunity, UserProfile, type LeaveRequestDto, type UserNotificationDto } from '../services/api';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -64,6 +64,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
   // Research + Mentees (backend)
   const [myResearch, setMyResearch] = useState<ResearchOpportunityDto[]>([]);
   const [loadingResearch, setLoadingResearch] = useState(false);
+  const [newResearchCount, setNewResearchCount] = useState(0);
   const [showAddResearchDialog, setShowAddResearchDialog] = useState(false);
   const [showEditResearchDialog, setShowEditResearchDialog] = useState(false);
   const [showResearchDialog, setShowResearchDialog] = useState(false);
@@ -399,6 +400,42 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
       .finally(() => setLoadingResearch(false));
   }, [activeMenu]);
 
+  // Red badge for new research notifications
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const notifs = await getMyNotifications(true);
+        const count = notifs.filter((n: UserNotificationDto) => n.type === 'research_new').length;
+        if (mounted) setNewResearchCount(count);
+      } catch {
+        // ignore
+      }
+    };
+    load();
+    const interval = setInterval(load, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // When opening Research tab, mark research_new notifications as read
+  useEffect(() => {
+    if (activeMenu !== 'research') return;
+    (async () => {
+      try {
+        const notifs = await getMyNotifications(true);
+        const unreadNew = notifs.filter((n: UserNotificationDto) => n.type === 'research_new' && n.id);
+        await Promise.all(unreadNew.map((n: UserNotificationDto) => markNotificationRead(n.id)));
+      } catch {
+        // ignore
+      } finally {
+        setNewResearchCount(0);
+      }
+    })();
+  }, [activeMenu, markNotificationRead]);
+
   useEffect(() => {
     if (activeMenu !== 'mentees') return;
     setLoadingMentees(true);
@@ -546,6 +583,22 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                   style={{ fontSize: '14px', fontWeight: isActive ? 600 : 500 }}
                 >
                   <Icon className="h-5 w-5" />
+                  {item.id === 'research' && newResearchCount > 0 && (
+                    <span
+                      className="inline-flex items-center justify-center text-white"
+                      style={{
+                        backgroundColor: '#dc2626',
+                        width: 20,
+                        height: 20,
+                        borderRadius: 9999,
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        lineHeight: 1,
+                      }}
+                    >
+                      {Math.min(newResearchCount, 99)}
+                    </span>
+                  )}
                   <span className="whitespace-nowrap overflow-hidden text-ellipsis">
                     {item.label}
                   </span>
