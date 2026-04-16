@@ -186,6 +186,7 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
   const [myResearch, setMyResearch] = useState<ResearchOpportunityDto[]>([]);
   const [loadingResearch, setLoadingResearch] = useState(false);
   const [newResearchCount, setNewResearchCount] = useState(0);
+  const [reminderNotifications, setReminderNotifications] = useState<UserNotificationDto[]>([]);
   const [showAddResearchDialog, setShowAddResearchDialog] = useState(false);
   const [showEditResearchDialog, setShowEditResearchDialog] = useState(false);
   const [showResearchDialog, setShowResearchDialog] = useState(false);
@@ -615,6 +616,29 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
     };
   }, []);
 
+  // Reminders panel (unread notifications except research_new)
+  useEffect(() => {
+    if (activeMenu !== 'dashboard') return;
+    let mounted = true;
+
+    const load = async () => {
+      try {
+        const notifs = await getMyNotifications(true);
+        const filtered = notifs.filter((n: UserNotificationDto) => n.type !== 'research_new');
+        if (mounted) setReminderNotifications(filtered.slice(0, 12));
+      } catch {
+        if (mounted) setReminderNotifications([]);
+      }
+    };
+
+    load();
+    const interval = setInterval(load, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [activeMenu]);
+
   // When opening Research tab, mark research_new notifications as read
   useEffect(() => {
     if (activeMenu !== 'research') return;
@@ -653,13 +677,6 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
     { action: 'Updated Marking Scheme', time: '1 day ago', date: 'Oct 17, 2025' },
     { action: 'Assigned Mentor to New Staff', time: '2 days ago', date: 'Oct 16, 2025' },
     { action: 'Sent Contract Renewal Reminders', time: '3 days ago', date: 'Oct 15, 2025' },
-  ];
-
-  const upcomingDeadlines = [
-    { task: 'Contract Renewal Alerts', priority: 'urgent', date: 'Oct 20, 2025' },
-    { task: 'Pending Mentor Assignment Reviews', priority: 'medium', date: 'Oct 22, 2025' },
-    { task: 'Interview Schedule Approval', priority: 'medium', date: 'Oct 25, 2025' },
-    { task: 'Monthly Report Submission', priority: 'normal', date: 'Oct 31, 2025' },
   ];
 
   const getRemainingContractDaysValue = (contractEndDate?: string) => {
@@ -1065,43 +1082,6 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                   </Card>
                 ))}
               </div>
-
-              {/* Upcoming Deadlines Section */}
-              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-                <h3 className="text-[#222222] mb-4" style={{ fontWeight: 700, fontSize: '18px' }}>
-                  Upcoming Deadlines
-                </h3>
-                <Separator className="mb-4" />
-
-                <div className="space-y-3">
-                  {upcomingDeadlines.map((deadline, index) => (
-                    <Card
-                      key={index}
-                      className="bg-[#f9f9f9] border border-[#e0e0e0] rounded-lg p-4 hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <p className="text-[#222222] flex-1" style={{ fontSize: '14px', fontWeight: 600 }}>
-                          {deadline.task}
-                        </p>
-                        <Badge
-                          className={`${deadline.priority === 'urgent'
-                            ? 'bg-red-100 text-red-700 border-red-300'
-                            : deadline.priority === 'medium'
-                              ? 'bg-orange-100 text-orange-700 border-orange-300'
-                              : 'bg-blue-100 text-blue-700 border-blue-300'
-                            } border`}
-                          style={{ fontSize: '10px' }}
-                        >
-                          {deadline.priority.toUpperCase()}
-                        </Badge>
-                      </div>
-                      <p className="text-[#999999]" style={{ fontSize: '12px' }}>
-                        Due: {deadline.date}
-                      </p>
-                    </Card>
-                  ))}
-                </div>
-              </Card>
 
 
             </>
@@ -2259,9 +2239,32 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
             </h3>
             <Separator className="mb-4" />
 
-            <p className="text-[#777777]" style={{ fontSize: '13px' }}>
-              Use the dashboard panels to track upcoming deadlines.
-            </p>
+            {reminderNotifications.length === 0 ? (
+              <p className="text-[#777777]" style={{ fontSize: '13px' }}>
+                No new reminders right now.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {reminderNotifications.map((n) => (
+                  <Card
+                    key={n.id}
+                    className="bg-[#f9f9f9] border border-[#e0e0e0] rounded-lg p-4 hover:shadow-md transition-shadow"
+                  >
+                    <p className="text-[#222222] mb-1" style={{ fontSize: '13px', fontWeight: 700 }}>
+                      {n.title}
+                    </p>
+                    <p className="text-[#555555] whitespace-pre-line" style={{ fontSize: '12px' }}>
+                      {n.message}
+                    </p>
+                    {n.createdAt && (
+                      <p className="text-[#999999] mt-2" style={{ fontSize: '11px' }}>
+                        {new Date(n.createdAt).toLocaleString()}
+                      </p>
+                    )}
+                  </Card>
+                ))}
+              </div>
+            )}
           </aside>
         )}
       </div>

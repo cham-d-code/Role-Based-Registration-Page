@@ -177,6 +177,26 @@ public class ModulePreferenceService {
                     .moduleId(mid)
                     .build());
         }
+
+        // Notify HOD + Coordinator that preferences were received
+        String staffName = userRepository.findById(staffId).map(User::getFullName).orElse("Temporary staff");
+        String codes = curriculumModuleRepository.findAllById(req.getModuleIds()).stream()
+                .map(CurriculumModule::getCode)
+                .sorted()
+                .collect(Collectors.joining(", "));
+        List<User> management = userRepository.findByStatusAndRoleIn(
+                UserStatus.approved, List.of(UserRole.hod, UserRole.coordinator));
+        String title = "Module preferences received";
+        String msg = String.format(
+                "%s submitted module preferences (%s). [requestId=%s, staffId=%s]",
+                staffName,
+                codes,
+                request.getId(),
+                staffId
+        );
+        for (User m : management) {
+            notificationService.notifyUser(m.getId(), title, msg, NotificationType.info, null, null);
+        }
     }
 
     @Transactional(readOnly = true)

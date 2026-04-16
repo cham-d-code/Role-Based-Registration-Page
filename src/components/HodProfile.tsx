@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { LayoutDashboard, Users, ClipboardCheck, FileText, BellRing, UserIcon, ChevronDown, Settings, LogOut, Mail, Phone, Calendar, Eye, Clock, Archive, Edit, DollarSign, CheckCircle, XCircle, BarChart2, Loader2, Plus } from 'lucide-react';
-import { approveLeave, createResearchOpportunity, deleteResearchOpportunity, getInterviewReport, getMyMentees, getMyLeaveRequests, getMyNotifications, getMyResearchOpportunities, getPendingLeaveRequests, markNotificationRead, rejectLeave, InterviewReport, ResearchOpportunityDto, updateMyProfile, updateResearchOpportunity, UserProfile, type LeaveRequestDto, type UserNotificationDto } from '../services/api';
+import { approveLeave, createResearchOpportunity, deleteResearchOpportunity, getInterviewReport, getJobDescriptionForStaff, getMyMentees, getMyLeaveRequests, getMyNotifications, getMyResearchOpportunities, getPendingLeaveRequests, markNotificationRead, rejectLeave, InterviewReport, ResearchOpportunityDto, updateMyProfile, updateResearchOpportunity, UserProfile, type LeaveRequestDto, type UserNotificationDto } from '../services/api';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -15,12 +15,12 @@ import SystemNotices from './SystemNotices';
 import SendNoticeDialog from './SendNoticeDialog';
 import HodEndedInterviewApprovalPage from './HodEndedInterviewApprovalPage';
 import HodManageInterviewsPage from './HodManageInterviewsPage';
-import ViewJobDescriptionDialog from './ViewJobDescriptionDialog';
 import AttendanceAndSalariesPage from './AttendanceAndSalariesPage';
 import EditProfileDialog from './EditProfileDialog';
 import ResearchDetailsDialog from './ResearchDetailsDialog';
 import AddResearchDialog from './AddResearchDialog';
 import EditResearchDialog from './EditResearchDialog';
+import StructuredJobDescriptionPage from './StructuredJobDescriptionPage';
 
 interface HodProfileProps {
   onLogout: () => void;
@@ -45,8 +45,10 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
   const [sendNoticeOpen, setSendNoticeOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState<'dashboard' | 'approvalPage' | 'manageInterviews' | 'attendanceSalaries'>('dashboard');
   const [selectedInterview, setSelectedInterview] = useState<any>(null);
-  const [viewJdOpen, setViewJdOpen] = useState(false);
   const [selectedStaffForJd, setSelectedStaffForJd] = useState<any>(null);
+  const [showStaffJdPage, setShowStaffJdPage] = useState(false);
+  const [selectedStaffJd, setSelectedStaffJd] = useState<any | null>(null);
+  const [loadingStaffJd, setLoadingStaffJd] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [profileData, setProfileData] = useState({
     name: 'Loading...',
@@ -122,6 +124,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     contractEndDate?: string;
   }[]>([]);
   const [loadingStaff, setLoadingStaff] = useState(false);
+  const [contractFilter, setContractFilter] = useState<'all' | 'expired' | 'remaining'>('all');
 
   // Registration requests data
   const [registrationRequests, setRegistrationRequests] = useState<any[]>([]);
@@ -696,14 +699,59 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
           {/* Temporary Staff List View */}
           {activeMenu === 'staff' && (
             <>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
-                  Temporary Staff List
-                </h2>
-                <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '12px' }}>
-                  {temporaryStaff.length} Active Staff
-                </Badge>
-              </div>
+              {showStaffJdPage && selectedStaffForJd ? (
+                <StructuredJobDescriptionPage
+                  staffName={selectedStaffForJd?.name || 'Temporary Staff'}
+                  jd={selectedStaffJd}
+                  loading={loadingStaffJd}
+                  onBack={() => setShowStaffJdPage(false)}
+                />
+              ) : (
+                <>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
+                        Temporary Staff List
+                      </h2>
+                      <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '12px' }}>
+                        {(() => {
+                          const now = new Date();
+                          const filtered = temporaryStaff.filter((s) => {
+                            const end = s.contractEndDate ? new Date(s.contractEndDate) : null;
+                            const expired = end ? end.getTime() < now.getTime() : false;
+                            if (contractFilter === 'expired') return expired;
+                            if (contractFilter === 'remaining') return !expired;
+                            return true;
+                          });
+                          return `${filtered.length} Staff`;
+                        })()}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        className={`${contractFilter === 'all' ? 'border-[#4db4ac] text-[#4db4ac]' : 'border-[#e0e0e0] text-[#555555]'} rounded-lg`}
+                        onClick={() => setContractFilter('all')}
+                      >
+                        All
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className={`${contractFilter === 'expired' ? 'border-red-500 text-red-600' : 'border-[#e0e0e0] text-[#555555]'} rounded-lg`}
+                        onClick={() => setContractFilter('expired')}
+                      >
+                        Contract Expired
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className={`${contractFilter === 'remaining' ? 'border-green-500 text-green-700' : 'border-[#e0e0e0] text-[#555555]'} rounded-lg`}
+                        onClick={() => setContractFilter('remaining')}
+                      >
+                        Contract Remaining
+                      </Button>
+                    </div>
+                  </div>
 
               {loadingStaff && (
                 <div className="flex items-center justify-center py-12 gap-3 text-[#4db4ac]">
@@ -720,7 +768,16 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
               )}
 
               <div className="space-y-4">
-                {temporaryStaff.map((staff) => {
+                {temporaryStaff
+                  .filter((s) => {
+                    const now = new Date();
+                    const end = s.contractEndDate ? new Date(s.contractEndDate) : null;
+                    const expired = end ? end.getTime() < now.getTime() : false;
+                    if (contractFilter === 'expired') return expired;
+                    if (contractFilter === 'remaining') return !expired;
+                    return true;
+                  })
+                  .map((staff) => {
                   const endDate = staff.contractEndDate ? new Date(staff.contractEndDate) : null;
                   const daysUntilExpiry = endDate
                     ? Math.ceil((endDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
@@ -820,7 +877,24 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                           <Button
                             onClick={() => {
                               setSelectedStaffForJd(staff);
-                              setViewJdOpen(true);
+                              setSelectedStaffJd(null);
+                              setShowStaffJdPage(true);
+                              setLoadingStaffJd(true);
+                              getJobDescriptionForStaff(staff.id)
+                                .then((dto) => {
+                                  try {
+                                    const parsed = dto?.content ? JSON.parse(dto.content) : null;
+                                    setSelectedStaffJd(parsed);
+                                  } catch (e) {
+                                    console.error('Failed to parse staff JD content', e);
+                                    setSelectedStaffJd(null);
+                                  }
+                                })
+                                .catch((e) => {
+                                  console.error('Failed to load staff JD', e);
+                                  setSelectedStaffJd(null);
+                                })
+                                .finally(() => setLoadingStaffJd(false));
                             }}
                             className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg w-full"
                             style={{ fontSize: '13px' }}
@@ -834,6 +908,8 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                   );
                 })}
               </div>
+                </>
+              )}
             </>
           )}
 
@@ -1704,11 +1780,6 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
         open={sendNoticeOpen}
         onOpenChange={setSendNoticeOpen}
         onSend={() => setSendNoticeOpen(false)}
-      />
-      <ViewJobDescriptionDialog
-        open={viewJdOpen}
-        onOpenChange={setViewJdOpen}
-        jobDescription={selectedStaffForJd?.jobDescription || null}
       />
       <EditProfileDialog
         open={editProfileOpen}

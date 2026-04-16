@@ -3,11 +3,13 @@ package com.tempstaff.controller;
 import com.tempstaff.dto.request.ApplyLeaveRequest;
 import com.tempstaff.dto.response.LeaveRequestResponse;
 import com.tempstaff.entity.LeaveRequest;
+import com.tempstaff.entity.NotificationType;
 import com.tempstaff.entity.RequestStatus;
 import com.tempstaff.entity.User;
 import com.tempstaff.entity.UserRole;
 import com.tempstaff.repository.LeaveRequestRepository;
 import com.tempstaff.repository.UserRepository;
+import com.tempstaff.service.NotificationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -27,6 +29,7 @@ public class LeaveRequestController {
 
     private final LeaveRequestRepository leaveRequestRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     private User currentUser(UserDetails userDetails) {
         return userRepository.findByEmail(userDetails.getUsername())
@@ -68,6 +71,22 @@ public class LeaveRequestController {
                 .build();
 
         lr = leaveRequestRepository.save(lr);
+
+        // Notify HOD + Coordinator that a leave request was received
+        List<User> management = userRepository.findByStatusAndRoleIn(
+                com.tempstaff.entity.UserStatus.approved, List.of(UserRole.hod, UserRole.coordinator));
+        String title = "Leave request received";
+        String msg = String.format(
+                "%s submitted a leave request for %s. Substitute: %s. [leaveRequestId=%s, staffId=%s]",
+                me.getFullName(),
+                request.getLeaveDate(),
+                substitute.getFullName(),
+                lr.getId(),
+                me.getId()
+        );
+        for (User m : management) {
+            notificationService.notifyUser(m.getId(), title, msg, NotificationType.info, null, null);
+        }
 
         return toResponse(lr);
     }
