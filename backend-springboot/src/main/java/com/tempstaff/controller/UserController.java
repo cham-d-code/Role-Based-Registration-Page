@@ -2,6 +2,7 @@ package com.tempstaff.controller;
 
 import com.tempstaff.dto.request.AssignMentorRequest;
 import com.tempstaff.dto.request.UpdateContractRequest;
+import com.tempstaff.dto.request.UpdateMyProfileRequest;
 import com.tempstaff.dto.request.UpdateSpecializationRequest;
 import com.tempstaff.service.ImStaffDirectoryService;
 import com.tempstaff.service.NotificationService;
@@ -20,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -38,6 +40,7 @@ public class UserController {
     private final ImStaffDirectoryService imStaffDirectoryService;
     private final NotificationService notificationService;
     private final ModulePreferenceService modulePreferenceService;
+    private final PasswordEncoder passwordEncoder;
 
     /**
      * GET /api/user/me
@@ -93,6 +96,59 @@ public class UserController {
                 .build();
 
         return ResponseEntity.ok(profile);
+    }
+
+    /**
+     * PUT /api/user/me/profile
+     * Update basic profile fields (all roles) + optionally change password.
+     *
+     * - Email cannot be changed here.
+     * - If newPassword is provided, currentPassword must be provided and valid.
+     */
+    @PutMapping("/me/profile")
+    public ResponseEntity<UserProfileResponse> updateMyProfile(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestBody UpdateMyProfileRequest request
+    ) {
+        User user = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        String fullName = request != null ? request.getFullName() : null;
+        if (fullName != null) fullName = fullName.trim();
+        if (fullName != null && fullName.isBlank()) fullName = null;
+
+        String mobile = request != null ? request.getMobile() : null;
+        if (mobile != null) mobile = mobile.trim();
+        if (mobile != null && mobile.isBlank()) mobile = null;
+
+        String profileImageUrl = request != null ? request.getProfileImageUrl() : null;
+        if (profileImageUrl != null) profileImageUrl = profileImageUrl.trim();
+        if (profileImageUrl != null && profileImageUrl.isBlank()) profileImageUrl = null;
+
+        String currentPassword = request != null ? request.getCurrentPassword() : null;
+        String newPassword = request != null ? request.getNewPassword() : null;
+        if (newPassword != null) newPassword = newPassword.trim();
+        if (newPassword != null && newPassword.isBlank()) newPassword = null;
+
+        if (newPassword != null) {
+            if (currentPassword == null || currentPassword.isBlank()) {
+                throw new RuntimeException("currentPassword is required to change password");
+            }
+            if (newPassword.length() < 8) {
+                throw new RuntimeException("newPassword must be at least 8 characters");
+            }
+            if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+                throw new RuntimeException("Current password is incorrect");
+            }
+            user.setPasswordHash(passwordEncoder.encode(newPassword));
+        }
+
+        if (fullName != null) user.setFullName(fullName);
+        if (mobile != null) user.setMobile(mobile);
+        user.setProfileImageUrl(profileImageUrl);
+
+        userRepository.save(user);
+        return getMyProfile(userDetails);
     }
 
     /**

@@ -23,6 +23,7 @@ interface EditProfileDialogProps {
     email: string;
     phone: string;
     avatarUrl?: string;
+    currentPassword?: string;
     newPassword?: string;
   }) => void;
 }
@@ -87,6 +88,7 @@ export default function EditProfileDialog({
       email,
       phone,
       avatarUrl: avatarUrl || undefined,
+      currentPassword: currentPassword || undefined,
       newPassword: newPassword || undefined
     });
 

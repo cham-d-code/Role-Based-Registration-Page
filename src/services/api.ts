@@ -323,6 +323,19 @@ export async function getUserProfile(): Promise<UserProfile> {
     return fetchWithAuth(`${API_BASE_URL}/user/me`);
 }
 
+export async function updateMyProfile(body: {
+    fullName?: string;
+    mobile?: string;
+    profileImageUrl?: string;
+    currentPassword?: string;
+    newPassword?: string;
+}): Promise<UserProfile> {
+    return fetchWithAuth(`${API_BASE_URL}/user/me/profile`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+    });
+}
+
 export async function updateMyPreferredSubjects(preferredSubjects: string[]): Promise<UserProfile> {
     return fetchWithAuth(`${API_BASE_URL}/user/me/preferred-subjects`, {
         method: 'PUT',

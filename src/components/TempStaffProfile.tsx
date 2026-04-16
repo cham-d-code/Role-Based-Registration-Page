@@ -51,6 +51,7 @@ import {
   MyResearchApplicationDto,
   ResearchOpportunityDto,
   submitModulePreferences,
+  updateMyProfile,
   type LeaveRequestDto,
   type ModulePreferenceRequestDto,
 } from '../services/api';
@@ -232,20 +233,36 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
     }
   };
 
-  const handleProfileSave = (updatedProfile: any) => {
-    setProfileData({
-      ...profileData,
-      name: updatedProfile.name,
-      email: updatedProfile.email,
-      phone: updatedProfile.phone,
-      avatarUrl: updatedProfile.avatarUrl || profileData.avatarUrl
-    });
-    
-    if (updatedProfile.newPassword) {
-      alert('Password changed successfully!');
+  const handleProfileSave = async (updatedProfile: any) => {
+    try {
+      const next = await updateMyProfile({
+        fullName: updatedProfile.name,
+        mobile: updatedProfile.phone,
+        profileImageUrl: updatedProfile.avatarUrl,
+        currentPassword: updatedProfile.currentPassword,
+        newPassword: updatedProfile.newPassword,
+      });
+
+      const initials = (next.fullName || '')
+        .split(' ')
+        .filter(Boolean)
+        .map((n: string) => n[0].toUpperCase())
+        .slice(0, 2)
+        .join('');
+
+      setProfileData({
+        ...profileData,
+        name: next.fullName,
+        email: next.email,
+        phone: next.mobile || '',
+        avatarUrl: next.profileImageUrl || '',
+        initials: initials || profileData.initials,
+      });
+
+      alert(updatedProfile.newPassword ? 'Profile & password updated successfully!' : 'Profile updated successfully!');
+    } catch (e: any) {
+      alert(e?.message || 'Failed to update profile');
     }
-    
-    alert('Profile updated successfully!');
   };
 
   const menuItems = [

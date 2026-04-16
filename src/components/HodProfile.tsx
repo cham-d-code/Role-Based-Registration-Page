@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { LayoutDashboard, Users, ClipboardCheck, FileText, BellRing, UserIcon, ChevronDown, Settings, LogOut, Mail, Phone, Calendar, Eye, Clock, Archive, Edit, DollarSign, CheckCircle, XCircle, BarChart2, Loader2, Plus } from 'lucide-react';
-import { approveLeave, createResearchOpportunity, deleteResearchOpportunity, getInterviewReport, getMyMentees, getMyLeaveRequests, getMyNotifications, getMyResearchOpportunities, getPendingLeaveRequests, markNotificationRead, rejectLeave, InterviewReport, ResearchOpportunityDto, updateResearchOpportunity, UserProfile, type LeaveRequestDto, type UserNotificationDto } from '../services/api';
+import { approveLeave, createResearchOpportunity, deleteResearchOpportunity, getInterviewReport, getMyMentees, getMyLeaveRequests, getMyNotifications, getMyResearchOpportunities, getPendingLeaveRequests, markNotificationRead, rejectLeave, InterviewReport, ResearchOpportunityDto, updateMyProfile, updateResearchOpportunity, UserProfile, type LeaveRequestDto, type UserNotificationDto } from '../services/api';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -331,20 +331,36 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     }
   }
 
-  const handleProfileSave = (updatedProfile: any) => {
-    setProfileData({
-      ...profileData,
-      name: updatedProfile.name,
-      email: updatedProfile.email,
-      phone: updatedProfile.phone,
-      avatarUrl: updatedProfile.avatarUrl || profileData.avatarUrl
-    });
+  const handleProfileSave = async (updatedProfile: any) => {
+    try {
+      const next = await updateMyProfile({
+        fullName: updatedProfile.name,
+        mobile: updatedProfile.phone,
+        profileImageUrl: updatedProfile.avatarUrl,
+        currentPassword: updatedProfile.currentPassword,
+        newPassword: updatedProfile.newPassword,
+      });
 
-    if (updatedProfile.newPassword) {
-      alert('Password changed successfully!');
+      const initials = (next.fullName || '')
+        .split(' ')
+        .filter(Boolean)
+        .map((n: string) => n[0].toUpperCase())
+        .slice(0, 2)
+        .join('');
+
+      setProfileData({
+        ...profileData,
+        name: next.fullName,
+        email: next.email,
+        phone: next.mobile || '',
+        avatarUrl: next.profileImageUrl || '',
+        initials: initials || profileData.initials,
+      });
+
+      alert(updatedProfile.newPassword ? 'Profile & password updated successfully!' : 'Profile updated successfully!');
+    } catch (e: any) {
+      alert(e?.message || 'Failed to update profile');
     }
-
-    alert('Profile updated successfully!');
   };
 
   // Leave request handlers (pending approvals)

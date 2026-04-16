@@ -41,7 +41,7 @@ import EditResearchDialog from './EditResearchDialog';
 import EditProfileDialog from './EditProfileDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Textarea } from './ui/textarea';
-import { createResearchOpportunity, deleteResearchOpportunity, getActiveSession, getInterviews, getInterviewCandidates, getJobDescriptionForStaff, getMarkingScheme, getMyMentees, getMyMenteesCount, getMyNotifications, getMyResearchOpportunities, MarkingSchemeData, ResearchOpportunityDto, SessionState, updateResearchOpportunity, UserNotificationDto, UserProfile } from '../services/api';
+import { createResearchOpportunity, deleteResearchOpportunity, getActiveSession, getInterviews, getInterviewCandidates, getJobDescriptionForStaff, getMarkingScheme, getMyMentees, getMyMenteesCount, getMyNotifications, getMyResearchOpportunities, MarkingSchemeData, ResearchOpportunityDto, SessionState, updateMyProfile, updateResearchOpportunity, UserNotificationDto, UserProfile } from '../services/api';
 
 interface MentorProfileProps {
   onLogout?: () => void;
@@ -304,20 +304,36 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
     return 'bg-green-100 text-green-700 border-green-300';
   };
 
-  const handleProfileSave = (updatedProfile: any) => {
-    setProfileData({
-      ...profileData,
-      name: updatedProfile.name,
-      email: updatedProfile.email,
-      phone: updatedProfile.phone,
-      avatarUrl: updatedProfile.avatarUrl || profileData.avatarUrl
-    });
+  const handleProfileSave = async (updatedProfile: any) => {
+    try {
+      const next = await updateMyProfile({
+        fullName: updatedProfile.name,
+        mobile: updatedProfile.phone,
+        profileImageUrl: updatedProfile.avatarUrl,
+        currentPassword: updatedProfile.currentPassword,
+        newPassword: updatedProfile.newPassword,
+      });
 
-    if (updatedProfile.newPassword) {
-      alert('Password changed successfully!');
+      const initials = (next.fullName || '')
+        .split(' ')
+        .filter(Boolean)
+        .map((n: string) => n[0].toUpperCase())
+        .slice(0, 2)
+        .join('');
+
+      setProfileData({
+        ...profileData,
+        name: next.fullName,
+        email: next.email,
+        phone: next.mobile || '',
+        avatarUrl: next.profileImageUrl || '',
+        initials: initials || profileData.initials,
+      });
+
+      alert(updatedProfile.newPassword ? 'Profile & password updated successfully!' : 'Profile updated successfully!');
+    } catch (e: any) {
+      alert(e?.message || 'Failed to update profile');
     }
-
-    alert('Profile updated successfully!');
   };
 
   // Show interview marking page when active in a live session
