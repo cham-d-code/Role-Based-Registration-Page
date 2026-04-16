@@ -190,13 +190,6 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequestDto[]>([]);
   const [loadingLeaves, setLoadingLeaves] = useState(false);
 
-  const [weeklyTasks, setWeeklyTasks] = useState([
-    { title: 'Conduct Tutorial - Marketing Management', category: 'Teaching', day: 'Monday', timeFrom: '08:00', timeTo: '10:00', deadline: 'Oct 20, 2025', status: 'Pending' },
-    { title: 'Mark Assignment Papers (Batch A)', category: 'Marking', day: 'Tuesday', timeFrom: '14:00', timeTo: '16:00', deadline: 'Oct 21, 2025', status: 'Pending' },
-    { title: 'Prepare Lecture Notes - Week 6', category: 'Teaching', day: 'Wednesday', timeFrom: '10:00', timeTo: '12:00', deadline: 'Oct 22, 2025', status: 'Completed' },
-    { title: 'Submit Monthly Report to Coordinator', category: 'Administrative', day: 'Thursday', timeFrom: '09:00', timeTo: '11:00', deadline: 'Oct 25, 2025', status: 'Pending' },
-    { title: 'Attend Department Meeting', category: 'Administrative', day: 'Friday', timeFrom: '15:00', timeTo: '17:00', deadline: 'Oct 19, 2025', status: 'Completed' },
-  ]);
 
   const [appliedResearch, setAppliedResearch] = useState<number[]>([]);
   const [openResearch, setOpenResearch] = useState<ResearchOpportunityDto[]>([]);
