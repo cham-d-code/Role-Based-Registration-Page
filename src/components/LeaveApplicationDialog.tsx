@@ -33,6 +33,7 @@ export default function LeaveApplicationDialog({
   currentUserId,
   onSubmit 
 }: LeaveApplicationDialogProps) {
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [formData, setFormData] = useState({
     leaveDate: '',
     reason: '',
@@ -109,6 +110,10 @@ export default function LeaveApplicationDialog({
       alert('Please fill all required fields!');
       return;
     }
+    if (formData.leaveDate < todayIso) {
+      alert('You cannot select a date in the past.');
+      return;
+    }
 
     const selectedSubstitute = allSubstituteStaff.find(s => s.id === formData.substituteId);
     
@@ -132,8 +137,6 @@ export default function LeaveApplicationDialog({
         <DialogHeader>
           <DialogTitle className="text-[#222222] flex items-center gap-2" style={{ fontWeight: 700, fontSize: '20px' }}>
             Apply for Leave
-            <Badge className="bg-[#4db4ac] text-white">FR18</Badge>
-            <Badge className="bg-[#4db4ac] text-white">FR19</Badge>
           </DialogTitle>
           <DialogDescription className="text-[#555555] mt-2" style={{ fontSize: '14px' }}>
             Please fill in the details below to apply for leave.
@@ -151,6 +154,7 @@ export default function LeaveApplicationDialog({
                 id="leaveDate"
                 type="date"
                 value={formData.leaveDate}
+                min={todayIso}
                 onChange={(e) => handleChange('leaveDate', e.target.value)}
                 className="h-12 border-[#d0d0d0] rounded-lg focus:border-[#4db4ac]"
               />
@@ -174,7 +178,7 @@ export default function LeaveApplicationDialog({
 
           <Separator />
 
-          {/* FR19: AI-Suggested Substitute */}
+          {/* AI-Suggested Substitute */}
           {bestMatch && (
             <div className="bg-gradient-to-r from-[#e6f7f6] to-white p-4 rounded-lg border-2 border-[#4db4ac]">
               <div className="flex items-start gap-3">

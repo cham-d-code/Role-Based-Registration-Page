@@ -14,7 +14,9 @@ public final class NotificationBuckets {
 
     public static final Set<NotificationType> REMINDER_TYPES = Set.of(
             NotificationType.interview_upcoming,
+            NotificationType.interview_scheduled,
             NotificationType.contract_expiry,
-            NotificationType.review_due
+            NotificationType.review_due,
+            NotificationType.jd_pending
     );
 }

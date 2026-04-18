@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { LayoutDashboard, Users, ClipboardCheck, FileText, BellRing, UserIcon, ChevronDown, Settings, LogOut, Mail, Phone, Calendar, CalendarCheck, Eye, Clock, Archive, Edit, DollarSign, CheckCircle, XCircle, BarChart2, Loader2, Plus, UserCheck } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardCheck, FileText, BellRing, UserIcon, ChevronDown, Settings, LogOut, Mail, Phone, Calendar, CalendarCheck, Eye, Clock, Archive, Edit, DollarSign, CheckCircle, XCircle, BarChart2, Loader2, Plus, UserCheck, Trash2 } from 'lucide-react';
 import { approveLeave, createResearchOpportunity, deleteResearchOpportunity, getHodDashboardStats, getInterviewReport, getJobDescriptionForStaff, getMyMentees, getMyLeaveRequests, getMyNotifications, getMyResearchOpportunities, getPendingLeaveRequests, getUnreadNotificationCount, markAllNotificationsRead, markNotificationRead, rejectLeave, HodDashboardStats, InterviewReport, ResearchOpportunityDto, updateMyProfile, updateMySpecialization, updateResearchOpportunity, UserProfile, type LeaveRequestDto, type UserNotificationDto } from '../services/api';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
@@ -565,7 +565,8 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     let mounted = true;
     const load = async () => {
       try {
-        const count = await getUnreadNotificationCount({ inboxOnly: true });
+        // Sidebar badge: show any unread notifications (inbox + reminders)
+        const count = await getUnreadNotificationCount();
         if (mounted) setUnreadNotificationCount(count);
       } catch {
         // ignore
@@ -579,7 +580,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     };
   }, []);
 
-  // When user opens the Notifications tab: inbox only; mark inbox unread read (reminders stay on dashboard).
+  // When user opens the Notifications tab: clear ALL unread so the sidebar badge disappears.
   useEffect(() => {
     if (activeMenu !== 'notifications') return;
     let cancelled = false;
@@ -588,7 +589,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
       try {
         const items = await getMyNotifications(false, 'inbox');
         if (!cancelled) setAllNotifications(items);
-        await markAllNotificationsRead({ inboxOnly: true }).catch(() => undefined);
+        await markAllNotificationsRead().catch(() => undefined);
         if (!cancelled) setUnreadNotificationCount(0);
       } catch (e) {
         console.error('Failed to load notifications', e);
@@ -891,7 +892,8 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
 
                 {reminderNotifications.length === 0 ? (
                   <p className="text-[#777777] py-4" style={{ fontSize: '13px' }}>
-                    No reminders right now. Scheduled items (contracts, upcoming interviews, monthly reviews) appear here.
+                    No reminders right now. Scheduled items (contracts, interviews, JD follow-ups, monthly reviews) appear
+                    here.
                   </p>
                 ) : (
                   <div className="space-y-1">
@@ -1532,7 +1534,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                             }
                           }}
                         >
-                          <XCircle className="h-3 w-3" />
+                          <Trash2 className="h-3 w-3" />
                         </Button>
                       </div>
                     </div>

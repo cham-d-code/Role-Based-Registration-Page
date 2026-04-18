@@ -41,6 +41,7 @@ import { Label } from './ui/label';
 import { Input } from './ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
+import { Textarea } from './ui/textarea';
 import { jsPDF } from 'jspdf';
 
 import MentorAssignmentDialog from './MentorAssignmentDialog';
@@ -52,7 +53,6 @@ import InterviewMarkingPage from './InterviewMarkingPage';
 import EndedInterviewDetailsPage from './EndedInterviewDetailsPage';
 import CoordinatorManageInterviewsPage from './CoordinatorManageInterviewsPage';
 import EditProfileDialog from './EditProfileDialog';
-import SystemNotices from './SystemNotices';
 import StaffAttendanceDialog from './StaffAttendanceDialog';
 import ResearchDetailsDialog from './ResearchDetailsDialog';
 import AddResearchDialog from './AddResearchDialog';
@@ -61,24 +61,31 @@ import SalaryManagementPage from './SalaryManagementPage';
 import DashboardIdentityCard from './DashboardIdentityCard';
 import AttendanceReportPage from './AttendanceReportPage';
 import StaffProfileDialog from './StaffProfileDialog';
+import StructuredJobDescriptionPage from './StructuredJobDescriptionPage';
 import logo from 'figma:asset/39b6269214ec5f8a015cd1f1a1adaa157fd5d025.png';
 import {
   approveLeave,
   createResearchOpportunity,
   deleteResearchOpportunity,
+  getCoordinatorDashboardStats,
+  getJobDescriptionForStaff,
   getMyNotifications,
   getMyMentees,
   getMyLeaveRequests,
   getPendingLeaveRequests,
   getMyResearchOpportunities,
+  getUnreadNotificationCount,
+  markAllNotificationsRead,
   markNotificationRead,
   rejectLeave,
   ResearchOpportunityDto,
   updateMyProfile,
+  updateMySpecialization,
   updateResearchOpportunity,
   type LeaveRequestDto,
   type UserNotificationDto,
   UserProfile,
+  type CoordinatorDashboardStats,
 } from '../services/api';
 
 interface CoordinatorProfileProps {
@@ -148,6 +155,7 @@ interface StaffMember {
   preferredModules?: string[];
   preferredModuleDetails?: any[];
   preferencesRequested?: boolean;
+  modulePreferencesSubmitted?: boolean;
 }
 
 interface LeaveRequest {
@@ -178,12 +186,16 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
   const [editingInterviewId, setEditingInterviewId] = useState<string | null>(null);
   const [editedDate, setEditedDate] = useState<string>('');
   const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [editSpecOpen, setEditSpecOpen] = useState(false);
+  const [specializationText, setSpecializationText] = useState('');
+  const [savingSpec, setSavingSpec] = useState(false);
   const [profileData, setProfileData] = useState({
     name: 'Loading...',
     email: '',
     phone: '',
     avatarUrl: '',
-    initials: '...'
+    initials: '...',
+    specialization: '',
   });
   const [showAttendanceDialog, setShowAttendanceDialog] = useState(false);
   const [selectedStaffForAttendance, setSelectedStaffForAttendance] = useState<StaffMember | null>(null);
@@ -209,6 +221,15 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
   const [showStaffProfileDialog, setShowStaffProfileDialog] = useState(false);
   const [selectedStaffForProfile, setSelectedStaffForProfile] = useState<{ id: string; name: string } | null>(null);
   const [loadingMentees, setLoadingMentees] = useState(false);
+  const [showStaffJdPage, setShowStaffJdPage] = useState(false);
+  const [selectedStaffForJd, setSelectedStaffForJd] = useState<{ id: string; name: string } | null>(null);
+  const [selectedStaffJd, setSelectedStaffJd] = useState<any | null>(null);
+  const [loadingStaffJd, setLoadingStaffJd] = useState(false);
+
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [allNotifications, setAllNotifications] = useState<UserNotificationDto[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [reminderNotifications, setReminderNotifications] = useState<UserNotificationDto[]>([]);
 
   // Fetch real profile data from backend on mount
   useEffect(() => {
@@ -221,13 +242,16 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
             .map((n: string) => n[0].toUpperCase())
             .slice(0, 2)
             .join('');
+          const spec = profile.specialization || '';
           setProfileData({
             name: profile.fullName,
             email: profile.email,
             phone: profile.mobile || '',
             avatarUrl: profile.profileImageUrl || '',
-            initials
+            initials,
+            specialization: spec,
           });
+          setSpecializationText(spec);
         })
         .catch(() => {
           const local = api.getCurrentUser();
@@ -238,7 +262,12 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
               .map((n: string) => n[0].toUpperCase())
               .slice(0, 2)
               .join('');
-            setProfileData(prev => ({ ...prev, name: local.fullName, email: local.email, initials }));
+            setProfileData(prev => ({
+              ...prev,
+              name: local.fullName,
+              email: local.email,
+              initials,
+            }));
           }
         });
     });
@@ -465,6 +494,7 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                 preferredSubjects: u.preferredSubjects ?? [],
                 hasJobDescription: existingMap[u.id]?.hasJobDescription ?? false,
                 preferencesRequested: u.preferencesRequested ?? existingMap[u.id]?.preferencesRequested ?? false,
+                modulePreferencesSubmitted: (u as any).modulePreferencesSubmitted ?? existingMap[u.id]?.modulePreferencesSubmitted ?? false,
                 mentor: u.mentorName ?? existingMap[u.id]?.mentor,
                 preferredModules: u.preferredModules ?? existingMap[u.id]?.preferredModules,
                 preferredModuleDetails: (u as any).preferredModuleDetails ?? (existingMap[u.id] as any)?.preferredModuleDetails,
@@ -652,6 +682,7 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
     { id: 'attendance', label: 'Attendance Report', icon: CalendarCheck },
     { id: 'salary', label: 'Salary Report', icon: CalendarCheck },
     { id: 'leave', label: 'Leave Requests', icon: FileText },
+    { id: 'notifications', label: 'Notifications', icon: BellRing },
     { id: 'profile', label: 'Profile', icon: UserIcon },
   ];
 
@@ -728,6 +759,71 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
     })();
   }, [activeMenu, markNotificationRead]);
 
+  // Sidebar badge: any unread notifications (inbox + reminders)
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const count = await getUnreadNotificationCount();
+        if (mounted) setUnreadNotificationCount(count);
+      } catch {
+        // ignore
+      }
+    };
+    load();
+    const interval = setInterval(load, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Notifications tab: load inbox and mark all read (clears sidebar badge)
+  useEffect(() => {
+    if (activeMenu !== 'notifications') return;
+    let cancelled = false;
+    (async () => {
+      setLoadingNotifications(true);
+      try {
+        const items = await getMyNotifications(false, 'inbox');
+        if (!cancelled) setAllNotifications(items);
+        await markAllNotificationsRead().catch(() => undefined);
+        if (!cancelled) setUnreadNotificationCount(0);
+      } catch (e) {
+        console.error('Failed to load notifications', e);
+        if (!cancelled) setAllNotifications([]);
+      } finally {
+        if (!cancelled) setLoadingNotifications(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMenu]);
+
+  // Dashboard: time-based reminders (contracts, interviews, JD pending, monthly review)
+  useEffect(() => {
+    if (activeMenu !== 'dashboard') return;
+    let mounted = true;
+
+    const load = () => {
+      getMyNotifications(false, 'reminders')
+        .then((rows) => {
+          if (mounted) setReminderNotifications(rows.slice(0, 20));
+        })
+        .catch(() => {
+          if (mounted) setReminderNotifications([]);
+        });
+    };
+
+    load();
+    const interval = setInterval(load, 10000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [activeMenu]);
+
   useEffect(() => {
     if (activeMenu !== 'mentees') return;
     setLoadingMentees(true);
@@ -737,11 +833,52 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
       .finally(() => setLoadingMentees(false));
   }, [activeMenu]);
 
+  const [coordinatorStats, setCoordinatorStats] = useState<CoordinatorDashboardStats>({
+    activeTempStaff: 0,
+    pendingRegistrationApproval: 0,
+    upcomingInterviewRounds: 0,
+    activeMentorships: 0,
+  });
+
+  useEffect(() => {
+    if (activeMenu !== 'dashboard') return;
+    let mounted = true;
+    const load = () => {
+      getCoordinatorDashboardStats()
+        .then((s) => {
+          if (mounted) setCoordinatorStats(s);
+        })
+        .catch((err) => console.error('Failed to load coordinator dashboard stats', err));
+    };
+    load();
+    const interval = setInterval(load, 10_000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [activeMenu]);
+
   const statsCards = [
-    { title: 'Active Staff Members', value: '24', color: '#4db4ac' },
-    { title: 'Pending Approvals', value: '8', color: '#4db4ac' },
-    { title: 'Interview Rounds', value: '3', color: '#4db4ac' },
-    { title: 'Reminders Sent', value: '15', color: '#4db4ac' },
+    {
+      title: 'Active Staff Members',
+      value: String(coordinatorStats.activeTempStaff),
+      color: '#4db4ac',
+    },
+    {
+      title: 'Pending Registration Approval',
+      value: String(coordinatorStats.pendingRegistrationApproval),
+      color: '#4db4ac',
+    },
+    {
+      title: 'Interview Rounds Upcoming',
+      value: String(coordinatorStats.upcomingInterviewRounds),
+      color: '#4db4ac',
+    },
+    {
+      title: 'Active Mentorships',
+      value: String(coordinatorStats.activeMentorships),
+      color: '#4db4ac',
+    },
   ];
 
   const recentActivities = [
@@ -882,14 +1019,14 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
         .slice(0, 2)
         .join('');
 
-      setProfileData({
-        ...profileData,
+      setProfileData((prev) => ({
+        ...prev,
         name: next.fullName,
         email: next.email,
         phone: next.mobile || '',
         avatarUrl: next.profileImageUrl || '',
-        initials: initials || profileData.initials,
-      });
+        initials: initials || prev.initials,
+      }));
 
       alert(updatedProfile.newPassword ? 'Profile & password updated successfully!' : 'Profile updated successfully!');
     } catch (e: any) {
@@ -1115,6 +1252,23 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                       {Math.min(pendingLeaveCount, 99)}
                     </span>
                   )}
+                  {item.id === 'notifications' && unreadNotificationCount > 0 && (
+                    <span
+                      className="inline-flex items-center justify-center text-white ml-auto"
+                      style={{
+                        backgroundColor: '#ef4444',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        minWidth: '20px',
+                        height: '20px',
+                        padding: '0 6px',
+                        borderRadius: '10px',
+                        lineHeight: 1,
+                      }}
+                    >
+                      {Math.min(unreadNotificationCount, 99)}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -1157,7 +1311,53 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                 ))}
               </div>
 
+              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '18px' }}>
+                    Reminders
+                  </h3>
+                  {reminderNotifications.length > 0 && (
+                    <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '11px' }}>
+                      {reminderNotifications.length}
+                    </Badge>
+                  )}
+                </div>
 
+                {reminderNotifications.length === 0 ? (
+                  <p className="text-[#777777] py-4" style={{ fontSize: '13px' }}>
+                    No reminders right now. Contract milestones, interview events, JD follow-ups, and monthly reviews
+                    appear here.
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {reminderNotifications.map((n) => (
+                      <div
+                        key={n.id}
+                        className="flex items-start gap-4 p-3 rounded-lg hover:bg-[#f9f9f9] transition-colors border-l-4 border-[#4db4ac]"
+                      >
+                        <div className="flex-shrink-0 mt-1">
+                          <div className="h-8 w-8 rounded-full bg-[#e6f7f6] flex items-center justify-center">
+                            <Clock className="h-4 w-4 text-[#4db4ac]" />
+                          </div>
+                        </div>
+                        <div className="flex-1 pb-1">
+                          <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
+                            {n.title}
+                          </p>
+                          <p className="text-[#555555] whitespace-pre-line mt-1" style={{ fontSize: '13px' }}>
+                            {n.message}
+                          </p>
+                          {n.createdAt && (
+                            <p className="text-[#999999] mt-1" style={{ fontSize: '12px' }}>
+                              {new Date(n.createdAt).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
             </>
           )}
 
@@ -1860,6 +2060,15 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                         </div>
                       )}
 
+                      {staff.modulePreferencesSubmitted && (
+                        <div className="flex items-center gap-2 bg-[#e6f7f6] border border-[#4db4ac] rounded-lg px-3 py-2">
+                          <CheckCircle className="h-4 w-4 text-[#4db4ac]" />
+                          <p className="text-[#2d8a82]" style={{ fontSize: '13px', fontWeight: 600 }}>
+                            Module Preference Received
+                          </p>
+                        </div>
+                      )}
+
                     </div>
                   </Card>
                 ))}
@@ -1897,32 +2106,41 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
 
           {/* My Mentees */}
           {activeMenu === 'mentees' && (
-            <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
-                  My Mentees
-                </h3>
-                <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '12px' }}>
-                  {myMentees.length} Total Mentees
-                </Badge>
-              </div>
-              <Separator className="mb-4" />
+            <>
+              {showStaffJdPage && selectedStaffForJd ? (
+                <StructuredJobDescriptionPage
+                  staffName={selectedStaffForJd?.name || 'Mentee'}
+                  jd={selectedStaffJd}
+                  loading={loadingStaffJd}
+                  onBack={() => setShowStaffJdPage(false)}
+                />
+              ) : (
+                <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
+                      My Mentees
+                    </h3>
+                    <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '12px' }}>
+                      {myMentees.length} Total Mentees
+                    </Badge>
+                  </div>
+                  <Separator className="mb-4" />
 
-              {loadingMentees && (
-                <div className="flex items-center justify-center py-8 gap-3 text-[#4db4ac]">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  <span style={{ fontSize: '14px' }}>Loading mentees…</span>
-                </div>
-              )}
+                  {loadingMentees && (
+                    <div className="flex items-center justify-center py-8 gap-3 text-[#4db4ac]">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                      <span style={{ fontSize: '14px' }}>Loading mentees…</span>
+                    </div>
+                  )}
 
-              {!loadingMentees && myMentees.length === 0 && (
-                <div className="text-center py-10 text-[#999999]" style={{ fontSize: '14px' }}>
-                  No mentees assigned to you yet.
-                </div>
-              )}
+                  {!loadingMentees && myMentees.length === 0 && (
+                    <div className="text-center py-10 text-[#999999]" style={{ fontSize: '14px' }}>
+                      No mentees assigned to you yet.
+                    </div>
+                  )}
 
-              <div className="space-y-4">
-                {!loadingMentees && myMentees.map((mentee: any) => {
+                  <div className="space-y-4">
+                    {!loadingMentees && myMentees.map((mentee: any) => {
                   const contractExpiry = mentee.contractEndDate || '';
                   const daysUntilExpiry = contractExpiry ? calculateDaysUntilExpiry(contractExpiry) : 0;
                   const expiryColor = getExpiryBadgeColor(daysUntilExpiry);
@@ -2018,7 +2236,27 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
 
                           <Button
                             className="w-full bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
-                            onClick={() => alert('Job Description view can be wired next.')}
+                            onClick={() => {
+                              setSelectedStaffForJd({ id: mentee.id, name: mentee.fullName });
+                              setSelectedStaffJd(null);
+                              setShowStaffJdPage(true);
+                              setLoadingStaffJd(true);
+                              getJobDescriptionForStaff(mentee.id)
+                                .then((dto) => {
+                                  try {
+                                    const parsed = dto?.content ? JSON.parse(dto.content) : null;
+                                    setSelectedStaffJd(parsed);
+                                  } catch (e) {
+                                    console.error('Failed to parse staff JD content', e);
+                                    setSelectedStaffJd(null);
+                                  }
+                                })
+                                .catch((e) => {
+                                  console.error('Failed to load staff JD', e);
+                                  setSelectedStaffJd(null);
+                                })
+                                .finally(() => setLoadingStaffJd(false));
+                            }}
                           >
                             <FileText className="h-4 w-4 mr-2" />
                             View Job Description
@@ -2038,9 +2276,11 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                       </div>
                     </Card>
                   );
-                })}
-              </div>
-            </Card>
+                    })}
+                  </div>
+                </Card>
+              )}
+            </>
           )}
 
           {/* Research Opportunities */}
@@ -2256,6 +2496,77 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
 
           {activeMenu === 'salary' && <SalaryManagementPage userRole="coordinator" />}
 
+          {activeMenu === 'notifications' && (
+            <>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
+                  Notifications
+                </h2>
+                <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '12px' }}>
+                  {allNotifications.length} total
+                </Badge>
+              </div>
+
+              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6 mb-6">
+                {loadingNotifications ? (
+                  <div className="flex items-center gap-2 text-[#777777]" style={{ fontSize: '14px' }}>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading notifications…
+                  </div>
+                ) : allNotifications.length === 0 ? (
+                  <p className="text-[#777777] py-6 text-center" style={{ fontSize: '14px' }}>
+                    You have no notifications. Leave requests, research applications, module preference updates, and other
+                    alerts appear here. Time-based reminders stay on your dashboard.
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {allNotifications.map((n) => (
+                      <div
+                        key={n.id}
+                        className={`flex items-start gap-4 p-3 rounded-lg border-l-4 transition-colors ${
+                          n.isRead
+                            ? 'border-[#e0e0e0] hover:bg-[#f9f9f9]'
+                            : 'border-[#4db4ac] bg-[#f0fbfa]'
+                        }`}
+                      >
+                        <div className="flex-shrink-0 mt-1">
+                          <div className="h-8 w-8 rounded-full bg-[#e6f7f6] flex items-center justify-center">
+                            <BellRing className="h-4 w-4 text-[#4db4ac]" />
+                          </div>
+                        </div>
+                        <div className="flex-1 pb-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
+                              {n.title}
+                            </p>
+                            {!n.isRead && (
+                              <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '10px' }}>
+                                New
+                              </Badge>
+                            )}
+                          </div>
+                          <p
+                            className="text-[#555555] whitespace-pre-line mt-1"
+                            style={{ fontSize: '13px' }}
+                          >
+                            {n.message}
+                          </p>
+                          {n.createdAt && (
+                            <p className="text-[#999999] mt-1" style={{ fontSize: '12px' }}>
+                              {new Date(n.createdAt).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    <p className="text-[#999999] pt-3 text-center" style={{ fontSize: '12px' }}>
+                      Notifications are automatically removed after 7 days.
+                    </p>
+                  </div>
+                )}
+              </Card>
+            </>
+          )}
+
           {/* Profile View */}
           {activeMenu === 'profile' && (
             <>
@@ -2307,10 +2618,28 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                   </div>
 
                   <div>
-                    <h3 className="text-[#222222] mb-4" style={{ fontWeight: 600, fontSize: '16px' }}>
-                      System Notices
-                    </h3>
-                    <SystemNotices userRole="coordinator" />
+                    <div className="flex items-center justify-between gap-4 mb-3">
+                      <h3 className="text-[#222222]" style={{ fontWeight: 600, fontSize: '16px' }}>
+                        Specialization Areas
+                      </h3>
+                      <Button
+                        variant="outline"
+                        className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#e6f7f6]"
+                        onClick={() => setEditSpecOpen(true)}
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit
+                      </Button>
+                    </div>
+                    {profileData.specialization ? (
+                      <p className="text-[#555555]" style={{ fontSize: '13px' }}>
+                        {profileData.specialization}
+                      </p>
+                    ) : (
+                      <p className="text-[#999999]" style={{ fontSize: '13px' }}>
+                        —
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -2400,6 +2729,62 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
         currentProfile={profileData}
         onSave={handleProfileSave}
       />
+
+      <Dialog open={editSpecOpen} onOpenChange={setEditSpecOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-[#222222]" style={{ fontSize: '20px', fontWeight: 700 }}>
+              Edit Specialization Areas
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="text-[#555555]" style={{ fontSize: '13px' }}>
+              Add your areas separated by commas.
+            </div>
+
+            <Textarea
+              value={specializationText}
+              onChange={(e) => setSpecializationText(e.target.value)}
+              className="min-h-[120px] border-[#e0e0e0] focus:border-[#4db4ac]"
+              placeholder="e.g., Data Science, Machine Learning, Business Intelligence"
+            />
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSpecializationText(profileData.specialization || '');
+                  setEditSpecOpen(false);
+                }}
+                disabled={savingSpec}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
+                disabled={savingSpec}
+                onClick={async () => {
+                  setSavingSpec(true);
+                  try {
+                    const updated = await updateMySpecialization(specializationText);
+                    const nextSpec = updated.specialization || '';
+                    setProfileData((prev) => ({ ...prev, specialization: nextSpec }));
+                    setSpecializationText(nextSpec);
+                    setEditSpecOpen(false);
+                  } catch (e: any) {
+                    alert(e?.message || 'Failed to save specialization');
+                  } finally {
+                    setSavingSpec(false);
+                  }
+                }}
+              >
+                Save
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Staff Attendance Dialog */}
       <StaffAttendanceDialog

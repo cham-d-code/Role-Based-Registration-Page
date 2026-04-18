@@ -100,8 +100,70 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;;
 
+-- Staff-facing notifications
+DO $$ BEGIN
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'jd_assigned';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;;
+
+DO $$ BEGIN
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'leave_approved';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;;
+
+DO $$ BEGIN
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'leave_rejected';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;;
+
 DO $$ BEGIN
     ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'interview_scheduled';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;;
+
+-- Management + reminder notifications (used by multiple dashboards)
+DO $$ BEGIN
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'registration_request';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;;
+
+DO $$ BEGIN
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'leave_request';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;;
+
+DO $$ BEGIN
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'interview_started';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;;
+
+DO $$ BEGIN
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'interview_ended';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;;
+
+DO $$ BEGIN
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'interview_upcoming';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;;
+
+DO $$ BEGIN
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'review_due';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;;
+
+DO $$ BEGIN
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'contract_expiry';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;;
+
+DO $$ BEGIN
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'module_preferences_received';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;;
+
+DO $$ BEGIN
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'jd_pending';
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;;
 

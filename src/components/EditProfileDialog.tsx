@@ -76,6 +76,7 @@ export default function EditProfileDialog({
   const [name, setName] = useState(currentProfile.name);
   const [email, setEmail] = useState(currentProfile.email);
   const [phone, setPhone] = useState(currentProfile.phone);
+  const [phoneError, setPhoneError] = useState('');
   const [avatarUrl, setAvatarUrl] = useState(currentProfile.avatarUrl || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -112,7 +113,22 @@ export default function EditProfileDialog({
     e.target.value = '';
   };
 
+  const validatePhone = (raw: string): string | undefined => {
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) return 'Mobile number is required';
+    if (digits.length < 10 || digits.length > 12) return 'Mobile number must be 10–12 digits';
+    return undefined;
+  };
+
   const handleSave = () => {
+    const phoneDigits = phone.replace(/\D/g, '');
+    const phoneErr = validatePhone(phoneDigits);
+    if (phoneErr) {
+      setPhoneError(phoneErr);
+      return;
+    }
+    setPhoneError('');
+
     // Validate password if user is trying to change it
     if (currentPassword || newPassword || confirmPassword) {
       if (!currentPassword) {
@@ -138,7 +154,7 @@ export default function EditProfileDialog({
     onSave({
       name,
       email,
-      phone,
+      phone: `+${phoneDigits}`,
       avatarUrl: avatarUrl || undefined,
       currentPassword: currentPassword || undefined,
       newPassword: newPassword || undefined
@@ -157,6 +173,7 @@ export default function EditProfileDialog({
     setName(currentProfile.name);
     setEmail(currentProfile.email);
     setPhone(currentProfile.phone);
+    setPhoneError('');
     setAvatarUrl(currentProfile.avatarUrl || '');
     setAvatarPreview(currentProfile.avatarUrl || '');
     setCurrentPassword('');
@@ -257,14 +274,29 @@ export default function EditProfileDialog({
                 <Label htmlFor="phone" className="text-[#555555] mb-2 block" style={{ fontSize: '13px', fontWeight: 500 }}>
                   Mobile Number
                 </Label>
-                <Input
-                  id="phone"
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="border-[#e0e0e0] focus:border-[#4db4ac]"
-                  placeholder="+94 XX XXX XXXX"
-                />
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#777777] select-none">+</span>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    inputMode="numeric"
+                    value={phone.replace(/^\+/, '')}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 12);
+                      setPhone(digits);
+                      if (phoneError) setPhoneError('');
+                    }}
+                    className={`pl-8 border-[#e0e0e0] focus:border-[#4db4ac] ${
+                      phoneError ? 'border-red-500 focus:border-red-500' : ''
+                    }`}
+                    placeholder="947XXXXXXXXX"
+                  />
+                </div>
+                {phoneError && (
+                  <p className="text-red-500 mt-2" style={{ fontSize: '12px' }}>
+                    {phoneError}
+                  </p>
+                )}
               </div>
             </div>
           </div>

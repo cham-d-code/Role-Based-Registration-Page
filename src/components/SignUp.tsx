@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { User, Mail, Phone, Eye, EyeOff, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { User, Mail, Eye, EyeOff, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 import { Card } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -36,7 +36,7 @@ export default function SignUp({ onSwitchToSignIn }: SignUpProps) {
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
-    mobile: '',
+    mobile: '', // digits only (without leading +)
     password: '',
     confirmPassword: '',
     role: '',
@@ -83,12 +83,10 @@ export default function SignUp({ onSwitchToSignIn }: SignUpProps) {
     return undefined;
   };
 
-  const validateMobile = (mobile: string): string | undefined => {
-    if (!mobile) return 'Mobile number is required';
-    const mobileRegex = /^[0-9]{10,15}$/;
-    if (!mobileRegex.test(mobile.replace(/[+\-\s]/g, ''))) {
-      return 'Please enter a valid mobile number (10-15 digits)';
-    }
+  const validateMobile = (digitsOnly: string): string | undefined => {
+    if (!digitsOnly) return 'Mobile number is required';
+    if (!/^[0-9]+$/.test(digitsOnly)) return 'Mobile number must contain only numbers';
+    if (digitsOnly.length < 10 || digitsOnly.length > 12) return 'Mobile number must be 10–12 digits';
     return undefined;
   };
 
@@ -195,7 +193,7 @@ export default function SignUp({ onSwitchToSignIn }: SignUpProps) {
         email: formData.email,
         password: formData.password,
         fullName: formData.fullName,
-        mobile: formData.mobile,
+        mobile: `+${formData.mobile}`,
         role: formData.role,
         preferredSubjects: selectedSubjects,
         ...(formData.role === 'staff' && {
@@ -410,18 +408,23 @@ export default function SignUp({ onSwitchToSignIn }: SignUpProps) {
           <div className="space-y-2">
             <Label htmlFor="mobile" className="text-[#555555]">Mobile Number</Label>
             <div className="relative">
-              <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-[#999999]" />
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#777777] select-none pointer-events-none">+</span>
               <Input
                 id="mobile"
                 type="tel"
-                placeholder="Enter your mobile number"
+                inputMode="numeric"
+                placeholder="947XXXXXXXXX"
                 value={formData.mobile}
-                onChange={(e) => handleChange('mobile', e.target.value)}
+                onChange={(e) => {
+                  const digits = e.target.value.replace(/\D/g, '').slice(0, 12);
+                  handleChange('mobile', digits);
+                }}
                 onBlur={() => handleBlur('mobile')}
-                className={`pl-10 border rounded-xl h-12 focus:ring-1 transition-colors ${touched.mobile && errors.mobile
+                className={`pl-8 border rounded-xl h-12 focus:ring-1 transition-colors ${
+                  touched.mobile && errors.mobile
                     ? 'border-red-500 focus:border-red-500 focus:ring-red-500'
                     : 'border-[#e0e0e0] focus:border-[#4db4ac] focus:ring-[#4db4ac]'
-                  }`}
+                }`}
               />
             </div>
             {touched.mobile && errors.mobile && (

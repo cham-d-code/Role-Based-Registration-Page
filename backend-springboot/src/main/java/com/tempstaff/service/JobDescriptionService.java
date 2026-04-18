@@ -3,6 +3,7 @@ package com.tempstaff.service;
 import com.tempstaff.dto.request.UpsertJobDescriptionRequest;
 import com.tempstaff.dto.response.JobDescriptionResponse;
 import com.tempstaff.entity.JobDescription;
+import com.tempstaff.entity.NotificationType;
 import com.tempstaff.entity.User;
 import com.tempstaff.entity.UserRole;
 import com.tempstaff.repository.JobDescriptionRepository;
@@ -19,6 +20,7 @@ public class JobDescriptionService {
 
     private final JobDescriptionRepository jobDescriptionRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public JobDescriptionResponse upsertForStaff(UUID creatorId, UUID staffId, UpsertJobDescriptionRequest req) {
@@ -44,6 +46,16 @@ public class JobDescriptionService {
 
         jd.setContent(req.getContent());
         jd = jobDescriptionRepository.save(jd);
+
+        // Notify staff member that JD was assigned/updated
+        notificationService.notifyUser(
+                staff.getId(),
+                "Job description assigned",
+                "A job description has been assigned/updated. Please check 'My JD'.",
+                NotificationType.jd_assigned,
+                null,
+                null
+        );
 
         return JobDescriptionResponse.builder()
                 .userId(staff.getId().toString())

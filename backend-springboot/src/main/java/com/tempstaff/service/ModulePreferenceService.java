@@ -195,7 +195,7 @@ public class ModulePreferenceService {
                 staffId
         );
         for (User m : management) {
-            notificationService.notifyUser(m.getId(), title, msg, NotificationType.info, null, null);
+            notificationService.notifyUser(m.getId(), title, msg, NotificationType.module_preferences_received, null, null);
         }
     }
 
@@ -346,6 +346,33 @@ public class ModulePreferenceService {
         }
 
         return missing;
+    }
+
+    /**
+     * Staff IDs who have submitted module preferences for their latest applicable request.
+     */
+    @Transactional(readOnly = true)
+    public Set<UUID> staffSubmittedForLatestRequest(Collection<UUID> staffIds) {
+        if (staffIds == null || staffIds.isEmpty()) return Set.of();
+
+        Map<UUID, UUID> staffToReq = latestRequestIdByStaff(staffIds);
+        if (staffToReq.isEmpty()) return Set.of();
+
+        Map<UUID, List<UUID>> reqToStaff = new HashMap<>();
+        for (var e : staffToReq.entrySet()) {
+            reqToStaff.computeIfAbsent(e.getValue(), k -> new ArrayList<>()).add(e.getKey());
+        }
+
+        Set<UUID> submitted = new HashSet<>();
+        for (var e : reqToStaff.entrySet()) {
+            UUID reqId = e.getKey();
+            List<UUID> groupStaff = e.getValue();
+            List<ModulePreferenceSubmission> subs = submissionRepo.findByRequestIdAndStaffIdIn(reqId, groupStaff);
+            for (ModulePreferenceSubmission s : subs) {
+                submitted.add(s.getStaffId());
+            }
+        }
+        return submitted;
     }
 }
 

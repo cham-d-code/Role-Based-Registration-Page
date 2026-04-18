@@ -165,6 +165,7 @@ public class UserController {
         var preferredModulesByStaff = modulePreferenceService.getLatestPreferredModuleCodesForStaff(staffIds);
         var preferredModuleDetailsByStaff = modulePreferenceService.getLatestPreferredModulesForStaff(staffIds);
         var missingSubmission = modulePreferenceService.staffMissingSubmissionForLatestRequest(staffIds);
+        var submittedPrefs = modulePreferenceService.staffSubmittedForLatestRequest(staffIds);
 
         List<UserProfileResponse> response = staffUsers.stream()
                 .map(u -> {
@@ -203,6 +204,7 @@ public class UserController {
                             .preferredModules(preferredModulesByStaff.get(u.getId()))
                             .preferredModuleDetails(preferredModuleDetailsByStaff.get(u.getId()))
                             .preferencesRequested(missingSubmission.contains(u.getId()))
+                            .modulePreferencesSubmitted(submittedPrefs.contains(u.getId()))
                             .build();
                 })
                 .collect(Collectors.toList());

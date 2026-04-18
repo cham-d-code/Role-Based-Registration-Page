@@ -314,6 +314,17 @@ export async function getHodDashboardStats(): Promise<HodDashboardStats> {
     return fetchWithAuth(`${API_BASE_URL}/dashboard/hod-stats`);
 }
 
+export interface CoordinatorDashboardStats {
+    activeTempStaff: number;
+    pendingRegistrationApproval: number;
+    upcomingInterviewRounds: number;
+    activeMentorships: number;
+}
+
+export async function getCoordinatorDashboardStats(): Promise<CoordinatorDashboardStats> {
+    return fetchWithAuth(`${API_BASE_URL}/dashboard/coordinator-stats`);
+}
+
 export interface MentorDashboardStats {
     menteesCount: number;
     activeResearchPosts: number;
@@ -323,6 +334,16 @@ export interface MentorDashboardStats {
 
 export async function getMentorDashboardStats(): Promise<MentorDashboardStats> {
     return fetchWithAuth(`${API_BASE_URL}/dashboard/mentor-stats`);
+}
+
+export interface TempStaffDashboardStats {
+    tasksAvailableToday: number;
+    leaveDaysRemaining: number;
+    daysToContractEnd: number | null;
+}
+
+export async function getTempStaffDashboardStats(): Promise<TempStaffDashboardStats> {
+    return fetchWithAuth(`${API_BASE_URL}/dashboard/staff-stats`);
 }
 
 // Check if user is authenticated
@@ -442,6 +463,10 @@ export async function getApprovedStaff(): Promise<{
     preferredSubjects?: string[];
     mentorId?: string;
     mentorName?: string;
+    preferencesRequested?: boolean;
+    modulePreferencesSubmitted?: boolean;
+    preferredModules?: string[];
+    preferredModuleDetails?: CurriculumModuleDto[];
 }[]> {
     return fetchWithAuth(`${API_BASE_URL}/user/staff`);
 }

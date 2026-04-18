@@ -18,14 +18,14 @@ import java.util.Set;
 
 /**
  * Sends contract expiry reminders to HOD + Coordinator at:
- * 3 months (90d), 2 months (60d), 1 month (30d), 2 weeks (14d), 1 week (7d) before expiry.
+ * 6 months (180d), 3 months (90d), 2 months (60d), 1 month (30d), 2 weeks (14d), 1 week (7d) before expiry.
  */
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class ContractExpiryReminderService {
 
-    private static final Set<Long> MILESTONES_DAYS = Set.of(90L, 60L, 30L, 14L, 7L);
+    private static final Set<Long> MILESTONES_DAYS = Set.of(180L, 90L, 60L, 30L, 14L, 7L);
 
     private final UserRepository userRepository;
     private final UserNotificationRepository userNotificationRepository;
@@ -50,6 +50,7 @@ public class ContractExpiryReminderService {
             if (!MILESTONES_DAYS.contains(daysLeft)) continue;
 
             String whenLabel = switch ((int) daysLeft) {
+                case 180 -> "6 months";
                 case 90 -> "3 months";
                 case 60 -> "2 months";
                 case 30 -> "1 month";

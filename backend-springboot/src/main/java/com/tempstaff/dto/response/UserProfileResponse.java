@@ -35,4 +35,6 @@ public class UserProfileResponse {
     private List<String> preferredModules;
     private List<CurriculumModuleResponse> preferredModuleDetails;
     private Boolean preferencesRequested;
+    /** True if staff submitted module preferences for their latest coordinator request. */
+    private Boolean modulePreferencesSubmitted;
 }

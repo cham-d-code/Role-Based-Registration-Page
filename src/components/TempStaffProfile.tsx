@@ -51,9 +51,14 @@ import {
   getLatestModulePreferenceRequest,
   getMyJobDescription,
   getMyLeaveRequests,
+  getMyNotifications,
   getMyResearchApplications,
+  getUnreadNotificationCount,
+  getTempStaffDashboardStats,
+  markAllNotificationsRead,
   getMyWeeklyTasks,
   getMyNextTask,
+  markNotificationRead,
   saveMyWeeklyTasks,
   updateWeeklyTaskStatus,
   listOpenResearchOpportunities,
@@ -61,6 +66,8 @@ import {
   ResearchOpportunityDto,
   submitModulePreferences,
   updateMyProfile,
+  type TempStaffDashboardStats,
+  type UserNotificationDto,
   type LeaveRequestDto,
   type ModulePreferenceRequestDto,
   type WeeklyTaskDto,
@@ -78,6 +85,7 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [editSubjectsOpen, setEditSubjectsOpen] = useState(false);
   const [preferredSubjects, setPreferredSubjects] = useState<string[]>([]);
+  const [newSubjectText, setNewSubjectText] = useState('');
   const [subjectsSaving, setSubjectsSaving] = useState(false);
   const [modulePrefRequest, setModulePrefRequest] = useState<ModulePreferenceRequestDto | null>(null);
   const [loadingModulePrefs, setLoadingModulePrefs] = useState(false);
@@ -105,7 +113,8 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
     email: '',
     phone: '',
     avatarUrl: '',
-    initials: '...'
+    initials: '...',
+    contractEndDate: null as string | null,
   });
 
   const currentUserId: string | null = getCurrentUser()?.id ?? null;
@@ -149,7 +158,8 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
             email: profile.email,
             phone: profile.mobile || '',
             avatarUrl: profile.profileImageUrl || '',
-            initials
+            initials,
+            contractEndDate: profile.contractEndDate ? String(profile.contractEndDate) : null,
           });
           setPreferredSubjects(profile.preferredSubjects ?? []);
         })
@@ -195,6 +205,14 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
   const [appliedResearch, setAppliedResearch] = useState<number[]>([]);
   const [openResearch, setOpenResearch] = useState<ResearchOpportunityDto[]>([]);
   const [loadingResearch, setLoadingResearch] = useState(false);
+  const [newResearchCount, setNewResearchCount] = useState(0);
+  const [leaveDecisionCount, setLeaveDecisionCount] = useState(0);
+  const [modulePrefNotifCount, setModulePrefNotifCount] = useState(0);
+  const [jdAssignedCount, setJdAssignedCount] = useState(0);
+  const [inboxNotifications, setInboxNotifications] = useState<UserNotificationDto[]>([]);
+  const [loadingInboxNotifications, setLoadingInboxNotifications] = useState(false);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [reminderNotifications, setReminderNotifications] = useState<UserNotificationDto[]>([]);
   const [appliedOpportunityIds, setAppliedOpportunityIds] = useState<string[]>([]);
   const [myApplications, setMyApplications] = useState<MyResearchApplicationDto[]>([]);
 
@@ -295,12 +313,94 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
     { id: 'profile', label: 'Profile', icon: UserIcon },
   ];
 
+  const [dashboardStats, setDashboardStats] = useState<TempStaffDashboardStats>({
+    tasksAvailableToday: 0,
+    leaveDaysRemaining: 0,
+    daysToContractEnd: null,
+  });
+
+  const fallbackDaysToContractEnd = (() => {
+    if (!profileData.contractEndDate) return null;
+    const d = new Date(profileData.contractEndDate);
+    if (Number.isNaN(d.getTime())) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    d.setHours(0, 0, 0, 0);
+    return Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  })();
+
   const quickStats = [
-    { label: 'Tasks Completed Today', value: '12', color: '#4db4ac' },
-    { label: 'Pending Tasks Today', value: '3', color: '#f7a541' },
-    { label: 'Leave Days Remaining', value: '2', color: '#4db4ac' },
-    { label: 'Days to Contract End', value: '45', color: '#555555' },
+    { label: 'Tasks Available Today', value: String(dashboardStats.tasksAvailableToday), color: '#4db4ac' },
+    { label: 'Leave Days Remaining', value: String(dashboardStats.leaveDaysRemaining), color: '#4db4ac' },
+    {
+      label: 'Days to Contract End',
+      value:
+        (dashboardStats.daysToContractEnd ?? fallbackDaysToContractEnd) === null
+          ? '—'
+          : String(dashboardStats.daysToContractEnd ?? fallbackDaysToContractEnd),
+      color: '#555555',
+    },
   ];
+
+  // Load dashboard stats from backend
+  useEffect(() => {
+    if (activeMenu !== 'dashboard') return;
+    let mounted = true;
+    const load = async () => {
+      try {
+        const stats = await getTempStaffDashboardStats();
+        if (mounted) setDashboardStats(stats);
+      } catch (e) {
+        console.error('Failed to load staff dashboard stats', e);
+      }
+    };
+    load();
+    const interval = setInterval(load, 10_000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [activeMenu]);
+
+  // Dashboard: time-based reminders
+  useEffect(() => {
+    if (activeMenu !== 'dashboard') return;
+    let mounted = true;
+    const load = () => {
+      getMyNotifications(false, 'reminders')
+        .then((rows) => {
+          if (mounted) setReminderNotifications(rows.slice(0, 20));
+        })
+        .catch(() => {
+          if (mounted) setReminderNotifications([]);
+        });
+    };
+    load();
+    const interval = setInterval(load, 10_000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [activeMenu]);
+
+  // Sidebar: total unread count (inbox + reminders)
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const c = await getUnreadNotificationCount();
+        if (mounted) setUnreadNotificationCount(c);
+      } catch {
+        // ignore
+      }
+    };
+    load();
+    const interval = setInterval(load, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   // Load latest module preference request so we can show a sidebar badge
   useEffect(() => {
@@ -344,6 +444,139 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
       if (nextTaskIntervalRef.current) clearInterval(nextTaskIntervalRef.current);
     };
   }, []);
+
+  // Sidebar badge for new research opportunities (unread research_new notifications).
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const notifs = await getMyNotifications(true, 'inbox');
+        const researchNew = notifs.filter((n: UserNotificationDto) => n.type === 'research_new').length;
+        const leaveDecision = notifs.filter((n: UserNotificationDto) => n.type === 'leave_approved' || n.type === 'leave_rejected').length;
+        const modulePrefs = notifs.filter((n: UserNotificationDto) => n.type === 'module_preferences_requested').length;
+        const jdAssigned = notifs.filter((n: UserNotificationDto) => n.type === 'jd_assigned').length;
+        if (!mounted) return;
+        setNewResearchCount(researchNew);
+        setLeaveDecisionCount(leaveDecision);
+        setModulePrefNotifCount(modulePrefs);
+        setJdAssignedCount(jdAssigned);
+      } catch {
+        // ignore
+      }
+    };
+    load();
+    const interval = setInterval(load, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Dashboard notifications panel: show latest inbox notifications
+  useEffect(() => {
+    if (activeMenu !== 'dashboard') return;
+    let cancelled = false;
+    (async () => {
+      setLoadingInboxNotifications(true);
+      try {
+        const items = await getMyNotifications(false, 'inbox');
+        if (!cancelled) setInboxNotifications(items.slice(0, 15));
+      } catch {
+        if (!cancelled) setInboxNotifications([]);
+      } finally {
+        if (!cancelled) setLoadingInboxNotifications(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMenu]);
+
+  // Notifications tab: full inbox + mark all read (clears sidebar badge)
+  useEffect(() => {
+    if (activeMenu !== 'notifications') return;
+    let cancelled = false;
+    (async () => {
+      setLoadingInboxNotifications(true);
+      try {
+        const items = await getMyNotifications(false, 'inbox');
+        if (!cancelled) setInboxNotifications(items);
+        await markAllNotificationsRead().catch(() => undefined);
+        if (!cancelled) setUnreadNotificationCount(0);
+      } catch {
+        if (!cancelled) setInboxNotifications([]);
+      } finally {
+        if (!cancelled) setLoadingInboxNotifications(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMenu]);
+
+  // When opening Research tab, mark research_new notifications as read so the sidebar badge clears.
+  useEffect(() => {
+    if (activeMenu !== 'research') return;
+    (async () => {
+      try {
+        const notifs = await getMyNotifications(true, 'inbox');
+        const unreadNew = notifs.filter((n: UserNotificationDto) => n.type === 'research_new' && n.id);
+        await Promise.all(unreadNew.map((n: UserNotificationDto) => markNotificationRead(n.id)));
+      } catch {
+        // ignore
+      } finally {
+        setNewResearchCount(0);
+      }
+    })();
+  }, [activeMenu]);
+
+  // When opening Leave tab, clear leave decision badge
+  useEffect(() => {
+    if (activeMenu !== 'leave') return;
+    (async () => {
+      try {
+        const notifs = await getMyNotifications(true, 'inbox');
+        const unread = notifs.filter((n: UserNotificationDto) => (n.type === 'leave_approved' || n.type === 'leave_rejected') && n.id);
+        await Promise.all(unread.map((n: UserNotificationDto) => markNotificationRead(n.id)));
+      } catch {
+        // ignore
+      } finally {
+        setLeaveDecisionCount(0);
+      }
+    })();
+  }, [activeMenu]);
+
+  // When opening Module Preferences tab, clear its badge
+  useEffect(() => {
+    if (activeMenu !== 'modulePreferences') return;
+    (async () => {
+      try {
+        const notifs = await getMyNotifications(true, 'inbox');
+        const unread = notifs.filter((n: UserNotificationDto) => n.type === 'module_preferences_requested' && n.id);
+        await Promise.all(unread.map((n: UserNotificationDto) => markNotificationRead(n.id)));
+      } catch {
+        // ignore
+      } finally {
+        setModulePrefNotifCount(0);
+      }
+    })();
+  }, [activeMenu]);
+
+  // When opening My JD tab, clear JD assigned badge
+  useEffect(() => {
+    if (activeMenu !== 'myJd') return;
+    (async () => {
+      try {
+        const notifs = await getMyNotifications(true, 'inbox');
+        const unread = notifs.filter((n: UserNotificationDto) => n.type === 'jd_assigned' && n.id);
+        await Promise.all(unread.map((n: UserNotificationDto) => markNotificationRead(n.id)));
+      } catch {
+        // ignore
+      } finally {
+        setJdAssignedCount(0);
+      }
+    })();
+  }, [activeMenu]);
 
   useEffect(() => {
     if (activeMenu !== 'research') return;
@@ -515,6 +748,82 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                     >
                       {item.label}
                     </span>
+                    {item.id === 'research' && newResearchCount > 0 && (
+                      <span
+                        className="flex items-center justify-center flex-shrink-0"
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 9999,
+                          backgroundColor: '#ef4444',
+                          color: '#ffffff',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          lineHeight: 1,
+                        }}
+                        aria-label={`${Math.min(newResearchCount, 99)} new research opportunities`}
+                        title="New research opportunities"
+                      >
+                        {Math.min(newResearchCount, 99)}
+                      </span>
+                    )}
+                    {item.id === 'myJd' && jdAssignedCount > 0 && (
+                      <span
+                        className="flex items-center justify-center flex-shrink-0"
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 9999,
+                          backgroundColor: '#ef4444',
+                          color: '#ffffff',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          lineHeight: 1,
+                        }}
+                        aria-label={`${Math.min(jdAssignedCount, 99)} JD updates`}
+                        title="JD assigned/updated"
+                      >
+                        {Math.min(jdAssignedCount, 99)}
+                      </span>
+                    )}
+                    {item.id === 'leave' && leaveDecisionCount > 0 && (
+                      <span
+                        className="flex items-center justify-center flex-shrink-0"
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 9999,
+                          backgroundColor: '#ef4444',
+                          color: '#ffffff',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          lineHeight: 1,
+                        }}
+                        aria-label={`${Math.min(leaveDecisionCount, 99)} leave updates`}
+                        title="Leave request decision"
+                      >
+                        {Math.min(leaveDecisionCount, 99)}
+                      </span>
+                    )}
+                    {item.id === 'modulePreferences' && modulePrefNotifCount > 0 && (
+                      <span
+                        className="flex items-center justify-center flex-shrink-0"
+                        style={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: 9999,
+                          backgroundColor: '#ef4444',
+                          color: '#ffffff',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          lineHeight: 1,
+                        }}
+                        aria-label={`${Math.min(modulePrefNotifCount, 99)} module preference requests`}
+                        title="Module preferences requested"
+                      >
+                        {Math.min(modulePrefNotifCount, 99)}
+                      </span>
+                    )}
                     {showModulePrefsBadge && (
                       <span
                         className="flex items-center justify-center flex-shrink-0"
@@ -532,6 +841,25 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                         title="New module preference request"
                       >
                         1
+                      </span>
+                    )}
+                    {item.id === 'notifications' && unreadNotificationCount > 0 && (
+                      <span
+                        className="flex items-center justify-center flex-shrink-0"
+                        style={{
+                          minWidth: 20,
+                          height: 20,
+                          padding: '0 6px',
+                          borderRadius: 10,
+                          backgroundColor: '#ef4444',
+                          color: '#ffffff',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          lineHeight: 1,
+                        }}
+                        aria-label={`${Math.min(unreadNotificationCount, 99)} unread notifications`}
+                      >
+                        {Math.min(unreadNotificationCount, 99)}
                       </span>
                     )}
                   </span>
@@ -571,7 +899,7 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
               </DashboardIdentityCard>
 
               {/* Quick Stats + Next Task */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {quickStats.map((stat, index) => (
                   <Card 
                     key={index} 
@@ -589,79 +917,191 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
               </div>
 
               {/* Next Task Card */}
-              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-                <div className="flex items-center gap-2 mb-3">
-                  <Clock className="h-5 w-5 text-[#4db4ac]" />
-                  <h3 className="text-[#555555]" style={{ fontSize: '14px', fontWeight: 600 }}>
-                    Next Task
-                  </h3>
-                </div>
-                {loadingNextTask ? (
-                  <Loader2 className="h-5 w-5 animate-spin text-[#4db4ac]" />
-                ) : nextTask ? (
-                  <>
-                    <p className="text-[#222222]" style={{ fontSize: '48px', fontWeight: 700, lineHeight: 1 }}>
-                      {nextTask.timeUntil}
-                    </p>
-                    <p className="text-[#555555] mt-3" style={{ fontSize: '14px', fontWeight: 500 }}>
-                      {nextTask.dateTimeLabel}
-                    </p>
-                    <p className="text-[#4db4ac] mt-1" style={{ fontSize: '14px', fontWeight: 600 }}>
-                      {nextTask.title}
-                    </p>
-                    <p className="text-[#999999] mt-1" style={{ fontSize: '12px' }}>
-                      {nextTask.timeFrom} – {nextTask.timeTo}
-                    </p>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="mt-3 text-[#4db4ac] hover:text-[#3c9a93] p-0"
-                      onClick={() => setActiveMenu('weeklyTasks')}
-                    >
-                      View weekly timetable →
-                    </Button>
-                  </>
-                ) : (
-                  <p className="text-[#999999]" style={{ fontSize: '14px' }}>
-                    No upcoming tasks this week.{' '}
-                    <button className="text-[#4db4ac] underline" onClick={() => setActiveMenu('weeklyTasks')}>
-                      Set up your timetable
-                    </button>
-                  </p>
-                )}
-              </Card>
+              <Card className="relative bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.08)] border-0 p-6 overflow-hidden">
+                <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#4db4ac]" aria-hidden />
 
-              {/* Recent Activities Section */}
-              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-                <h3 className="text-[#222222] mb-4" style={{ fontWeight: 700, fontSize: '18px' }}>
-                  Recent Activities
-                </h3>
-                
-                <div className="space-y-1">
-                  {recentActivities.map((activity, index) => (
-                    <div 
-                      key={index} 
-                      className="flex items-start gap-4 p-3 rounded-lg hover:bg-[#f9f9f9] transition-colors border-l-4 border-[#4db4ac]"
-                    >
-                      <div className="flex-shrink-0 mt-1">
-                        <div className="h-8 w-8 rounded-full bg-[#e6f7f6] flex items-center justify-center">
-                          <CheckCircle className="h-4 w-4 text-[#4db4ac]" />
-                        </div>
-                      </div>
-                      <div className="flex-1 pb-4">
-                        <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 500 }}>
-                          {activity.activity}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="h-9 w-9 rounded-full bg-[#e6f7f6] flex items-center justify-center mt-0.5">
+                      <Clock className="h-5 w-5 text-[#4db4ac]" />
+                    </div>
+                    <div>
+                      <h3 className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 700 }}>
+                        Next Task
+                      </h3>
+                      <p className="text-[#777777]" style={{ fontSize: '12px' }}>
+                        What’s coming up for you
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-[#4db4ac] hover:text-[#3c9a93] p-0 h-auto"
+                    onClick={() => setActiveMenu('weeklyTasks')}
+                  >
+                    View timetable →
+                  </Button>
+                </div>
+
+                {loadingNextTask ? (
+                  <div className="flex items-center gap-2 text-[#777777] mt-4" style={{ fontSize: '14px' }}>
+                    <Loader2 className="h-5 w-5 animate-spin text-[#4db4ac]" />
+                    Loading…
+                  </div>
+                ) : nextTask ? (
+                  <div className="mt-4">
+                    <div className="flex items-end justify-between gap-4 flex-wrap">
+                      <div>
+                        <p className="text-[#111827]" style={{ fontSize: '52px', fontWeight: 800, lineHeight: 1 }}>
+                          {nextTask.timeUntil}
                         </p>
-                        <p className="text-[#555555] mt-1" style={{ fontSize: '13px' }}>
-                          {activity.detail}
+                        <p className="text-[#555555] mt-2" style={{ fontSize: '14px', fontWeight: 600 }}>
+                          {nextTask.dateTimeLabel}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[#4db4ac]" style={{ fontSize: '14px', fontWeight: 700 }}>
+                          {nextTask.title}
                         </p>
                         <p className="text-[#999999] mt-1" style={{ fontSize: '12px' }}>
-                          {activity.time} • {activity.date}
+                          {nextTask.timeFrom} – {nextTask.timeTo}
                         </p>
                       </div>
                     </div>
-                  ))}
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-lg border border-[#e6f7f6] bg-[#f9fdfc] p-4">
+                    <p className="text-[#555555]" style={{ fontSize: '14px', fontWeight: 600 }}>
+                      No upcoming tasks this week
+                    </p>
+                    <p className="text-[#777777] mt-1" style={{ fontSize: '13px' }}>
+                      Set up your timetable to see your next task here.
+                    </p>
+                    <Button
+                      size="sm"
+                      className="mt-3 bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg px-4"
+                      onClick={() => setActiveMenu('weeklyTasks')}
+                    >
+                      Set up timetable
+                    </Button>
+                  </div>
+                )}
+              </Card>
+
+              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '18px' }}>
+                    Reminders
+                  </h3>
+                  {reminderNotifications.length > 0 && (
+                    <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '11px' }}>
+                      {reminderNotifications.length}
+                    </Badge>
+                  )}
                 </div>
+                {reminderNotifications.length === 0 ? (
+                  <p className="text-[#777777] py-4" style={{ fontSize: '13px' }}>
+                    No reminders right now. Contract milestones, interviews, and other scheduled items appear here.
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {reminderNotifications.map((n) => (
+                      <div
+                        key={n.id}
+                        className="flex items-start gap-4 p-3 rounded-lg hover:bg-[#f9f9f9] transition-colors border-l-4 border-[#4db4ac]"
+                      >
+                        <div className="flex-shrink-0 mt-1">
+                          <div className="h-8 w-8 rounded-full bg-[#e6f7f6] flex items-center justify-center">
+                            <Clock className="h-4 w-4 text-[#4db4ac]" />
+                          </div>
+                        </div>
+                        <div className="flex-1 pb-1">
+                          <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
+                            {n.title}
+                          </p>
+                          <p className="text-[#555555] whitespace-pre-line mt-1" style={{ fontSize: '13px' }}>
+                            {n.message}
+                          </p>
+                          {n.createdAt && (
+                            <p className="text-[#999999] mt-1" style={{ fontSize: '12px' }}>
+                              {new Date(n.createdAt).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
+
+              {/* Notifications Panel (staff inbox) */}
+              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <BellRing className="h-5 w-5 text-[#4db4ac]" />
+                    <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '18px' }}>
+                      Notifications
+                    </h3>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-[#4db4ac] hover:text-[#3c9a93] p-0 h-auto"
+                    onClick={() => setActiveMenu('notifications')}
+                  >
+                    View all →
+                  </Button>
+                </div>
+
+                {loadingInboxNotifications ? (
+                  <div className="flex items-center gap-2 text-[#777777]" style={{ fontSize: '14px' }}>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading notifications…
+                  </div>
+                ) : inboxNotifications.length === 0 ? (
+                  <p className="text-[#777777] py-4" style={{ fontSize: '13px' }}>
+                    No notifications right now. You’ll see updates for JD assigned, leave request decisions,
+                    new research opportunities, and module preference requests here.
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {inboxNotifications
+                      .filter((n) =>
+                        ['jd_assigned', 'leave_approved', 'leave_rejected', 'research_new', 'module_preferences_requested'].includes(
+                          String(n.type)
+                        )
+                      )
+                      .slice(0, 6)
+                      .map((n) => (
+                        <div
+                          key={n.id}
+                          className={`flex items-start gap-4 p-3 rounded-lg border-l-4 transition-colors ${
+                            n.isRead ? 'border-[#e0e0e0] hover:bg-[#f9f9f9]' : 'border-[#4db4ac] bg-[#f0fbfa]'
+                          }`}
+                        >
+                          <div className="flex-shrink-0 mt-1">
+                            <div className="h-8 w-8 rounded-full bg-[#e6f7f6] flex items-center justify-center">
+                              <BellRing className="h-4 w-4 text-[#4db4ac]" />
+                            </div>
+                          </div>
+                          <div className="flex-1 pb-1">
+                            <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
+                              {n.title}
+                            </p>
+                            <p className="text-[#555555] whitespace-pre-line mt-1" style={{ fontSize: '13px' }}>
+                              {n.message}
+                            </p>
+                            {n.createdAt && (
+                              <p className="text-[#999999] mt-1" style={{ fontSize: '12px' }}>
+                                {new Date(n.createdAt).toLocaleString()}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </Card>
             </>
           )}
@@ -673,7 +1113,6 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                 <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
                   My JD
                 </h3>
-                <Badge className="bg-[#4db4ac] text-white">FR13</Badge>
               </div>
               <Separator className="mb-4" />
 
@@ -1046,7 +1485,7 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
             </div>
           )}
 
-          {/* Leave Requests View (FR18, FR19) */}
+          {/* Leave Requests View */}
           {activeMenu === 'leave' && (
             <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
               <div className="flex items-center justify-between mb-4">
@@ -1054,8 +1493,6 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                   <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
                     Leave Requests
                   </h3>
-                  <Badge className="bg-[#4db4ac] text-white">FR18</Badge>
-                  <Badge className="bg-[#4db4ac] text-white">FR19</Badge>
                 </div>
                 <Button
                   onClick={() => setShowLeaveDialog(true)}
@@ -1369,21 +1806,68 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
             </Card>
           )}
 
-          {/* Notifications View (FR16) */}
+          {/* Notifications View (inbox) */}
           {activeMenu === 'notifications' && (
             <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <BellRing className="h-6 w-6 text-[#4db4ac]" />
-                <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
                   Notifications
-                </h3>
-                <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '10px' }}>
-                  FR16
+                </h2>
+                <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '12px' }}>
+                  {inboxNotifications.length} total
                 </Badge>
               </div>
-              <Separator className="mb-6" />
-              
-              <SystemNotices userRole="staff" />
+
+              {loadingInboxNotifications ? (
+                <div className="flex items-center gap-2 text-[#777777]" style={{ fontSize: '14px' }}>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Loading notifications…
+                </div>
+              ) : inboxNotifications.length === 0 ? (
+                <p className="text-[#777777] py-6 text-center" style={{ fontSize: '14px' }}>
+                  You have no notifications. JD assignments, leave decisions, new research opportunities, and module
+                  preference requests appear here.
+                </p>
+              ) : (
+                <div className="space-y-1">
+                  {inboxNotifications.map((n) => (
+                    <div
+                      key={n.id}
+                      className={`flex items-start gap-4 p-3 rounded-lg border-l-4 transition-colors ${
+                        n.isRead ? 'border-[#e0e0e0] hover:bg-[#f9f9f9]' : 'border-[#4db4ac] bg-[#f0fbfa]'
+                      }`}
+                    >
+                      <div className="flex-shrink-0 mt-1">
+                        <div className="h-8 w-8 rounded-full bg-[#e6f7f6] flex items-center justify-center">
+                          <BellRing className="h-4 w-4 text-[#4db4ac]" />
+                        </div>
+                      </div>
+                      <div className="flex-1 pb-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
+                            {n.title}
+                          </p>
+                          {!n.isRead && (
+                            <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '10px' }}>
+                              New
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-[#555555] whitespace-pre-line mt-1" style={{ fontSize: '13px' }}>
+                          {n.message}
+                        </p>
+                        {n.createdAt && (
+                          <p className="text-[#999999] mt-1" style={{ fontSize: '12px' }}>
+                            {new Date(n.createdAt).toLocaleString()}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  <p className="text-[#999999] pt-3 text-center" style={{ fontSize: '12px' }}>
+                    Notifications are automatically removed after 7 days.
+                  </p>
+                </div>
+              )}
             </Card>
           )}
 
@@ -1433,26 +1917,6 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                       <div className="flex items-center gap-3 text-[#555555]" style={{ fontSize: '14px' }}>
                         <Phone className="h-5 w-5 text-[#4db4ac]" />
                         <span>{profileData.phone}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-[#222222] mb-4" style={{ fontWeight: 600, fontSize: '16px' }}>
-                      Work Statistics
-                    </h3>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[#555555]" style={{ fontSize: '14px' }}>Tasks Completed</span>
-                        <span className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>125</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[#555555]" style={{ fontSize: '14px' }}>Attendance Rate</span>
-                        <span className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>95%</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[#555555]" style={{ fontSize: '14px' }}>Modules Assigned</span>
-                        <span className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>3</span>
                       </div>
                     </div>
                   </div>
@@ -1534,8 +1998,43 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
           </DialogHeader>
 
           <div className="space-y-4">
+            <div className="rounded-lg border border-[#e6f7f6] bg-[#fbfdfd] p-3">
+              <div className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
+                Add a new subject
+              </div>
+              <div className="mt-2 flex flex-col sm:flex-row gap-2">
+                <input
+                  value={newSubjectText}
+                  onChange={(e) => setNewSubjectText(e.target.value)}
+                  placeholder="Type a subject name (e.g., Cloud Computing)"
+                  className="h-10 w-full rounded-md border border-[#d8efed] bg-white px-3 text-[#222222] outline-none focus:border-[#4db4ac] focus:ring-2 focus:ring-[#4db4ac]/20"
+                />
+                <Button
+                  type="button"
+                  className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
+                  onClick={() => {
+                    const raw = newSubjectText.trim();
+                    if (!raw) return;
+                    const exists = preferredSubjects.some((s) => s.trim().toLowerCase() === raw.toLowerCase());
+                    if (exists) {
+                      setNewSubjectText('');
+                      return;
+                    }
+                    setPreferredSubjects((prev) => [...prev, raw]);
+                    setNewSubjectText('');
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add
+                </Button>
+              </div>
+              <div className="mt-2 text-[#777777]" style={{ fontSize: '12px' }}>
+                You can save custom subjects too.
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {availableSubjects.map((subject) => (
+              {[...availableSubjects, ...preferredSubjects.filter((s) => !availableSubjects.includes(s))].map((subject) => (
                 <div key={subject} className="flex items-center space-x-2">
                   <Checkbox
                     id={`pref-${subject}`}
@@ -1573,8 +2072,16 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                   setSubjectsSaving(true);
                   try {
                     const api = await import('../services/api');
-                    const updated = await api.updateMyPreferredSubjects(preferredSubjects);
-                    setPreferredSubjects(updated.preferredSubjects ?? preferredSubjects);
+                    const cleaned = Array.from(
+                      new Map(
+                        preferredSubjects
+                          .map((s) => s.trim())
+                          .filter(Boolean)
+                          .map((s) => [s.toLowerCase(), s] as const)
+                      ).values()
+                    );
+                    const updated = await api.updateMyPreferredSubjects(cleaned);
+                    setPreferredSubjects(updated.preferredSubjects ?? cleaned);
                     setEditSubjectsOpen(false);
                   } finally {
                     setSubjectsSaving(false);

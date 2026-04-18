@@ -7,6 +7,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.stream.Collectors;
 
@@ -29,6 +30,20 @@ public class GlobalExceptionHandler {
                         .success(false)
                         .message(errors)
                         .build());
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<AuthResponse> handleResponseStatusException(ResponseStatusException ex) {
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        if (status == null) status = HttpStatus.BAD_REQUEST;
+        String message = ex.getReason() != null ? ex.getReason() : "Request failed";
+
+        return ResponseEntity.status(status).body(
+                AuthResponse.builder()
+                        .success(false)
+                        .message(message)
+                        .build()
+        );
     }
 
     @ExceptionHandler(Exception.class)
