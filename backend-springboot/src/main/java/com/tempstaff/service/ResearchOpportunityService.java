@@ -218,20 +218,9 @@ public class ResearchOpportunityService {
         app.setStatus(ApplicationStatus.accepted);
         researchApplicationRepository.save(app);
 
-        // Clear the "new application" badge for this opportunity on the owner's inbox.
-        // Once at least one applicant is accepted for a research opportunity, we mark all
-        // research_applied notifications for that opportunity as read, so the red count drops.
-        List<UserNotification> appliedNotifs = userNotificationRepository
-                .findByRecipientIdAndTypeAndRelatedOpportunityId(
-                        ownerId, NotificationType.research_applied, opp.getId());
-        for (UserNotification n : appliedNotifs) {
-            if (Boolean.FALSE.equals(n.getIsRead())) {
-                n.setIsRead(true);
-            }
-        }
-        if (!appliedNotifs.isEmpty()) {
-            userNotificationRepository.saveAll(appliedNotifs);
-        }
+        // Clear the "new application" notification for this specific applicant so
+        // the HOD's/creator's red badge updates once the application is decided.
+        markApplicationNotificationsRead(ownerId, app.getId());
 
         notificationService.notifyUser(
                 app.getUserId(),
@@ -261,6 +250,10 @@ public class ResearchOpportunityService {
         app.setStatus(ApplicationStatus.rejected);
         researchApplicationRepository.save(app);
 
+        // Clear the "new application" notification for this specific applicant so
+        // the HOD's/creator's red badge updates once the application is decided.
+        markApplicationNotificationsRead(ownerId, app.getId());
+
         notificationService.notifyUser(
                 app.getUserId(),
                 "Application rejected",
@@ -274,6 +267,20 @@ public class ResearchOpportunityService {
                 .filter(a -> a.getApplicationId().equals(applicationId))
                 .findFirst()
                 .orElseThrow();
+    }
+
+    private void markApplicationNotificationsRead(UUID ownerId, UUID applicationId) {
+        List<UserNotification> notifs = userNotificationRepository
+                .findByRecipientIdAndTypeAndRelatedApplicationId(
+                        ownerId, NotificationType.research_applied, applicationId);
+        boolean anyChanged = false;
+        for (UserNotification n : notifs) {
+            if (Boolean.FALSE.equals(n.getIsRead())) {
+                n.setIsRead(true);
+                anyChanged = true;
+            }
+        }
+        if (anyChanged) userNotificationRepository.saveAll(notifs);
     }
 
     private ResearchOpportunityResponse toOpportunityResponse(ResearchOpportunity opp) {

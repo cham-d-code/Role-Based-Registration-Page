@@ -8,6 +8,8 @@ import { Badge } from './ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Separator } from './ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Textarea } from './ui/textarea';
 import ArchivedStaffDialog from './ArchivedStaffDialog';
 import StaffProfileDialog from './StaffProfileDialog';
 import SendNoticeDialog from './SendNoticeDialog';
@@ -47,6 +49,9 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
   const [selectedStaffJd, setSelectedStaffJd] = useState<any | null>(null);
   const [loadingStaffJd, setLoadingStaffJd] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
+  const [editSpecOpen, setEditSpecOpen] = useState(false);
+  const [specializationText, setSpecializationText] = useState('');
+  const [savingSpec, setSavingSpec] = useState(false);
   const [profileData, setProfileData] = useState({
     name: 'Loading...',
     email: '',
@@ -372,13 +377,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
         newPassword: updatedProfile.newPassword,
       });
 
-      let latest = next;
-      if (updatedProfile.specialization !== undefined &&
-          (updatedProfile.specialization || '') !== (profileData.specialization || '')) {
-        latest = await updateMySpecialization(updatedProfile.specialization || '');
-      }
-
-      const initials = (latest.fullName || '')
+      const initials = (next.fullName || '')
         .split(' ')
         .filter(Boolean)
         .map((n: string) => n[0].toUpperCase())
@@ -387,12 +386,11 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
 
       setProfileData({
         ...profileData,
-        name: latest.fullName,
-        email: latest.email,
-        phone: latest.mobile || '',
-        avatarUrl: latest.profileImageUrl || '',
+        name: next.fullName,
+        email: next.email,
+        phone: next.mobile || '',
+        avatarUrl: next.profileImageUrl || '',
         initials: initials || profileData.initials,
-        specialization: latest.specialization || '',
       });
 
       alert(updatedProfile.newPassword ? 'Profile & password updated successfully!' : 'Profile updated successfully!');
@@ -623,9 +621,6 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     { title: 'Upcoming Interview Rounds', value: String(dashboardStats.upcomingInterviewRounds), color: '#4db4ac' },
   ];
 
-  // Reminders list (unread notifications except research_new)
-  const [reminderNotifications, setReminderNotifications] = useState<UserNotificationDto[]>([]);
-
   useEffect(() => {
     if (activeMenu !== 'dashboard') return;
     let mounted = true;
@@ -635,22 +630,9 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
         .then(s => { if (mounted) setDashboardStats(s); })
         .catch(err => console.error('Failed to load dashboard stats', err));
     };
-    const loadReminders = () => {
-      getMyNotifications(true)
-        .then(notifs => {
-          if (!mounted) return;
-          const filtered = notifs.filter((n) => n.type !== 'research_new');
-          setReminderNotifications(filtered.slice(0, 12));
-        })
-        .catch(() => { if (mounted) setReminderNotifications([]); });
-    };
 
     loadStats();
-    loadReminders();
-    const interval = setInterval(() => {
-      loadStats();
-      loadReminders();
-    }, 10000);
+    const interval = setInterval(loadStats, 10000);
     return () => {
       mounted = false;
       clearInterval(interval);
@@ -1785,58 +1767,6 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
             </div>
           )}
 
-          {activeMenu === 'dashboard' && (
-            <>
-              {/* Reminders Section */}
-              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '18px' }}>
-                    Reminders
-                  </h3>
-                  {reminderNotifications.length > 0 && (
-                    <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '11px' }}>
-                      {reminderNotifications.length}
-                    </Badge>
-                  )}
-                </div>
-
-                {reminderNotifications.length === 0 ? (
-                  <p className="text-[#777777] py-4" style={{ fontSize: '13px' }}>
-                    No new reminders right now.
-                  </p>
-                ) : (
-                  <div className="space-y-1">
-                    {reminderNotifications.map((n) => (
-                      <div
-                        key={n.id}
-                        className="flex items-start gap-4 p-3 rounded-lg hover:bg-[#f9f9f9] transition-colors border-l-4 border-[#4db4ac]"
-                      >
-                        <div className="flex-shrink-0 mt-1">
-                          <div className="h-8 w-8 rounded-full bg-[#e6f7f6] flex items-center justify-center">
-                            <BellRing className="h-4 w-4 text-[#4db4ac]" />
-                          </div>
-                        </div>
-                        <div className="flex-1 pb-1">
-                          <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
-                            {n.title}
-                          </p>
-                          <p className="text-[#555555] whitespace-pre-line mt-1" style={{ fontSize: '13px' }}>
-                            {n.message}
-                          </p>
-                          {n.createdAt && (
-                            <p className="text-[#999999] mt-1" style={{ fontSize: '12px' }}>
-                              {new Date(n.createdAt).toLocaleString()}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Card>
-            </>
-          )}
-
           {/* Notifications View */}
           {activeMenu === 'notifications' && (
             <>
@@ -1961,19 +1891,30 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                   </div>
 
                   <div>
-                    <h3 className="text-[#222222] mb-4" style={{ fontWeight: 600, fontSize: '16px' }}>
-                      Specializations
-                    </h3>
-                    {profileData.specialization ? (
-                      <p
-                        className="text-[#222222] whitespace-pre-wrap leading-relaxed"
-                        style={{ fontSize: '14px' }}
+                    <div className="flex items-center justify-between gap-4 mb-3">
+                      <h3 className="text-[#222222]" style={{ fontWeight: 600, fontSize: '16px' }}>
+                        Specialization Areas
+                      </h3>
+                      <Button
+                        variant="outline"
+                        className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#e6f7f6]"
+                        onClick={() => {
+                          setSpecializationText(profileData.specialization || '');
+                          setEditSpecOpen(true);
+                        }}
                       >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit
+                      </Button>
+                    </div>
+
+                    {profileData.specialization ? (
+                      <p className="text-[#555555]" style={{ fontSize: '13px' }}>
                         {profileData.specialization}
                       </p>
                     ) : (
-                      <p className="text-[#999999] italic" style={{ fontSize: '13px' }}>
-                        No specializations added yet. Click "Edit Profile" to add your areas of expertise.
+                      <p className="text-[#999999]" style={{ fontSize: '13px' }}>
+                        —
                       </p>
                     )}
                   </div>
@@ -2009,7 +1950,6 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
         open={editProfileOpen}
         onOpenChange={setEditProfileOpen}
         currentProfile={profileData}
-        showSpecialization
         onSave={handleProfileSave}
       />
 
@@ -2056,6 +1996,62 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
           }
         }}
       />
+
+      <Dialog open={editSpecOpen} onOpenChange={setEditSpecOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-[#222222]" style={{ fontSize: '20px', fontWeight: 700 }}>
+              Edit Specialization Areas
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="text-[#555555]" style={{ fontSize: '13px' }}>
+              Add your areas separated by commas.
+            </div>
+
+            <Textarea
+              value={specializationText}
+              onChange={(e) => setSpecializationText(e.target.value)}
+              className="min-h-[120px] border-[#e0e0e0] focus:border-[#4db4ac]"
+              placeholder="e.g., Business Intelligence, Digital Transformation, Information Security, Software Engineering"
+            />
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSpecializationText(profileData.specialization || '');
+                  setEditSpecOpen(false);
+                }}
+                disabled={savingSpec}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
+                disabled={savingSpec}
+                onClick={async () => {
+                  setSavingSpec(true);
+                  try {
+                    const updated = await updateMySpecialization(specializationText);
+                    const nextSpec = (updated as any).specialization || '';
+                    setProfileData((prev) => ({ ...prev, specialization: nextSpec }));
+                    setSpecializationText(nextSpec);
+                    setEditSpecOpen(false);
+                  } catch (e: any) {
+                    alert(e?.message || 'Failed to update specialization');
+                  } finally {
+                    setSavingSpec(false);
+                  }
+                }}
+              >
+                {savingSpec ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

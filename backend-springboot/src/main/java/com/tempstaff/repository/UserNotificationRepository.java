@@ -31,6 +31,9 @@ public interface UserNotificationRepository extends JpaRepository<UserNotificati
     List<UserNotification> findByRecipientIdAndTypeAndRelatedOpportunityId(
             UUID recipientId, NotificationType type, UUID relatedOpportunityId);
 
+    List<UserNotification> findByRecipientIdAndTypeAndRelatedApplicationId(
+            UUID recipientId, NotificationType type, UUID relatedApplicationId);
+
     @Modifying
     @Query("update UserNotification n set n.isRead = true where n.recipientId = :recipientId and n.isRead = false")
     int markAllAsReadForRecipient(@Param("recipientId") UUID recipientId);

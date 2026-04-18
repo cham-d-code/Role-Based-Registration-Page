@@ -4,7 +4,6 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Separator } from './ui/separator';
-import { Textarea } from './ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Camera, Eye, EyeOff, Save, X } from 'lucide-react';
 import { Alert } from './ui/alert';
@@ -18,9 +17,7 @@ interface EditProfileDialogProps {
     phone: string;
     avatarUrl?: string;
     initials: string;
-    specialization?: string;
   };
-  showSpecialization?: boolean;
   onSave: (updatedProfile: {
     name: string;
     email: string;
@@ -28,7 +25,6 @@ interface EditProfileDialogProps {
     avatarUrl?: string;
     currentPassword?: string;
     newPassword?: string;
-    specialization?: string;
   }) => void;
 }
 
@@ -36,14 +32,12 @@ export default function EditProfileDialog({
   open, 
   onOpenChange, 
   currentProfile,
-  showSpecialization = false,
   onSave 
 }: EditProfileDialogProps) {
   const [name, setName] = useState(currentProfile.name);
   const [email, setEmail] = useState(currentProfile.email);
   const [phone, setPhone] = useState(currentProfile.phone);
   const [avatarUrl, setAvatarUrl] = useState(currentProfile.avatarUrl || '');
-  const [specialization, setSpecialization] = useState(currentProfile.specialization || '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -95,8 +89,7 @@ export default function EditProfileDialog({
       phone,
       avatarUrl: avatarUrl || undefined,
       currentPassword: currentPassword || undefined,
-      newPassword: newPassword || undefined,
-      specialization: showSpecialization ? specialization : undefined,
+      newPassword: newPassword || undefined
     });
 
     // Reset password fields
@@ -114,7 +107,6 @@ export default function EditProfileDialog({
     setPhone(currentProfile.phone);
     setAvatarUrl(currentProfile.avatarUrl || '');
     setAvatarPreview(currentProfile.avatarUrl || '');
-    setSpecialization(currentProfile.specialization || '');
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
@@ -222,24 +214,6 @@ export default function EditProfileDialog({
                   placeholder="+94 XX XXX XXXX"
                 />
               </div>
-
-              {showSpecialization && (
-                <div>
-                  <Label htmlFor="specialization" className="text-[#555555] mb-2 block" style={{ fontSize: '13px', fontWeight: 500 }}>
-                    Specializations
-                  </Label>
-                  <Textarea
-                    id="specialization"
-                    value={specialization}
-                    onChange={(e) => setSpecialization(e.target.value)}
-                    className="border-[#e0e0e0] focus:border-[#4db4ac] min-h-[100px]"
-                    placeholder="e.g. Operations Management, Supply Chain Management, Business Analytics"
-                  />
-                  <p className="text-[#999999] mt-2" style={{ fontSize: '12px' }}>
-                    Comma-separate multiple areas of expertise. Shown on your profile.
-                  </p>
-                </div>
-              )}
             </div>
           </div>
 
