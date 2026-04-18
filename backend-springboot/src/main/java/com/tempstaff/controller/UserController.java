@@ -472,20 +472,6 @@ public class UserController {
                 null
         );
 
-        // Also notify HODs (unless the HOD is the one assigning or is the mentor — they were already notified).
-        List<User> hods = userRepository.findByStatusAndRoleIn(
-                UserStatus.approved, List.of(UserRole.hod));
-        String hodTitle = "New mentee assigned";
-        String hodMsg = String.format(
-                "%s was assigned %s as a mentee by %s.",
-                mentor.getFullName(), staff.getFullName(), assigner.getFullName());
-        for (User hod : hods) {
-            if (hod.getId().equals(assigner.getId()) || hod.getId().equals(mentor.getId())) continue;
-            notificationService.notifyUser(
-                    hod.getId(), hodTitle, hodMsg,
-                    NotificationType.mentor_assigned, null, null);
-        }
-
         return ResponseEntity.ok(Map.of(
                 "success", true,
                 "message", "Mentor assigned",

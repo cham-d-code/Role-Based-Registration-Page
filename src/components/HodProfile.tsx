@@ -1108,6 +1108,9 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                 <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
                   My Mentees
                 </h3>
+                <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '12px' }}>
+                  {myMentees.length} Total Mentees
+                </Badge>
               </div>
               <Separator className="mb-4" />
 
@@ -1124,30 +1127,139 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                 </div>
               )}
 
-              <div className="space-y-3">
-                {myMentees.map((m) => (
-                  <Card key={m.id} className="border border-[#e0e0e0] rounded-lg p-4 bg-white">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 700 }}>{m.fullName}</div>
-                        <div className="text-[#555555]" style={{ fontSize: '13px' }}>{m.email}</div>
-                        {m.mobile && <div className="text-[#555555]" style={{ fontSize: '13px' }}>{m.mobile}</div>}
+              <div className="space-y-4">
+                {myMentees.map((m) => {
+                  const initials = (m.fullName || '')
+                    .split(' ')
+                    .filter(Boolean)
+                    .map((n) => n[0]?.toUpperCase())
+                    .slice(0, 2)
+                    .join('') || 'TS';
+
+                  const end = m.contractEndDate ? new Date(m.contractEndDate) : null;
+                  const endOk = end && !Number.isNaN(end.getTime());
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const daysLeft = endOk ? Math.ceil((end!.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+
+                  const tags = (m.preferredSubjects && m.preferredSubjects.length > 0)
+                    ? m.preferredSubjects
+                    : (m.specialization ? m.specialization.split(/\s*,\s*/).filter(Boolean) : []);
+
+                  return (
+                    <Card
+                      key={m.id}
+                      className="border border-[#e0e0e0] rounded-xl p-5 bg-white shadow-sm"
+                    >
+                      <div className="flex flex-col lg:flex-row lg:items-center gap-5">
+                        <div className="flex items-start gap-4 flex-1 min-w-0">
+                          <div className="h-12 w-12 rounded-full bg-[#4db4ac] text-white flex items-center justify-center font-bold">
+                            {initials}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[#222222] truncate" style={{ fontSize: '16px', fontWeight: 700 }}>
+                              {m.fullName}
+                            </div>
+
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-[#555555]" style={{ fontSize: '13px' }}>
+                              <span className="inline-flex items-center gap-2">
+                                <Mail className="h-4 w-4 text-[#4db4ac]" />
+                                <span className="truncate">{m.email}</span>
+                              </span>
+                              {m.mobile && (
+                                <span className="inline-flex items-center gap-2">
+                                  <Phone className="h-4 w-4 text-[#4db4ac]" />
+                                  <span>{m.mobile}</span>
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap gap-2 mt-3">
+                              {tags.length > 0 ? (
+                                tags.slice(0, 6).map((t, idx) => (
+                                  <Badge
+                                    key={`${m.id}-tag-${idx}`}
+                                    className="bg-[#e6f7f6] text-[#2a8f88] border border-[#bfeeee]"
+                                    style={{ fontSize: '11px' }}
+                                  >
+                                    {t}
+                                  </Badge>
+                                ))
+                              ) : (
+                                <span className="text-[#999999]" style={{ fontSize: '12px' }}>—</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="w-full lg:w-[280px] flex flex-col gap-3">
+                          <div className="rounded-xl border border-[#bfeeee] bg-[#e6f7f6] p-4">
+                            <div className="flex items-center gap-2 text-[#2a8f88]" style={{ fontSize: '12px', fontWeight: 700 }}>
+                              <Clock className="h-4 w-4" />
+                              Contract Expiry
+                            </div>
+
+                            <div className="mt-3 text-[#1b6f69]" style={{ fontSize: '28px', fontWeight: 800 }}>
+                              {endOk ? `${Math.max(daysLeft, 0)} days` : '—'}
+                            </div>
+
+                            <div className="mt-1 text-[#2a8f88]" style={{ fontSize: '12px' }}>
+                              {endOk ? `Expires: ${end!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : 'No contract end date'}
+                            </div>
+
+                            <div className="mt-3 w-full bg-white/70 rounded-full h-1.5">
+                              <div
+                                className="h-1.5 rounded-full bg-[#222222]"
+                                style={{ width: endOk ? `${Math.min(100, Math.max(2, (Math.max(daysLeft, 0) / 365) * 100))}%` : '0%' }}
+                              />
+                            </div>
+                          </div>
+
+                          <Button
+                            onClick={() => {
+                              setSelectedStaffForJd({ id: m.id, name: m.fullName });
+                              setSelectedStaffJd(null);
+                              setShowStaffJdPage(true);
+                              setLoadingStaffJd(true);
+                              getJobDescriptionForStaff(m.id)
+                                .then((dto) => {
+                                  try {
+                                    const parsed = dto?.content ? JSON.parse(dto.content) : null;
+                                    setSelectedStaffJd(parsed);
+                                  } catch (e) {
+                                    console.error('Failed to parse staff JD content', e);
+                                    setSelectedStaffJd(null);
+                                  }
+                                })
+                                .catch((e) => {
+                                  console.error('Failed to load staff JD', e);
+                                  setSelectedStaffJd(null);
+                                })
+                                .finally(() => setLoadingStaffJd(false));
+                            }}
+                            className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg w-full"
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Job Description
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedStaffForProfile({ id: m.id, name: m.fullName });
+                              setShowStaffProfileDialog(true);
+                            }}
+                            className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#e6f7f6] rounded-lg w-full"
+                          >
+                            <UserIcon className="h-4 w-4 mr-2" />
+                            View Profile
+                          </Button>
+                        </div>
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#4db4ac] hover:text-white rounded-lg"
-                        onClick={() => {
-                          setSelectedStaffForProfile({ id: m.id, name: m.fullName });
-                          setShowStaffProfileDialog(true);
-                        }}
-                      >
-                        <Eye className="h-3 w-3 mr-1" />
-                        View Profile
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
+                    </Card>
+                  );
+                })}
               </div>
             </Card>
           )}

@@ -1771,6 +1771,12 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                               Remaining contract days: {getRemainingContractDaysLabel(staff.contractEndDate)}
                             </span>
                           </div>
+                          <div className="flex items-center gap-2 text-[#555555]" style={{ fontSize: '13px' }}>
+                            <UserCheck className="h-4 w-4 text-[#4db4ac]" />
+                            <span>
+                              Mentor: {staff.mentor ? staff.mentor : '—'}
+                            </span>
+                          </div>
                         </div>
 
                         <div className="mb-3">
