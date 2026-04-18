@@ -21,6 +21,7 @@ import {
   Calendar,
   ClipboardList,
   Loader2,
+  Wifi,
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -175,15 +176,31 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
     });
   }, []);
 
-  // Poll backend for live session every 5s
+  // Poll backend for live session every 5s (mentor/HOD waiting room + marking)
   useEffect(() => {
     const check = async () => {
-      try { setLiveSession(await getActiveSession()); } catch { /* ignore */ }
+      try {
+        setLiveSession(await getActiveSession());
+      } catch {
+        /* ignore */
+      }
     };
     check();
     const interval = setInterval(check, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  // Refresh session immediately when opening Interview Portal (don’t wait for next poll)
+  useEffect(() => {
+    if (activeMenu !== 'interview') return;
+    void (async () => {
+      try {
+        setLiveSession(await getActiveSession());
+      } catch {
+        /* ignore */
+      }
+    })();
+  }, [activeMenu]);
 
   // Active: scheme + candidates for marking. Waiting: candidates only (read-only) until coordinator admits.
   useEffect(() => {
@@ -853,19 +870,6 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                 </h2>
               </div>
 
-              <Card className="mb-6 border border-[#4db4ac]/50 bg-[#f0fbfa] p-5 rounded-xl">
-                <h3 className="text-[#222222] font-semibold text-sm mb-2">Marking scheme (coordinator only)</h3>
-                <p className="text-[#555555] text-xs leading-relaxed mb-2">
-                  Senior staff do not create marking criteria here. The <strong>Temporary Staff Coordinator</strong> defines
-                  criteria and maximum marks under <strong>Manage Interviews</strong>: start the live session for an
-                  interview, then use <strong>Open Marking Panel</strong> to add criteria and save the scheme. After that,
-                  admitted panel members use <strong>Enter Marks</strong> in the banner above.
-                </p>
-                <p className="text-[#777777] text-xs">
-                  Upcoming interviews and candidates below are loaded from the server.
-                </p>
-              </Card>
-
               {/* Live Session Status Banner */}
               {liveSession && (
                 <Card className={`mb-6 rounded-xl p-4 border-0 ${liveSession.myStatus === 'active' ? 'bg-green-600' : liveSession.myStatus === 'waiting' ? 'bg-orange-500' : 'bg-red-500'}`}>
@@ -990,6 +994,8 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                   const candidates = portalCandidates[interview.id] ?? [];
                   const loadingC = loadingPortalCandidatesFor === interview.id;
                   const days = daysUntilInterviewDate(interview.date);
+                  const sessionLiveHere =
+                    !!liveSession && String(liveSession.interviewId) === String(interview.id);
 
                   return (
                     <Card key={interview.id} className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
@@ -997,11 +1003,18 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                         <div className="flex items-center gap-2">
                           <Calendar className="h-6 w-6 text-[#4db4ac]" />
                           <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
-                            {interview.interviewNumber} — Upcoming Interview
+                            {interview.interviewNumber} — {sessionLiveHere ? 'Live Interview' : 'Upcoming Interview'}
                           </h3>
-                          <Badge className="bg-blue-100 text-blue-700 border-blue-300 border" style={{ fontSize: '12px' }}>
-                            UPCOMING
-                          </Badge>
+                          {sessionLiveHere ? (
+                            <Badge className="bg-green-600 text-white border-0 flex items-center gap-1" style={{ fontSize: '12px' }}>
+                              <Wifi className="h-3 w-3" />
+                              LIVE
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-blue-100 text-blue-700 border-blue-300 border" style={{ fontSize: '12px' }}>
+                              UPCOMING
+                            </Badge>
+                          )}
                         </div>
                       </div>
                       <Separator className="mb-4" />
@@ -1025,7 +1038,11 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                               </p>
                             </div>
                             <p className="text-[#555555] max-w-md text-right" style={{ fontSize: '12px' }}>
-                              Only the coordinator starts the live session. Your status appears in the banner above when a session is running.
+                              {sessionLiveHere
+                                ? liveSession?.myStatus === 'active'
+                                  ? 'You are admitted to this live session. Use Enter Marks in the banner when the scheme is ready.'
+                                  : 'Session is live — waiting room until the coordinator admits you. See the banner above.'
+                                : 'When the coordinator starts this interview, it will show as LIVE here and in the banner above.'}
                             </p>
                           </div>
                         </Card>
@@ -1043,9 +1060,27 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                             <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
                               Interview Status
                             </p>
-                            <Badge className="bg-blue-100 text-blue-700 border-blue-300 border" style={{ fontSize: '12px' }}>
-                              UPCOMING
-                            </Badge>
+                            {sessionLiveHere ? (
+                              <div className="space-y-1">
+                                <Badge className="bg-green-600 text-white border-0 flex items-center gap-1 w-fit" style={{ fontSize: '12px' }}>
+                                  <Wifi className="h-3 w-3" />
+                                  LIVE
+                                </Badge>
+                                {liveSession && (
+                                  <p className="text-[#555555] text-xs">
+                                    {liveSession.myStatus === 'active'
+                                      ? 'Admitted — you can mark'
+                                      : liveSession.myStatus === 'waiting'
+                                        ? 'Waiting room'
+                                        : 'Removed'}
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <Badge className="bg-blue-100 text-blue-700 border-blue-300 border" style={{ fontSize: '12px' }}>
+                                UPCOMING
+                              </Badge>
+                            )}
                           </Card>
                           <Card className="border border-[#e0e0e0] rounded-lg p-4 bg-[#f9f9f9]">
                             <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
