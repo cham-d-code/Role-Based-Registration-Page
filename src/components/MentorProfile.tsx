@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -32,7 +32,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Progress } from './ui/progress';
 import StructuredJobDescriptionPage from './StructuredJobDescriptionPage';
 import DashboardIdentityCard from './DashboardIdentityCard';
-import UpcomingInterviewDetailsDialog from './UpcomingInterviewDetailsDialog';
 import InterviewMarkingPage from './InterviewMarkingPage';
 import ResearchDetailsDialog from './ResearchDetailsDialog';
 import AddResearchDialog from './AddResearchDialog';
@@ -41,7 +40,7 @@ import EditProfileDialog from './EditProfileDialog';
 import StaffProfileDialog from './StaffProfileDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Textarea } from './ui/textarea';
-import { createResearchOpportunity, deleteResearchOpportunity, getActiveSession, getInterviews, getInterviewCandidates, getJobDescriptionForStaff, getMarkingScheme, getMentorDashboardStats, getMyMentees, getMyNotifications, getMyResearchOpportunities, getUnreadNotificationCount, markAllNotificationsRead, MarkingSchemeData, MentorDashboardStats, ResearchOpportunityDto, SessionState, updateMyProfile, updateResearchOpportunity, UserNotificationDto, UserProfile } from '../services/api';
+import { createResearchOpportunity, deleteResearchOpportunity, getActiveSession, getInterviews, getInterviewCandidates, getJobDescriptionForStaff, getMarkingScheme, getMentorDashboardStats, getMyMentees, getMyNotifications, getMyResearchOpportunities, getUnreadNotificationCount, markAllNotificationsRead, MarkingSchemeData, MentorDashboardStats, ResearchOpportunityDto, SessionState, updateMyProfile, updateResearchOpportunity, UserNotificationDto, UserProfile, type InterviewData, type CandidateData } from '../services/api';
 
 interface MentorProfileProps {
   onLogout?: () => void;
@@ -85,8 +84,6 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
   const [selectedMenteeJd, setSelectedMenteeJd] = useState<any | null>(null);
   const [showMenteeJdPage, setShowMenteeJdPage] = useState(false);
   const [loadingMenteeJd, setLoadingMenteeJd] = useState(false);
-  const [showInterviewDialog, setShowInterviewDialog] = useState(false);
-  const [selectedInterview, setSelectedInterview] = useState<any>(null);
   const [currentPage, setCurrentPage] = useState<'main' | 'interviewMarking'>('main');
   const [showResearchDialog, setShowResearchDialog] = useState(false);
   const [selectedResearch, setSelectedResearch] = useState<any>(null);
@@ -132,6 +129,13 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
   const [liveCandidates, setLiveCandidates] = useState<{ id: string; name: string; email: string; phone: string }[]>([]);
   const [waitingRoomCandidates, setWaitingRoomCandidates] = useState<{ id: string; name: string; email: string; phone: string }[]>([]);
   const [loadingWaitingCandidates, setLoadingWaitingCandidates] = useState(false);
+
+  const [portalInterviews, setPortalInterviews] = useState<InterviewData[]>([]);
+  const [loadingPortalInterviews, setLoadingPortalInterviews] = useState(false);
+  const [portalCandidates, setPortalCandidates] = useState<Record<string, CandidateData[]>>({});
+  const [loadingPortalCandidatesFor, setLoadingPortalCandidatesFor] = useState<string | null>(null);
+  const portalCandidatesRef = useRef<Record<string, CandidateData[]>>({});
+  portalCandidatesRef.current = portalCandidates;
 
   // Fetch profile on mount
   useEffect(() => {
@@ -327,47 +331,6 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
       .finally(() => setLoadingMentees(false));
   }, [activeMenu]);
 
-  const upcomingInterviews = [
-    {
-      id: 'INT001',
-      interviewNumber: 'Interview #2025-04',
-      date: '2025-10-25',
-      candidateCount: 8,
-      status: 'upcoming' as const,
-      candidates: [
-        { id: 'CAND001', name: 'K.M. Silva', email: 'k.silva@example.com', phone: '+94 77 123 4567' },
-        { id: 'CAND002', name: 'A.B. Perera', email: 'a.perera@example.com', phone: '+94 76 234 5678' },
-        { id: 'CAND003', name: 'N.D. Fernando', email: 'n.fernando@example.com', phone: '+94 75 345 6789' },
-        { id: 'CAND004', name: 'S.R. Wijesinghe', email: 's.wijesinghe@example.com', phone: '+94 71 456 7890' },
-        { id: 'CAND005', name: 'P.K. Jayawardena', email: 'p.jayawardena@example.com', phone: '+94 77 567 8901' },
-        { id: 'CAND006', name: 'M.A. Rajapaksa', email: 'm.rajapaksa@example.com', phone: '+94 76 678 9012' },
-        { id: 'CAND007', name: 'R.T. Dissanayake', email: 'r.dissanayake@example.com', phone: '+94 75 789 0123' },
-        { id: 'CAND008', name: 'L.K. Gunasekara', email: 'l.gunasekara@example.com', phone: '+94 71 890 1234' },
-      ]
-    },
-    {
-      id: 'INT002',
-      interviewNumber: 'Interview #2025-05',
-      date: '2025-11-05',
-      candidateCount: 12,
-      status: 'upcoming' as const,
-      candidates: [
-        { id: 'CAND009', name: 'T.M. Karunaratne', email: 't.karunaratne@example.com', phone: '+94 77 901 2345' },
-        { id: 'CAND010', name: 'D.S. Wickramasinghe', email: 'd.wickramasinghe@example.com', phone: '+94 76 012 3456' },
-        { id: 'CAND011', name: 'H.P. Amarasinghe', email: 'h.amarasinghe@example.com', phone: '+94 75 123 4567' },
-        { id: 'CAND012', name: 'C.L. Senanayake', email: 'c.senanayake@example.com', phone: '+94 71 234 5678' },
-        { id: 'CAND013', name: 'V.N. Herath', email: 'v.herath@example.com', phone: '+94 77 345 6789' },
-        { id: 'CAND014', name: 'G.K. Mendis', email: 'g.mendis@example.com', phone: '+94 76 456 7890' },
-        { id: 'CAND015', name: 'B.A. Samaraweera', email: 'b.samaraweera@example.com', phone: '+94 75 567 8901' },
-        { id: 'CAND016', name: 'I.R. Perera', email: 'i.perera@example.com', phone: '+94 71 678 9012' },
-        { id: 'CAND017', name: 'J.P. Bandara', email: 'j.bandara@example.com', phone: '+94 77 789 0123' },
-        { id: 'CAND018', name: 'K.S. De Silva', email: 'k.desilva@example.com', phone: '+94 76 890 1234' },
-        { id: 'CAND019', name: 'O.M. Kumara', email: 'o.kumara@example.com', phone: '+94 75 901 2345' },
-        { id: 'CAND020', name: 'W.D. Ranasinghe', email: 'w.ranasinghe@example.com', phone: '+94 71 012 3456' },
-      ]
-    },
-  ];
-
   useEffect(() => {
     if (activeMenu !== 'research') return;
     setLoadingResearch(true);
@@ -419,6 +382,46 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
     // Backend sends LocalDate like "2026-10-14". Parsing with new Date(string) can shift by timezone.
     const [y, m, d] = isoDate.split('-').map(Number);
     return new Date(y, (m || 1) - 1, d || 1);
+  };
+
+  const loadPortalCandidates = useCallback(async (interviewId: string) => {
+    if (portalCandidatesRef.current[interviewId]) return;
+    setLoadingPortalCandidatesFor(interviewId);
+    try {
+      const rows = await getInterviewCandidates(interviewId);
+      setPortalCandidates((prev) => ({ ...prev, [interviewId]: rows }));
+    } catch (e) {
+      console.error('Failed to load interview candidates', e);
+      setPortalCandidates((prev) => ({ ...prev, [interviewId]: [] }));
+    } finally {
+      setLoadingPortalCandidatesFor(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeMenu !== 'interview') return;
+    setLoadingPortalInterviews(true);
+    getInterviews()
+      .then((all) => {
+        const upcoming = all.filter((i) => i.status === 'upcoming');
+        setPortalInterviews(upcoming);
+        upcoming.forEach((i) => {
+          void loadPortalCandidates(i.id);
+        });
+      })
+      .catch((e) => {
+        console.error('Failed to load interviews', e);
+        setPortalInterviews([]);
+      })
+      .finally(() => setLoadingPortalInterviews(false));
+  }, [activeMenu, loadPortalCandidates]);
+
+  const daysUntilInterviewDate = (dateStr: string) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const target = parseLocalDate(dateStr);
+    target.setHours(0, 0, 0, 0);
+    return Math.ceil((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
   };
 
   const calculateDaysUntilExpiry = (expiryDate: string) => {
@@ -844,6 +847,19 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                 </h2>
               </div>
 
+              <Card className="mb-6 border border-[#4db4ac]/50 bg-[#f0fbfa] p-5 rounded-xl">
+                <h3 className="text-[#222222] font-semibold text-sm mb-2">Marking scheme (coordinator only)</h3>
+                <p className="text-[#555555] text-xs leading-relaxed mb-2">
+                  Senior staff do not create marking criteria here. The <strong>Temporary Staff Coordinator</strong> defines
+                  criteria and maximum marks under <strong>Manage Interviews</strong>: start the live session for an
+                  interview, then use <strong>Open Marking Panel</strong> to add criteria and save the scheme. After that,
+                  admitted panel members use <strong>Enter Marks</strong> in the banner above.
+                </p>
+                <p className="text-[#777777] text-xs">
+                  Upcoming interviews and candidates below are loaded from the server.
+                </p>
+              </Card>
+
               {/* Live Session Status Banner */}
               {liveSession && (
                 <Card className={`mb-6 rounded-xl p-4 border-0 ${liveSession.myStatus === 'active' ? 'bg-green-600' : liveSession.myStatus === 'waiting' ? 'bg-orange-500' : 'bg-red-500'}`}>
@@ -947,144 +963,180 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                 </Card>
               )}
 
-              {/* Upcoming Interviews Section - Show Details Inline */}
-              {upcomingInterviews.map((interview) => (
-                <Card key={interview.id} className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-6 w-6 text-[#4db4ac]" />
-                      <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
-                        {interview.interviewNumber} - Upcoming Interview
-                      </h3>
-                      <Badge className="bg-blue-100 text-blue-700 border-blue-300 border" style={{ fontSize: '12px' }}>
-                        UPCOMING
-                      </Badge>
-                    </div>
-                  </div>
-                  <Separator className="mb-4" />
+              {loadingPortalInterviews && (
+                <div className="flex items-center justify-center py-12 gap-2 text-[#4db4ac]">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                  <span style={{ fontSize: '14px' }}>Loading interviews…</span>
+                </div>
+              )}
 
-                  <div className="space-y-4">
-                    {/* Interview Date Management */}
-                    <Card className="border-2 border-[#4db4ac] rounded-lg p-4 bg-[#e6f7f6]">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Calendar className="h-5 w-5 text-[#4db4ac]" />
-                            <p className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 600 }}>
-                              Interview Date
+              {!loadingPortalInterviews && portalInterviews.length === 0 && (
+                <Card className="p-8 text-center border border-[#e0e0e0] rounded-xl">
+                  <Calendar className="h-10 w-10 text-[#d0d0d0] mx-auto mb-2" />
+                  <p className="text-[#999999]" style={{ fontSize: '14px' }}>
+                    No upcoming interviews from the server yet.
+                  </p>
+                </Card>
+              )}
+
+              {!loadingPortalInterviews &&
+                portalInterviews.map((interview) => {
+                  const candidates = portalCandidates[interview.id] ?? [];
+                  const loadingC = loadingPortalCandidatesFor === interview.id;
+                  const days = daysUntilInterviewDate(interview.date);
+
+                  return (
+                    <Card key={interview.id} className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-6 w-6 text-[#4db4ac]" />
+                          <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
+                            {interview.interviewNumber} — Upcoming Interview
+                          </h3>
+                          <Badge className="bg-blue-100 text-blue-700 border-blue-300 border" style={{ fontSize: '12px' }}>
+                            UPCOMING
+                          </Badge>
+                        </div>
+                      </div>
+                      <Separator className="mb-4" />
+
+                      <div className="space-y-4">
+                        <Card className="border-2 border-[#4db4ac] rounded-lg p-4 bg-[#e6f7f6]">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <Calendar className="h-5 w-5 text-[#4db4ac]" />
+                                <p className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 600 }}>
+                                  Interview Date
+                                </p>
+                              </div>
+                              <p className="text-[#222222]" style={{ fontSize: '18px', fontWeight: 600 }}>
+                                {parseLocalDate(interview.date).toLocaleDateString('en-US', {
+                                  month: 'long',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })}
+                              </p>
+                            </div>
+                            <p className="text-[#555555] max-w-md text-right" style={{ fontSize: '12px' }}>
+                              Only the coordinator starts the live session. Your status appears in the banner above when a session is running.
                             </p>
                           </div>
+                        </Card>
 
-                          <div className="flex items-center gap-3">
-                            <p className="text-[#222222]" style={{ fontSize: '18px', fontWeight: 600 }}>
-                              {new Date(interview.date).toLocaleDateString('en-US', {
-                                month: 'long',
-                                day: 'numeric',
-                                year: 'numeric'
-                              })}
+                        <div className="grid grid-cols-3 gap-4">
+                          <Card className="border border-[#e0e0e0] rounded-lg p-4 bg-[#f9f9f9]">
+                            <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
+                              Total Candidates
                             </p>
-                          </div>
+                            <p className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
+                              {interview.candidateCount}
+                            </p>
+                          </Card>
+                          <Card className="border border-[#e0e0e0] rounded-lg p-4 bg-[#f9f9f9]">
+                            <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
+                              Interview Status
+                            </p>
+                            <Badge className="bg-blue-100 text-blue-700 border-blue-300 border" style={{ fontSize: '12px' }}>
+                              UPCOMING
+                            </Badge>
+                          </Card>
+                          <Card className="border border-[#e0e0e0] rounded-lg p-4 bg-[#f9f9f9]">
+                            <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
+                              Days Until Interview
+                            </p>
+                            <p className={`${days < 7 ? 'text-red-500' : 'text-[#4db4ac]'}`} style={{ fontSize: '24px', fontWeight: 700 }}>
+                              {days > 0 ? days : 0}
+                            </p>
+                          </Card>
                         </div>
 
-                        <p className="text-[#555555] max-w-md text-right" style={{ fontSize: '12px' }}>
-                          Live interviews are started by the Temporary Staff Coordinator only. When a session runs, your status appears in the banner above.
-                        </p>
+                        <div>
+                          <div className="flex items-center gap-2 mb-3">
+                            <Users className="h-5 w-5 text-[#4db4ac]" />
+                            <h4 className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 600 }}>
+                              Candidates for This Interview
+                            </h4>
+                            <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '11px' }}>
+                              {candidates.length}
+                            </Badge>
+                          </div>
+
+                          {loadingC ? (
+                            <div className="flex items-center gap-2 py-8 justify-center text-[#4db4ac]">
+                              <Loader2 className="h-5 w-5 animate-spin" />
+                              <span style={{ fontSize: '13px' }}>Loading candidates…</span>
+                            </div>
+                          ) : candidates.length === 0 ? (
+                            <div className="text-center py-8 border border-[#e0e0e0] rounded-lg">
+                              <Users className="h-8 w-8 text-[#d0d0d0] mx-auto mb-2" />
+                              <p className="text-[#999999]" style={{ fontSize: '13px' }}>
+                                No candidates for this interview yet.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="border border-[#e0e0e0] rounded-lg overflow-hidden">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow className="bg-[#f9f9f9]">
+                                    <TableHead className="text-[#222222] py-2" style={{ fontWeight: 600 }}>#</TableHead>
+                                    <TableHead className="text-[#222222] py-2" style={{ fontWeight: 600 }}>Candidate ID</TableHead>
+                                    <TableHead className="text-[#222222] py-2" style={{ fontWeight: 600 }}>Name</TableHead>
+                                    <TableHead className="text-[#222222] py-2" style={{ fontWeight: 600 }}>Email</TableHead>
+                                    <TableHead className="text-[#222222] py-2" style={{ fontWeight: 600 }}>Phone</TableHead>
+                                    <TableHead className="text-[#222222] py-2" style={{ fontWeight: 600 }}>CV</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {candidates.map((candidate, index) => (
+                                    <TableRow key={candidate.id}>
+                                      <TableCell className="text-[#555555] py-2" style={{ fontSize: '13px' }}>
+                                        {index + 1}
+                                      </TableCell>
+                                      <TableCell className="text-[#222222] py-2" style={{ fontSize: '13px', fontWeight: 500 }}>
+                                        {candidate.candidateId || candidate.id || '—'}
+                                      </TableCell>
+                                      <TableCell className="text-[#222222] py-2" style={{ fontSize: '13px', fontWeight: 600 }}>
+                                        {candidate.name}
+                                      </TableCell>
+                                      <TableCell className="py-2">
+                                        <div className="flex items-center gap-1 text-[#555555]" style={{ fontSize: '12px' }}>
+                                          <Mail className="h-3 w-3 text-[#4db4ac]" />
+                                          {candidate.email}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="py-2">
+                                        <div className="flex items-center gap-1 text-[#555555]" style={{ fontSize: '12px' }}>
+                                          <Phone className="h-3 w-3 text-[#4db4ac]" />
+                                          {candidate.phone}
+                                        </div>
+                                      </TableCell>
+                                      <TableCell className="py-2">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#e6f7f6]"
+                                          disabled={!candidate.cvUrl}
+                                          onClick={() => {
+                                            if (candidate.cvUrl) window.open(candidate.cvUrl, '_blank', 'noopener,noreferrer');
+                                            else alert('No CV link for this candidate.');
+                                          }}
+                                        >
+                                          <FileText className="h-3 w-3 mr-1" />
+                                          View CV
+                                        </Button>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </Card>
-
-                    {/* Candidate Statistics */}
-                    <div className="grid grid-cols-3 gap-4">
-                      <Card className="border border-[#e0e0e0] rounded-lg p-4 bg-[#f9f9f9]">
-                        <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
-                          Total Candidates
-                        </p>
-                        <p className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
-                          {interview.candidates.length}
-                        </p>
-                      </Card>
-                      <Card className="border border-[#e0e0e0] rounded-lg p-4 bg-[#f9f9f9]">
-                        <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
-                          Interview Status
-                        </p>
-                        <Badge className="bg-blue-100 text-blue-700 border-blue-300 border" style={{ fontSize: '12px' }}>
-                          UPCOMING
-                        </Badge>
-                      </Card>
-                      <Card className="border border-[#e0e0e0] rounded-lg p-4 bg-[#f9f9f9]">
-                        <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
-                          Days Until Interview
-                        </p>
-                        <p className="text-[#4db4ac]" style={{ fontSize: '24px', fontWeight: 700 }}>
-                          {Math.abs(Math.ceil((new Date(interview.date).getTime() - new Date('2025-10-20').getTime()) / (1000 * 60 * 60 * 24)))}
-                        </p>
-                      </Card>
-                    </div>
-
-                    {/* Candidates List */}
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <Users className="h-5 w-5 text-[#4db4ac]" />
-                        <h4 className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 600 }}>
-                          Candidates for This Interview
-                        </h4>
-                      </div>
-
-                      <div className="border border-[#e0e0e0] rounded-lg overflow-hidden">
-                        <Table>
-                          <TableHeader>
-                            <TableRow className="bg-[#f9f9f9]">
-                              <TableHead className="text-[#222222] py-2" style={{ fontWeight: 600 }}>#</TableHead>
-                              <TableHead className="text-[#222222] py-2" style={{ fontWeight: 600 }}>Candidate ID</TableHead>
-                              <TableHead className="text-[#222222] py-2" style={{ fontWeight: 600 }}>Name</TableHead>
-                              <TableHead className="text-[#222222] py-2" style={{ fontWeight: 600 }}>Email</TableHead>
-                              <TableHead className="text-[#222222] py-2" style={{ fontWeight: 600 }}>Phone</TableHead>
-                              <TableHead className="text-[#222222] py-2" style={{ fontWeight: 600 }}>CV</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {interview.candidates.map((candidate, index) => (
-                              <TableRow key={candidate.id}>
-                                <TableCell className="text-[#555555] py-2" style={{ fontSize: '13px' }}>
-                                  {index + 1}
-                                </TableCell>
-                                <TableCell className="text-[#222222] py-2" style={{ fontSize: '13px', fontWeight: 500 }}>
-                                  {candidate.id}
-                                </TableCell>
-                                <TableCell className="text-[#222222] py-2" style={{ fontSize: '13px', fontWeight: 600 }}>
-                                  {candidate.name}
-                                </TableCell>
-                                <TableCell className="py-2">
-                                  <div className="flex items-center gap-1 text-[#555555]" style={{ fontSize: '12px' }}>
-                                    <Mail className="h-3 w-3 text-[#4db4ac]" />
-                                    {candidate.email}
-                                  </div>
-                                </TableCell>
-                                <TableCell className="py-2">
-                                  <div className="flex items-center gap-1 text-[#555555]" style={{ fontSize: '12px' }}>
-                                    <Phone className="h-3 w-3 text-[#4db4ac]" />
-                                    {candidate.phone}
-                                  </div>
-                                </TableCell>
-                                <TableCell className="py-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#e6f7f6]"
-                                    onClick={() => alert(`Viewing CV for ${candidate.name}`)}
-                                  >
-                                    <FileText className="h-3 w-3 mr-1" />
-                                    View CV
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              ))}
+                  );
+                })}
             </>
           )}
 
@@ -1345,24 +1397,6 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
       </div>
 
       {/* Dialogs */}
-
-      {selectedInterview && (
-        <UpcomingInterviewDetailsDialog
-          open={showInterviewDialog}
-          onOpenChange={setShowInterviewDialog}
-          interviewNumber={selectedInterview.interviewNumber}
-          interviewDate={selectedInterview.date}
-          candidates={selectedInterview.candidates}
-          onUpdateDate={(newDate: string) => {
-            // Update interview date logic
-            console.log('Updating interview date to:', newDate);
-          }}
-          onStartInterview={() => {
-            // Start interview logic
-            console.log('Starting interview:', selectedInterview.interviewNumber);
-          }}
-        />
-      )}
 
       {selectedResearch && (
         <ResearchDetailsDialog

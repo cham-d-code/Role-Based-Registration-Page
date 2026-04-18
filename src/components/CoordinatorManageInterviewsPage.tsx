@@ -495,8 +495,11 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
                       </Card>
                     </div>
 
-                    {/* Marking Button */}
-                    <div className="flex justify-end">
+                    {/* Marking: coordinator defines criteria + max marks here; panel uses same scheme to enter marks */}
+                    <div className="flex flex-col items-end gap-2">
+                      <p className="text-[#555555] text-right max-w-lg" style={{ fontSize: '12px' }}>
+                        Open the marking panel to <strong>create or update</strong> criteria and full marks for this interview, then save. HOD and senior staff cannot edit the scheme.
+                      </p>
                       <Button
                         className="bg-black hover:bg-gray-800 text-white"
                         onClick={() => handleOpenMarkingPanel(interview)}
