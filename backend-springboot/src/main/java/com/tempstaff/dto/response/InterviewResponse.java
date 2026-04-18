@@ -22,4 +22,6 @@ public class InterviewResponse {
     private String status;           // "upcoming" or "ended"
     private int candidateCount;
     private LocalDateTime createdAt;
+    /** Present when coordinator released marking results to HOD (ended interviews only). */
+    private LocalDateTime reportSentToHodAt;
 }

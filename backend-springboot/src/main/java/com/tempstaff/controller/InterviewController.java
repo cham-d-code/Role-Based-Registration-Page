@@ -2,13 +2,19 @@ package com.tempstaff.controller;
 
 import com.tempstaff.dto.response.CandidateResponse;
 import com.tempstaff.dto.response.InterviewResponse;
+import com.tempstaff.entity.User;
+import com.tempstaff.repository.UserRepository;
 import com.tempstaff.service.InterviewService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
 import java.time.LocalDate;
@@ -22,6 +28,7 @@ import java.util.UUID;
 public class InterviewController {
 
     private final InterviewService interviewService;
+    private final UserRepository userRepository;
 
     /**
      * GET /api/interviews
@@ -79,5 +86,21 @@ public class InterviewController {
 
         LocalDate newDate = LocalDate.parse(body.get("date"));
         return ResponseEntity.ok(interviewService.updateInterviewDate(id, newDate));
+    }
+
+    /**
+     * Coordinator releases averaged marking results to HOD after reviewing (ended interview only).
+     */
+    @PutMapping("/{id}/report/release")
+    public ResponseEntity<InterviewResponse> releaseReportToHod(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        User caller = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
+        try {
+            return ResponseEntity.ok(interviewService.releaseInterviewReportToHod(id, caller.getId()));
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
     }
 }

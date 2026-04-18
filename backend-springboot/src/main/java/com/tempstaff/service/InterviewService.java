@@ -22,6 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -42,15 +43,59 @@ public class InterviewService {
      */
     public List<InterviewResponse> getAllInterviews() {
         return interviewRepository.findAllByOrderByDateDesc().stream()
-                .map(interview -> InterviewResponse.builder()
-                        .id(interview.getId().toString())
-                        .interviewNumber(interview.getInterviewNumber())
-                        .date(interview.getDate())
-                        .status(interview.getStatus().name())
-                        .candidateCount((int) candidateRepository.countByInterviewId(interview.getId()))
-                        .createdAt(interview.getCreatedAt())
-                        .build())
+                .map(this::toInterviewResponse)
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * Coordinator releases the averaged marking report so HODs can open it (ended interviews only).
+     */
+    @Transactional
+    public InterviewResponse releaseInterviewReportToHod(UUID interviewId, UUID coordinatorId) {
+        User coordinator = userRepository.findById(coordinatorId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        if (coordinator.getRole() != UserRole.coordinator) {
+            throw new RuntimeException("Only the Temporary Staff Coordinator can send results to the HOD.");
+        }
+        Interview interview = interviewRepository.findById(interviewId)
+                .orElseThrow(() -> new RuntimeException("Interview not found"));
+        if (interview.getStatus() != InterviewStatus.ended) {
+            throw new RuntimeException("Stop the interview session first before releasing the report.");
+        }
+        if (interview.getReportSentToHodAt() != null) {
+            return toInterviewResponse(interview);
+        }
+        interview.setReportSentToHodAt(LocalDateTime.now());
+        interviewRepository.save(interview);
+
+        List<User> hods = userRepository.findByStatusAndRoleIn(UserStatus.approved, List.of(UserRole.hod));
+        String title = "Interview marking report ready for review";
+        String msg = String.format(
+                "%s released the averaged results for %s. Open Manage Interviews to review.",
+                coordinator.getFullName(),
+                interview.getInterviewNumber());
+        for (User hod : hods) {
+            notificationService.notifyUser(
+                    hod.getId(),
+                    title,
+                    msg,
+                    NotificationType.interview_report_for_hod,
+                    null,
+                    null);
+        }
+        return toInterviewResponse(interview);
+    }
+
+    private InterviewResponse toInterviewResponse(Interview interview) {
+        return InterviewResponse.builder()
+                .id(interview.getId().toString())
+                .interviewNumber(interview.getInterviewNumber())
+                .date(interview.getDate())
+                .status(interview.getStatus().name())
+                .candidateCount((int) candidateRepository.countByInterviewId(interview.getId()))
+                .createdAt(interview.getCreatedAt())
+                .reportSentToHodAt(interview.getReportSentToHodAt())
+                .build();
     }
 
     /**
@@ -99,14 +144,7 @@ public class InterviewService {
 
         notifyPanelInterviewScheduled(interview, "New interview scheduled");
 
-        return InterviewResponse.builder()
-                .id(interview.getId().toString())
-                .interviewNumber(interview.getInterviewNumber())
-                .date(interview.getDate())
-                .status(interview.getStatus().name())
-                .candidateCount(candidates.size())
-                .createdAt(interview.getCreatedAt())
-                .build();
+        return toInterviewResponse(interview);
     }
 
     /**
@@ -121,14 +159,7 @@ public class InterviewService {
 
         notifyPanelInterviewScheduled(interview, "Interview rescheduled");
 
-        return InterviewResponse.builder()
-                .id(interview.getId().toString())
-                .interviewNumber(interview.getInterviewNumber())
-                .date(interview.getDate())
-                .status(interview.getStatus().name())
-                .candidateCount((int) candidateRepository.countByInterviewId(interview.getId()))
-                .createdAt(interview.getCreatedAt())
-                .build();
+        return toInterviewResponse(interview);
     }
 
     // ──────────────────────────────────────────────────

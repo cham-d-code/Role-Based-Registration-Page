@@ -20,6 +20,8 @@ public enum NotificationType {
     leave_request,
     interview_started,
     interview_ended,
+    /** Coordinator released averaged interview marks for HOD review. */
+    interview_report_for_hod,
     /** Panel notified when an interview round is created or its date changes */
     interview_scheduled,
     interview_upcoming,

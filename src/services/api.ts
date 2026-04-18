@@ -681,6 +681,8 @@ export interface InterviewData {
     status: string;     // "upcoming" | "ended"
     candidateCount: number;
     createdAt?: string;
+    /** Set when coordinator released averaged results to HOD (ended interviews). */
+    reportSentToHodAt?: string | null;
 }
 
 export interface CandidateData {
@@ -869,10 +871,13 @@ export interface MarkerResult {
 
 export interface CandidateReport {
     candidateId: string;
+    displayCandidateId?: string | null;
     candidateName: string;
     candidateEmail: string;
     markerResults: MarkerResult[];
     averageTotal: number;
+    averageMarksByCriterion?: Record<string, number>;
+    markersIncludedCount?: number;
     maxTotal: number;
 }
 
@@ -885,9 +890,14 @@ export interface InterviewReport {
     candidates: CandidateReport[];
 }
 
-/** HOD fetches full interview report */
+/** Coordinator (always for ended) or HOD (after coordinator release) — averaged marking report */
 export async function getInterviewReport(interviewId: string): Promise<InterviewReport> {
     return fetchWithAuth(`${API_BASE_URL}/interviews/${interviewId}/report`);
+}
+
+/** Coordinator sends averaged results to HOD after reviewing (ended interview only). */
+export async function releaseInterviewReportToHod(interviewId: string): Promise<InterviewData> {
+    return fetchWithAuth(`${API_BASE_URL}/interviews/${interviewId}/report/release`, { method: 'PUT' });
 }
 
 // ─── Salary Management ────────────────────────────────────────────────────────

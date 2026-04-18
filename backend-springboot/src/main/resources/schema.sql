@@ -143,6 +143,11 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;;
 
 DO $$ BEGIN
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'interview_report_for_hod';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;;
+
+DO $$ BEGIN
     ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'interview_upcoming';
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;;
@@ -266,11 +271,14 @@ CREATE TABLE IF NOT EXISTS interviews (
     approved_by UUID REFERENCES users(id) ON DELETE SET NULL,
     approval_status request_status DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    report_sent_to_hod_at TIMESTAMP
 );;
 
 CREATE INDEX IF NOT EXISTS idx_interviews_status ON interviews(status);;
 CREATE INDEX IF NOT EXISTS idx_interviews_date ON interviews(scheduled_date);;
+
+ALTER TABLE interviews ADD COLUMN IF NOT EXISTS report_sent_to_hod_at TIMESTAMP;;
 
 CREATE TABLE IF NOT EXISTS candidates (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

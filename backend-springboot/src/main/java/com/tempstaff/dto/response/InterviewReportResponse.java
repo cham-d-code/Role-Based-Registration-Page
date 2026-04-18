@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -25,14 +26,21 @@ public class InterviewReportResponse {
     @Data @Builder @NoArgsConstructor @AllArgsConstructor
     public static class CandidateReport {
         private String candidateId;
+        /** Excel / display candidate id when imported */
+        private String displayCandidateId;
         private String candidateName;
         private String candidateEmail;
 
         /** markerId → list of marks per criterion (in same order as criteria) */
         private List<MarkerResult> markerResults;
 
-        /** Average total across all participating markers */
+        /** Average total across markers included in scoring (active panel, not removed / not left) */
         private double averageTotal;
+        /** Per-criterion average of marks from those same markers */
+        @Builder.Default
+        private Map<String, Double> averageMarksByCriterion = new LinkedHashMap<>();
+        /** How many markers were averaged (same for total and per-criterion where they gave a score) */
+        private int markersIncludedCount;
         private int maxTotal;
     }
 

@@ -102,23 +102,12 @@ public class InterviewSessionService {
             s.setEndedAt(LocalDateTime.now());
             sessionRepo.save(s);
 
-            // Mark the interview itself as ended so HODs know to review the report.
+            // Mark the interview as ended. HODs are notified only after the coordinator releases
+            // the averaged report (see InterviewService.releaseInterviewReportToHod).
             Interview interview = s.getInterview();
             if (interview != null && interview.getStatus() != InterviewStatus.ended) {
                 interview.setStatus(InterviewStatus.ended);
                 interviewRepo.save(interview);
-            }
-
-            // Remind HODs to review the interview report.
-            List<User> hods = userRepo.findByStatusAndRoleIn(UserStatus.approved, List.of(UserRole.hod));
-            String title = "Interview ended — review report";
-            String msg = String.format(
-                    "The session for interview %s has ended. Please review the interview report.",
-                    interview != null ? interview.getInterviewNumber() : "");
-            for (User hod : hods) {
-                notificationService.notifyUser(
-                        hod.getId(), title, msg,
-                        NotificationType.interview_ended, null, null);
             }
         });
     }

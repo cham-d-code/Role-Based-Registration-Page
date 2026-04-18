@@ -130,7 +130,9 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
   const [liveCandidates, setLiveCandidates] = useState<
     { id: string; displayId?: string; name: string; email: string; phone: string; cvUrl?: string }[]
   >([]);
-  const [waitingRoomCandidates, setWaitingRoomCandidates] = useState<{ id: string; name: string; email: string; phone: string }[]>([]);
+  const [waitingRoomCandidates, setWaitingRoomCandidates] = useState<
+    { id: string; displayId?: string; name: string; email: string; phone: string; cvUrl?: string }[]
+  >([]);
   const [loadingWaitingCandidates, setLoadingWaitingCandidates] = useState(false);
 
   const [portalInterviews, setPortalInterviews] = useState<InterviewData[]>([]);
@@ -870,108 +872,209 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                 </h2>
               </div>
 
-              {/* Live Session Status Banner */}
+              {/* Live session panel — single source of truth when a session is active */}
               {liveSession && (
-                <Card className={`mb-6 rounded-xl p-4 border-0 ${liveSession.myStatus === 'active' ? 'bg-green-600' : liveSession.myStatus === 'waiting' ? 'bg-orange-500' : 'bg-red-500'}`}>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="bg-white rounded-full p-2 flex-shrink-0">
-                        {liveSession.myStatus === 'active' ? (
-                          <CheckCircle className="h-5 w-5 text-green-600" />
-                        ) : (
-                          <Clock className="h-5 w-5 text-orange-500" />
-                        )}
-                      </div>
-                      <div>
-                        <p className="text-white font-bold text-base">
+                <Card
+                  className={`mb-6 rounded-xl p-6 border bg-white shadow-[0px_4px_12px_rgba(0,0,0,0.06)] ${
+                    liveSession.myStatus === 'active'
+                      ? 'border-[#4db4ac]/40'
+                      : liveSession.myStatus === 'waiting'
+                        ? 'border-amber-300/80'
+                        : 'border-red-300'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-start gap-3 mb-4">
+                    <div
+                      className={`rounded-full p-2 flex-shrink-0 ${
+                        liveSession.myStatus === 'active'
+                          ? 'bg-[#e6f7f6]'
+                          : liveSession.myStatus === 'waiting'
+                            ? 'bg-amber-50'
+                            : 'bg-red-50'
+                      }`}
+                    >
+                      {liveSession.myStatus === 'active' ? (
+                        <CheckCircle className="h-5 w-5 text-[#4db4ac]" />
+                      ) : liveSession.myStatus === 'waiting' ? (
+                        <Clock className="h-5 w-5 text-amber-600" />
+                      ) : (
+                        <Clock className="h-5 w-5 text-red-600" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 gap-y-1">
+                        <p className="text-[#222222] font-bold text-base">
                           {liveSession.myStatus === 'active'
                             ? `You are in the live session — ${liveSession.interviewNumber}`
                             : liveSession.myStatus === 'waiting'
-                            ? `Waiting room — ${liveSession.interviewNumber} is live`
-                            : `You have been removed from ${liveSession.interviewNumber}`}
+                              ? `Waiting room — ${liveSession.interviewNumber} is live`
+                              : `You have been removed from ${liveSession.interviewNumber}`}
                         </p>
-                        <p className="text-white/80 text-sm">
-                          Started by {liveSession.startedByName}
-                          {liveSession.myStatus === 'waiting' &&
-                            ' · The coordinator will admit you when ready. Review candidates below.'}
-                          {liveSession.myStatus === 'active' && ` · ${liveSession.activeParticipants.length} active participant(s)`}
-                        </p>
+                        {liveSession.myStatus === 'active' && (
+                          <Badge className="bg-green-100 text-green-800 border border-green-300" style={{ fontSize: '11px' }}>
+                            LIVE
+                          </Badge>
+                        )}
                       </div>
+                      <p className="text-[#555555] text-sm mt-1">
+                        Started by {liveSession.startedByName ?? 'coordinator'}
+                        {liveSession.myStatus === 'waiting' &&
+                          ' · The coordinator will admit you when ready. Candidate list is below.'}
+                        {liveSession.myStatus === 'active' &&
+                          ` · ${liveSession.activeParticipants.length} active participant(s)`}
+                      </p>
                     </div>
+                  </div>
 
-                    {liveSession.myStatus === 'active' && (
-                      <div className="flex-shrink-0">
-                        {loadingScheme ? (
-                          <div className="flex items-center gap-2 text-white/80 text-sm">
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Loading scheme…
-                          </div>
-                        ) : (
+                  {liveSession.myStatus === 'active' && (
+                    <div className="space-y-4">
+                      {loadingScheme ? (
+                        <div className="flex items-center gap-2 text-[#555555] text-sm">
+                          <Loader2 className="h-4 w-4 animate-spin text-[#4db4ac]" />
+                          Loading scheme…
+                        </div>
+                      ) : (
+                        <>
                           <Button
-                            className="bg-white text-green-700 hover:bg-green-50 font-semibold disabled:opacity-60"
+                            className="bg-[#222222] hover:bg-neutral-800 text-white font-semibold disabled:opacity-60"
                             disabled={!markingScheme}
                             onClick={() => markingScheme && setCurrentPage('interviewMarking')}
                           >
                             <ClipboardList className="h-4 w-4 mr-2" />
                             {markingScheme ? 'Enter Marks' : 'Waiting for coordinator’s marking scheme'}
                           </Button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Show coordinator's scheme summary when active */}
-                  {liveSession.myStatus === 'active' && markingScheme && (
-                    <div className="mt-3 pt-3 border-t border-white/30">
-                      <p className="text-white/80 text-xs mb-2 font-semibold">
-                        MARKING SCHEME — created by {markingScheme.createdByName} · {markingScheme.criteria.length} criteria · max {markingScheme.totalMaxMarks} pts
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {markingScheme.criteria.map((c, i) => (
-                          <span key={c.id} className="bg-white/20 text-white text-xs px-2 py-1 rounded-full">
-                            {i + 1}. {c.name} ({c.maxMarks} pts)
-                          </span>
-                        ))}
-                      </div>
+                          {markingScheme && (
+                            <div className="pt-2 border-t border-[#e8e8e8]">
+                              <p className="text-[#222222] text-sm font-semibold mb-3">
+                                MARKING SCHEME — created by {markingScheme.createdByName} · {markingScheme.criteria.length}{' '}
+                                criteria · max {markingScheme.totalMaxMarks} pts
+                              </p>
+                              <ol className="list-decimal list-inside space-y-1.5 text-[#222222] text-sm">
+                                {markingScheme.criteria.map((c) => (
+                                  <li key={c.id}>
+                                    {c.name} ({c.maxMarks} pts)
+                                  </li>
+                                ))}
+                              </ol>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
                   )}
 
                   {liveSession.myStatus === 'waiting' && (
-                    <div className="mt-3 pt-3 border-t border-white/30">
-                      <p className="text-white text-sm font-semibold mb-2">Candidates (read-only until admitted)</p>
-                      {loadingWaitingCandidates ? (
-                        <div className="flex items-center gap-2 text-white/80 text-sm">
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Loading candidates…
-                        </div>
-                      ) : waitingRoomCandidates.length === 0 ? (
-                        <p className="text-white/80 text-sm">No candidates loaded.</p>
-                      ) : (
-                        <div className="max-h-48 overflow-y-auto rounded-lg bg-white/10">
-                          <table className="w-full text-left text-xs text-white">
-                            <thead>
-                              <tr className="border-b border-white/20">
-                                <th className="p-2 font-semibold">Name</th>
-                                <th className="p-2 font-semibold">Email</th>
-                                <th className="p-2 font-semibold">Phone</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {waitingRoomCandidates.map((c) => (
-                                <tr key={c.id} className="border-b border-white/10">
-                                  <td className="p-2">{c.name}</td>
-                                  <td className="p-2">{c.email}</td>
-                                  <td className="p-2">{c.phone}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
+                    <p className="text-[#555555] text-sm">
+                      You can review candidate details in the table below until you are admitted to the panel.
+                    </p>
                   )}
                 </Card>
               )}
+
+              {/* Full candidate list for the live interview (no duplicate date/stats card above) */}
+              {liveSession &&
+                (liveSession.myStatus === 'active' || liveSession.myStatus === 'waiting') &&
+                (() => {
+                  const loadingLiveTable =
+                    liveSession.myStatus === 'active' ? loadingScheme : loadingWaitingCandidates;
+                  const rows =
+                    liveSession.myStatus === 'active' ? liveCandidates : waitingRoomCandidates;
+                  return (
+                    <Card className="mb-6 bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Users className="h-5 w-5 text-[#4db4ac]" />
+                        <h4 className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 600 }}>
+                          Candidates for This Interview
+                        </h4>
+                        <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '11px' }}>
+                          {rows.length}
+                        </Badge>
+                      </div>
+                      {loadingLiveTable ? (
+                        <div className="flex items-center gap-2 py-8 justify-center text-[#4db4ac]">
+                          <Loader2 className="h-5 w-5 animate-spin" />
+                          <span style={{ fontSize: '13px' }}>Loading candidates…</span>
+                        </div>
+                      ) : rows.length === 0 ? (
+                        <div className="text-center py-8 border border-[#e0e0e0] rounded-lg">
+                          <Users className="h-8 w-8 text-[#d0d0d0] mx-auto mb-2" />
+                          <p className="text-[#999999]" style={{ fontSize: '13px' }}>
+                            No candidates for this interview yet.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="border border-[#e0e0e0] rounded-lg overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-[#f9f9f9]">
+                                <TableHead className="text-[#222222] py-2" style={{ fontWeight: 600 }}>
+                                  #
+                                </TableHead>
+                                <TableHead className="text-[#222222] py-2" style={{ fontWeight: 600 }}>
+                                  Candidate ID
+                                </TableHead>
+                                <TableHead className="text-[#222222] py-2" style={{ fontWeight: 600 }}>
+                                  Name
+                                </TableHead>
+                                <TableHead className="text-[#222222] py-2" style={{ fontWeight: 600 }}>
+                                  Email
+                                </TableHead>
+                                <TableHead className="text-[#222222] py-2" style={{ fontWeight: 600 }}>
+                                  Phone
+                                </TableHead>
+                                <TableHead className="text-[#222222] py-2" style={{ fontWeight: 600 }}>
+                                  CV
+                                </TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {rows.map((candidate, index) => (
+                                <TableRow key={candidate.id}>
+                                  <TableCell className="text-[#555555] py-2" style={{ fontSize: '13px' }}>
+                                    {index + 1}
+                                  </TableCell>
+                                  <TableCell className="text-[#222222] py-2" style={{ fontSize: '13px', fontWeight: 500 }}>
+                                    {candidate.displayId || candidate.id || '—'}
+                                  </TableCell>
+                                  <TableCell className="text-[#222222] py-2" style={{ fontSize: '13px', fontWeight: 600 }}>
+                                    {candidate.name}
+                                  </TableCell>
+                                  <TableCell className="py-2">
+                                    <div className="flex items-center gap-1 text-[#555555]" style={{ fontSize: '12px' }}>
+                                      <Mail className="h-3 w-3 text-[#4db4ac]" />
+                                      {candidate.email}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="py-2">
+                                    <div className="flex items-center gap-1 text-[#555555]" style={{ fontSize: '12px' }}>
+                                      <Phone className="h-3 w-3 text-[#4db4ac]" />
+                                      {candidate.phone}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell className="py-2">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#e6f7f6]"
+                                      disabled={!candidate.cvUrl}
+                                      onClick={() => {
+                                        if (candidate.cvUrl) window.open(candidate.cvUrl, '_blank', 'noopener,noreferrer');
+                                        else alert('No CV link for this candidate.');
+                                      }}
+                                    >
+                                      <FileText className="h-3 w-3 mr-1" />
+                                      View CV
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </Card>
+                  );
+                })()}
 
               {loadingPortalInterviews && (
                 <div className="flex items-center justify-center py-12 gap-2 text-[#4db4ac]">
@@ -980,7 +1083,7 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                 </div>
               )}
 
-              {!loadingPortalInterviews && portalInterviews.length === 0 && (
+              {!loadingPortalInterviews && portalInterviews.length === 0 && !liveSession && (
                 <Card className="p-8 text-center border border-[#e0e0e0] rounded-xl">
                   <Calendar className="h-10 w-10 text-[#d0d0d0] mx-auto mb-2" />
                   <p className="text-[#999999]" style={{ fontSize: '14px' }}>
@@ -990,7 +1093,9 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
               )}
 
               {!loadingPortalInterviews &&
-                portalInterviews.map((interview) => {
+                portalInterviews
+                  .filter((interview) => !liveSession || String(interview.id) !== String(liveSession.interviewId))
+                  .map((interview) => {
                   const candidates = portalCandidates[interview.id] ?? [];
                   const loadingC = loadingPortalCandidatesFor === interview.id;
                   const days = daysUntilInterviewDate(interview.date);

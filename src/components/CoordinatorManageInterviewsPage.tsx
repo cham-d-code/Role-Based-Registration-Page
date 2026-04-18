@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Calendar as CalendarIcon, Users, Mail, Phone, FileText, Edit, Plus, ArrowLeft, Check, X,
-  Loader2, Upload, Play, Square, UserCheck, UserX, Wifi
+  Loader2, Upload, Play, Square, UserCheck, UserX, Wifi, BarChart2, Send
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -13,7 +13,8 @@ import {
   getInterviews, getInterviewCandidates, createInterview, updateInterviewDate,
   startInterviewSession, endInterviewSession, getInterviewSession, getActiveSession,
   approveParticipant, removeParticipant, leaveSession, getMarkingScheme,
-  InterviewData, CandidateData, SessionState, MarkingSchemeData,
+  getInterviewReport, releaseInterviewReportToHod,
+  InterviewData, CandidateData, SessionState, MarkingSchemeData, InterviewReport,
 } from '../services/api';
 import InterviewMarkingPage from './InterviewMarkingPage';
 
@@ -58,8 +59,12 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
   const candidatesMapRef = useRef(candidatesMap);
   candidatesMapRef.current = candidatesMap;
 
-  /** After "Leave Session", stay out of the live UI until the session ends (logout clears this ref). */
-  const skipReconnectSessionIdRef = useRef<string | null>(null);
+  // ── Ended interview report (coordinator review → send to HOD) ─────────────
+  const [coordReportInterviewId, setCoordReportInterviewId] = useState<string | null>(null);
+  const [coordReportData, setCoordReportData] = useState<InterviewReport | null>(null);
+  const [coordReportLoading, setCoordReportLoading] = useState(false);
+  const [coordReportError, setCoordReportError] = useState('');
+  const [releasingReport, setReleasingReport] = useState(false);
 
   // ── Load interviews on mount ───────────────────────────────────────────────
   useEffect(() => { fetchInterviews(); }, []);
@@ -71,12 +76,8 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
       try {
         const active = await getActiveSession();
         if (!active) {
-          skipReconnectSessionIdRef.current = null;
           setLiveInterviewId(null);
           setSessionState(null);
-          return;
-        }
-        if (skipReconnectSessionIdRef.current === active.sessionId) {
           return;
         }
         setLiveInterviewId(active.interviewId);
@@ -97,7 +98,6 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
     if (!liveInterviewId) return;
     const stillUpcoming = interviews.some(i => i.id === liveInterviewId && i.status === 'upcoming');
     if (!stillUpcoming) {
-      skipReconnectSessionIdRef.current = null;
       setLiveInterviewId(null);
       setSessionState(null);
     }
@@ -173,7 +173,6 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
   // ── Start Interview ────────────────────────────────────────────────────────
   async function handleStartInterview(interview: InterviewData) {
     try {
-      skipReconnectSessionIdRef.current = null;
       await loadCandidates(interview.id);
       const state = await startInterviewSession(interview.id);
       setLiveInterviewId(interview.id);
@@ -184,28 +183,71 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
   }
 
   // ── End Session ────────────────────────────────────────────────────────────
-  async function handleEndSession() {
+  /** Stops the live session for everyone; panel averages are computed from markers still on the panel (excluding removed / voluntary leave). */
+  async function handleStopInterview() {
     if (!liveInterviewId) return;
+    if (!confirm('Stop this interview? Other panel members can no longer submit marks. You can review averaged results below, then send them to the HOD.')) return;
     try {
       await endInterviewSession(liveInterviewId);
-      skipReconnectSessionIdRef.current = null;
       setLiveInterviewId(null);
       setSessionState(null);
       await fetchInterviews();
     } catch (e: any) {
-      alert(e?.message || 'Failed to end the interview session.');
+      alert(e?.message || 'Failed to stop the interview session.');
     }
   }
 
-  // ── Leave Session (coordinator exits but session stays live; marks excluded from average) ──
+  /** Optional: step away without ending the session; your marks are excluded from averages. You can return here anytime to admit panelists or stop the interview. */
   async function handleLeaveSession() {
     if (!liveInterviewId) return;
-    if (!confirm('Leave this session? The interview stays live but your marks will not be included in the average score.')) return;
-    const sid = sessionState?.sessionId ?? null;
+    if (!confirm('Leave the live controls? The interview stays live for others. Your marks will not be included in averages. You can come back to this page to manage the session or stop it.')) return;
     try { await leaveSession(liveInterviewId); } catch { /* ignore */ }
-    if (sid) skipReconnectSessionIdRef.current = sid;
     setLiveInterviewId(null);
     setSessionState(null);
+  }
+
+  async function toggleCoordReport(interviewId: string) {
+    if (coordReportInterviewId === interviewId) {
+      setCoordReportInterviewId(null);
+      setCoordReportData(null);
+      setCoordReportError('');
+      return;
+    }
+    setCoordReportInterviewId(interviewId);
+    setCoordReportData(null);
+    setCoordReportError('');
+    setCoordReportLoading(true);
+    try {
+      const data = await getInterviewReport(interviewId);
+      setCoordReportData(data);
+    } catch (e: any) {
+      setCoordReportError(e.message || 'Failed to load report.');
+    } finally {
+      setCoordReportLoading(false);
+    }
+  }
+
+  async function handleSendReportToHod(interviewId: string) {
+    if (!confirm('Send averaged results to all HODs for review?')) return;
+    setReleasingReport(true);
+    try {
+      await releaseInterviewReportToHod(interviewId);
+      await fetchInterviews();
+      if (coordReportInterviewId === interviewId) {
+        setCoordReportLoading(true);
+        try {
+          setCoordReportData(await getInterviewReport(interviewId));
+        } catch {
+          /* ignore */
+        } finally {
+          setCoordReportLoading(false);
+        }
+      }
+    } catch (e: any) {
+      alert(e?.message || 'Failed to send report to HOD.');
+    } finally {
+      setReleasingReport(false);
+    }
   }
 
   // ── Allow a waiting member ─────────────────────────────────────────────────
@@ -456,11 +498,11 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
                           Leave Session
                         </Button>
                         <Button
-                          onClick={handleEndSession}
+                          onClick={handleStopInterview}
                           className="bg-black hover:bg-gray-800 text-white font-semibold"
                         >
                           <Square className="h-4 w-4 mr-2" />
-                          End Session
+                          Stop Interview
                         </Button>
                       </div>
                     </div>
@@ -720,24 +762,114 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
           {/* ── Ended Interviews ── */}
           {endedInterviews.length > 0 && (
             <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-              <h3 className="text-[#222222] mb-4" style={{ fontWeight: 700, fontSize: '18px' }}>
-                Ended Interviews ({endedInterviews.length})
+              <h3 className="text-[#222222] mb-2" style={{ fontWeight: 700, fontSize: '18px' }}>
+                Ended interviews — review & release to HOD
               </h3>
+              <p className="text-[#555555] mb-4" style={{ fontSize: '13px' }}>
+                Shortlist is ordered by average total score. Per-criterion columns show the average of each marker who remained on the panel (removed members and those who left voluntarily are excluded). After you review, send the report to HODs.
+              </p>
               <Separator className="mb-4" />
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {endedInterviews.map(interview => (
-                  <div key={interview.id} className="flex items-center justify-between p-3 border border-[#e0e0e0] rounded-lg bg-[#f9f9f9]">
-                    <div className="flex items-center gap-3">
-                      <CalendarIcon className="h-5 w-5 text-[#999999]" />
-                      <div>
-                        <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>{interview.interviewNumber}</p>
-                        <p className="text-[#999999]" style={{ fontSize: '12px' }}>{formatDate(interview.date)}</p>
+                  <div key={interview.id} className="border border-[#e0e0e0] rounded-lg bg-[#f9f9f9] overflow-hidden">
+                    <div className="flex flex-wrap items-center justify-between gap-3 p-3">
+                      <div className="flex items-center gap-3">
+                        <CalendarIcon className="h-5 w-5 text-[#999999]" />
+                        <div>
+                          <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>{interview.interviewNumber}</p>
+                          <p className="text-[#999999]" style={{ fontSize: '12px' }}>{formatDate(interview.date)} · {interview.candidateCount} candidates</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge className="bg-gray-100 text-gray-600 border-gray-300 border" style={{ fontSize: '11px' }}>ENDED</Badge>
+                        {interview.reportSentToHodAt ? (
+                          <Badge className="bg-green-100 text-green-800 border-green-300 border" style={{ fontSize: '11px' }}>Sent to HOD</Badge>
+                        ) : (
+                          <Badge className="bg-amber-100 text-amber-900 border-amber-300 border" style={{ fontSize: '11px' }}>Not sent to HOD</Badge>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-[#4db4ac] text-[#4db4ac]"
+                          onClick={() => toggleCoordReport(interview.id)}
+                        >
+                          <BarChart2 className="h-4 w-4 mr-1" />
+                          {coordReportInterviewId === interview.id ? 'Hide results' : 'View averaged results'}
+                        </Button>
+                        {!interview.reportSentToHodAt && (
+                          <Button
+                            size="sm"
+                            className="bg-[#222222] hover:bg-neutral-800 text-white"
+                            disabled={releasingReport}
+                            onClick={() => handleSendReportToHod(interview.id)}
+                          >
+                            {releasingReport ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
+                            Send to HOD
+                          </Button>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <Badge className="bg-gray-100 text-gray-600 border-gray-300 border" style={{ fontSize: '11px' }}>ENDED</Badge>
-                      <span className="text-[#555555]" style={{ fontSize: '12px' }}>{interview.candidateCount} candidates</span>
-                    </div>
+                    {coordReportInterviewId === interview.id && (
+                      <div className="border-t border-[#e0e0e0] bg-white p-4">
+                        {coordReportLoading && (
+                          <div className="flex items-center gap-2 py-6 justify-center text-[#4db4ac]">
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            <span style={{ fontSize: '14px' }}>Loading report…</span>
+                          </div>
+                        )}
+                        {coordReportError && (
+                          <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-600 text-sm">{coordReportError}</div>
+                        )}
+                        {coordReportData && (
+                          <div className="space-y-3 overflow-x-auto">
+                            <p className="text-[#4db4ac] font-semibold text-sm">
+                              Criteria — max {coordReportData.totalMaxMarks} pts total
+                            </p>
+                            <div className="border border-[#e0e0e0] rounded-lg overflow-hidden min-w-[640px]">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow className="bg-[#f9f9f9]">
+                                    <TableHead className="text-[#222222] font-semibold">#</TableHead>
+                                    <TableHead className="text-[#222222] font-semibold">Candidate ID</TableHead>
+                                    <TableHead className="text-[#222222] font-semibold">Name</TableHead>
+                                    {coordReportData.criteria.map(c => (
+                                      <TableHead key={c.id} className="text-center text-[#222222] font-semibold text-xs">
+                                        {c.name} <span className="text-[#4db4ac]">/{c.maxMarks}</span>
+                                        <div className="text-[#999] font-normal">avg</div>
+                                      </TableHead>
+                                    ))}
+                                    <TableHead className="text-center text-[#222222] font-semibold bg-[#e6f7f6]">
+                                      Avg total <span className="text-[#4db4ac]">/{coordReportData.totalMaxMarks}</span>
+                                    </TableHead>
+                                    <TableHead className="text-center text-xs text-[#555555]">Markers</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {coordReportData.candidates.map((cand, ci) => (
+                                    <TableRow key={cand.candidateId}>
+                                      <TableCell className="text-[#555555]">{ci + 1}</TableCell>
+                                      <TableCell className="font-medium">{cand.displayCandidateId || '—'}</TableCell>
+                                      <TableCell className="font-semibold text-[#222222]">{cand.candidateName}</TableCell>
+                                      {coordReportData.criteria.map(c => (
+                                        <TableCell key={c.id} className="text-center font-semibold">
+                                          {cand.averageMarksByCriterion?.[c.id] ?? '—'}
+                                        </TableCell>
+                                      ))}
+                                      <TableCell className="text-center font-bold text-[#4db4ac] bg-[#f6fffd]">
+                                        {cand.averageTotal}
+                                      </TableCell>
+                                      <TableCell className="text-center text-sm text-[#555555]">
+                                        {cand.markersIncludedCount ?? cand.markerResults.length}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

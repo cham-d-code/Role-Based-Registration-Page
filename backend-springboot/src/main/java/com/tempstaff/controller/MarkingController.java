@@ -4,7 +4,10 @@ import com.tempstaff.dto.request.SaveMarkingSchemeRequest;
 import com.tempstaff.dto.request.SubmitMarksRequest;
 import com.tempstaff.dto.response.InterviewReportResponse;
 import com.tempstaff.dto.response.MarkingSchemeResponse;
+import com.tempstaff.entity.Interview;
 import com.tempstaff.entity.User;
+import com.tempstaff.entity.UserRole;
+import com.tempstaff.repository.InterviewRepository;
 import com.tempstaff.repository.UserRepository;
 import com.tempstaff.service.MarkingService;
 import lombok.RequiredArgsConstructor;
@@ -24,6 +27,7 @@ public class MarkingController {
 
     private final MarkingService markingService;
     private final UserRepository userRepository;
+    private final InterviewRepository interviewRepository;
 
     /** Coordinator creates/replaces the marking scheme for an interview */
     @PostMapping("/{interviewId}/marking-scheme")
@@ -57,9 +61,25 @@ public class MarkingController {
         return ResponseEntity.ok().build();
     }
 
-    /** HOD gets the full interview report */
+    /**
+     * Averaged marking report: coordinator anytime after the interview; HOD only after coordinator release.
+     */
     @GetMapping("/{interviewId}/report")
-    public ResponseEntity<InterviewReportResponse> getReport(@PathVariable UUID interviewId) {
+    public ResponseEntity<InterviewReportResponse> getReport(
+            @PathVariable UUID interviewId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+
+        User caller = getUser(userDetails);
+        Interview interview = interviewRepository.findById(interviewId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Interview not found"));
+        if (caller.getRole() == UserRole.hod) {
+            if (interview.getReportSentToHodAt() == null) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "The coordinator has not released this report for HOD review yet.");
+            }
+        } else if (caller.getRole() != UserRole.coordinator) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You cannot view this report.");
+        }
         return ResponseEntity.ok(markingService.getReport(interviewId));
     }
 

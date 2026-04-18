@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Calendar as CalendarIcon, Users, Mail, Phone, FileText, Edit, Plus, ArrowLeft,
-  Check, X, Loader2, Upload, UserCheck, Wifi
+  Check, X, Loader2, Upload, UserCheck, Wifi, BarChart2
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -12,8 +12,8 @@ import { Input } from './ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import {
   getInterviews, getInterviewCandidates, createInterview, updateInterviewDate,
-  getActiveSession, getMarkingScheme,
-  InterviewData, CandidateData, SessionState, MarkingSchemeData,
+  getActiveSession, getMarkingScheme, getInterviewReport,
+  InterviewData, CandidateData, SessionState, MarkingSchemeData, InterviewReport,
 } from '../services/api';
 import InterviewMarkingPage from './InterviewMarkingPage';
 
@@ -164,6 +164,26 @@ export default function HodManageInterviewsPage({ onBack }: HodManageInterviewsP
   function formatDate(dateStr: string): string {
     const d = new Date(dateStr);
     return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getFullYear()).slice(-2)}`;
+  }
+
+  async function toggleHodReport(interviewId: string) {
+    if (hodReportInterviewId === interviewId) {
+      setHodReportInterviewId(null);
+      setHodReportData(null);
+      setHodReportError('');
+      return;
+    }
+    setHodReportInterviewId(interviewId);
+    setHodReportData(null);
+    setHodReportError('');
+    setHodReportLoading(true);
+    try {
+      setHodReportData(await getInterviewReport(interviewId));
+    } catch (e: any) {
+      setHodReportError(e.message || 'Failed to load report.');
+    } finally {
+      setHodReportLoading(false);
+    }
   }
 
   const upcomingInterviews = interviews.filter(i => i.status === 'upcoming');
@@ -371,7 +391,8 @@ export default function HodManageInterviewsPage({ onBack }: HodManageInterviewsP
                             </Badge>
                             {sessionState.myStatus === 'active' && (
                               <Button
-                                className="bg-black hover:bg-gray-800 text-white"
+                                variant="outline"
+                                className="border-neutral-900 bg-white text-neutral-900 hover:bg-neutral-100 font-semibold shadow-sm"
                                 onClick={() => handleOpenMarking(interview)}
                               >
                                 <UserCheck className="h-4 w-4 mr-2" />
@@ -486,24 +507,103 @@ export default function HodManageInterviewsPage({ onBack }: HodManageInterviewsP
           {/* ── Ended Interviews ── */}
           {endedInterviews.length > 0 && (
             <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-              <h3 className="text-[#222222] mb-4" style={{ fontWeight: 700, fontSize: '18px' }}>
-                Ended Interviews ({endedInterviews.length})
+              <h3 className="text-[#222222] mb-2" style={{ fontWeight: 700, fontSize: '18px' }}>
+                Ended interviews ({endedInterviews.length})
               </h3>
+              <p className="text-[#555555] mb-4" style={{ fontSize: '13px' }}>
+                Averaged shortlist is available after the coordinator stops the interview and releases results to HOD.
+              </p>
               <Separator className="mb-4" />
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {endedInterviews.map(interview => (
-                  <div key={interview.id} className="flex items-center justify-between p-3 border border-[#e0e0e0] rounded-lg bg-[#f9f9f9]">
-                    <div className="flex items-center gap-3">
-                      <CalendarIcon className="h-5 w-5 text-[#999999]" />
-                      <div>
-                        <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>{interview.interviewNumber}</p>
-                        <p className="text-[#999999]" style={{ fontSize: '12px' }}>{formatDate(interview.date)}</p>
+                  <div key={interview.id} className="border border-[#e0e0e0] rounded-lg bg-[#f9f9f9] overflow-hidden">
+                    <div className="flex flex-wrap items-center justify-between gap-3 p-3">
+                      <div className="flex items-center gap-3">
+                        <CalendarIcon className="h-5 w-5 text-[#999999]" />
+                        <div>
+                          <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>{interview.interviewNumber}</p>
+                          <p className="text-[#999999]" style={{ fontSize: '12px' }}>{formatDate(interview.date)} · {interview.candidateCount} candidates</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge className="bg-gray-100 text-gray-600 border-gray-300 border" style={{ fontSize: '11px' }}>ENDED</Badge>
+                        {interview.reportSentToHodAt ? (
+                          <>
+                            <Badge className="bg-green-100 text-green-800 border-green-300 border" style={{ fontSize: '11px' }}>Released</Badge>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-[#4db4ac] text-[#4db4ac]"
+                              onClick={() => toggleHodReport(interview.id)}
+                            >
+                              <BarChart2 className="h-4 w-4 mr-1" />
+                              {hodReportInterviewId === interview.id ? 'Hide shortlist' : 'View shortlist'}
+                            </Button>
+                          </>
+                        ) : (
+                          <Badge className="bg-amber-100 text-amber-900 border-amber-300 border" style={{ fontSize: '11px' }}>
+                            Awaiting coordinator release
+                          </Badge>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <Badge className="bg-gray-100 text-gray-600 border-gray-300 border" style={{ fontSize: '11px' }}>ENDED</Badge>
-                      <span className="text-[#555555]" style={{ fontSize: '12px' }}>{interview.candidateCount} candidates</span>
-                    </div>
+                    {interview.reportSentToHodAt && hodReportInterviewId === interview.id && (
+                      <div className="border-t border-[#e0e0e0] bg-white p-4">
+                        {hodReportLoading && (
+                          <div className="flex items-center gap-2 py-6 justify-center text-[#4db4ac]">
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            <span style={{ fontSize: '14px' }}>Loading report…</span>
+                          </div>
+                        )}
+                        {hodReportError && (
+                          <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-600 text-sm">{hodReportError}</div>
+                        )}
+                        {hodReportData && (
+                          <div className="space-y-3 overflow-x-auto">
+                            <p className="text-[#4db4ac] font-semibold text-sm">
+                              Shortlist by average score — max {hodReportData.totalMaxMarks} pts
+                            </p>
+                            <div className="border border-[#e0e0e0] rounded-lg overflow-hidden min-w-[640px]">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow className="bg-[#f9f9f9]">
+                                    <TableHead className="text-[#222222] font-semibold">#</TableHead>
+                                    <TableHead className="text-[#222222] font-semibold">Candidate ID</TableHead>
+                                    <TableHead className="text-[#222222] font-semibold">Name</TableHead>
+                                    {hodReportData.criteria.map(c => (
+                                      <TableHead key={c.id} className="text-center text-[#222222] font-semibold text-xs">
+                                        {c.name} <span className="text-[#4db4ac]">/{c.maxMarks}</span>
+                                        <div className="text-[#999] font-normal">avg</div>
+                                      </TableHead>
+                                    ))}
+                                    <TableHead className="text-center text-[#222222] font-semibold bg-[#e6f7f6]">
+                                      Avg total <span className="text-[#4db4ac]">/{hodReportData.totalMaxMarks}</span>
+                                    </TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {hodReportData.candidates.map((cand, ci) => (
+                                    <TableRow key={cand.candidateId}>
+                                      <TableCell className="text-[#555555]">{ci + 1}</TableCell>
+                                      <TableCell className="font-medium">{cand.displayCandidateId || '—'}</TableCell>
+                                      <TableCell className="font-semibold text-[#222222]">{cand.candidateName}</TableCell>
+                                      {hodReportData.criteria.map(c => (
+                                        <TableCell key={c.id} className="text-center font-semibold">
+                                          {cand.averageMarksByCriterion?.[c.id] ?? '—'}
+                                        </TableCell>
+                                      ))}
+                                      <TableCell className="text-center font-bold text-[#4db4ac] bg-[#f6fffd]">
+                                        {cand.averageTotal}
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

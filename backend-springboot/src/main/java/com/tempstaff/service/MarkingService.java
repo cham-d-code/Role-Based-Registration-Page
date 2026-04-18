@@ -173,9 +173,9 @@ public class MarkingService {
 
         int totalMaxMarks = scheme.getCriteria().stream().mapToInt(MarkingCriterion::getMaxMarks).sum();
 
-        // Find markers who DIDN'T leave (exclude left_session = true)
-        Set<UUID> leftMarkers = participantRepo.findBySessionId(session.getId()).stream()
-                .filter(SessionParticipant::isLeftSession)
+        // Exclude markers who left voluntarily or were removed from the panel (marks not averaged)
+        Set<UUID> excludedMarkers = participantRepo.findBySessionId(session.getId()).stream()
+                .filter(p -> p.isLeftSession() || "removed".equalsIgnoreCase(p.getStatus()))
                 .map(p -> p.getUser().getId())
                 .collect(Collectors.toSet());
 
@@ -193,9 +193,8 @@ public class MarkingService {
         for (Candidate cand : candidates) {
             List<CandidateMark> candMarks = byCand.getOrDefault(cand.getId(), Collections.emptyList());
 
-            // Group by marker, excluding those who left
             Map<UUID, List<CandidateMark>> byMarker = candMarks.stream()
-                    .filter(m -> !leftMarkers.contains(m.getMarker().getId()))
+                    .filter(m -> !excludedMarkers.contains(m.getMarker().getId()))
                     .collect(Collectors.groupingBy(m -> m.getMarker().getId()));
 
             List<InterviewReportResponse.MarkerResult> markerResults = new ArrayList<>();
@@ -204,7 +203,9 @@ public class MarkingService {
                 Map<String, Integer> marksByCriterion = entry.getValue().stream()
                         .collect(Collectors.toMap(
                                 m -> m.getCriterion().getId().toString(),
-                                CandidateMark::getMarksGiven
+                                CandidateMark::getMarksGiven,
+                                (a, b) -> b,
+                                LinkedHashMap::new
                         ));
                 int total = marksByCriterion.values().stream().mapToInt(Integer::intValue).sum();
                 String comments = entry.getValue().stream()
@@ -221,16 +222,31 @@ public class MarkingService {
                         .build());
             }
 
+            int markerCount = markerResults.size();
             double avgTotal = markerResults.stream()
                     .mapToInt(InterviewReportResponse.MarkerResult::getTotal)
                     .average().orElse(0.0);
 
+            Map<String, Double> avgByCriterion = new LinkedHashMap<>();
+            for (MarkingSchemeResponse.CriterionResponse crit : criteriaList) {
+                List<Integer> vals = markerResults.stream()
+                        .map(mr -> mr.getMarksByCriterion().get(crit.getId()))
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
+                double critAvg = vals.isEmpty() ? 0.0
+                        : vals.stream().mapToInt(Integer::intValue).average().orElse(0.0);
+                avgByCriterion.put(crit.getId(), Math.round(critAvg * 10.0) / 10.0);
+            }
+
             candReports.add(InterviewReportResponse.CandidateReport.builder()
                     .candidateId(cand.getId().toString())
+                    .displayCandidateId(cand.getCandidateId())
                     .candidateName(cand.getName())
                     .candidateEmail(cand.getEmail())
                     .markerResults(markerResults)
                     .averageTotal(Math.round(avgTotal * 10.0) / 10.0)
+                    .averageMarksByCriterion(avgByCriterion)
+                    .markersIncludedCount(markerCount)
                     .maxTotal(totalMaxMarks)
                     .build());
         }

@@ -33,6 +33,10 @@ public class Interview {
     @Builder.Default
     private InterviewStatus status = InterviewStatus.upcoming;
 
+    /** When set, HOD may load the averaged marking report for this ended interview. */
+    @Column(name = "report_sent_to_hod_at")
+    private LocalDateTime reportSentToHodAt;
+
     @OneToMany(mappedBy = "interview", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Candidate> candidates;
 
