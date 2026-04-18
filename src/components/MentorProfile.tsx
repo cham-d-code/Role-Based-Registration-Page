@@ -126,7 +126,9 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
   const [markingScheme, setMarkingScheme] = useState<MarkingSchemeData | null>(null);
   const [loadingScheme, setLoadingScheme] = useState(false);
   // Candidates for the live interview (admitted markers)
-  const [liveCandidates, setLiveCandidates] = useState<{ id: string; name: string; email: string; phone: string }[]>([]);
+  const [liveCandidates, setLiveCandidates] = useState<
+    { id: string; displayId?: string; name: string; email: string; phone: string; cvUrl?: string }[]
+  >([]);
   const [waitingRoomCandidates, setWaitingRoomCandidates] = useState<{ id: string; name: string; email: string; phone: string }[]>([]);
   const [loadingWaitingCandidates, setLoadingWaitingCandidates] = useState(false);
 
@@ -201,10 +203,12 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
         .then(([scheme, cands]) => {
           setMarkingScheme(scheme);
           setLiveCandidates(cands.map(c => ({
-            id: (c as any).candidateId || c.id,
+            id: c.id,
+            displayId: c.candidateId,
             name: c.name,
             email: c.email,
             phone: c.phone,
+            cvUrl: c.cvUrl,
           })));
         })
         .catch(e => console.error('Failed to load scheme/candidates', e))
@@ -217,10 +221,12 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
         .then((cands) =>
           setWaitingRoomCandidates(
             cands.map((c) => ({
-              id: (c as any).candidateId || c.id,
+              id: c.id,
+              displayId: c.candidateId,
               name: c.name,
               email: c.email,
               phone: c.phone,
+              cvUrl: c.cvUrl,
             }))
           )
         )

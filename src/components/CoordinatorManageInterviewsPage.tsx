@@ -11,7 +11,7 @@ import { Input } from './ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import {
   getInterviews, getInterviewCandidates, createInterview, updateInterviewDate,
-  startInterviewSession, endInterviewSession, getInterviewSession,
+  startInterviewSession, endInterviewSession, getInterviewSession, getActiveSession,
   approveParticipant, removeParticipant, leaveSession, getMarkingScheme,
   InterviewData, CandidateData, SessionState, MarkingSchemeData,
 } from '../services/api';
@@ -58,22 +58,39 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
   const candidatesMapRef = useRef(candidatesMap);
   candidatesMapRef.current = candidatesMap;
 
+  /** After "Leave Session", stay out of the live UI until the session ends (logout clears this ref). */
+  const skipReconnectSessionIdRef = useRef<string | null>(null);
+
   // ── Load interviews on mount ───────────────────────────────────────────────
   useEffect(() => { fetchInterviews(); }, []);
 
-  // ── Poll session state every 5s while live ────────────────────────────────
+  // ── Keep live session in sync with backend (survives refresh / logout-login until End Session) ──
   useEffect(() => {
-    if (!liveInterviewId) return;
+    if (markingInterview) return;
     const poll = async () => {
       try {
-        const state = await getInterviewSession(liveInterviewId);
-        setSessionState(state);
-      } catch { /* session ended */ }
+        const active = await getActiveSession();
+        if (!active) {
+          skipReconnectSessionIdRef.current = null;
+          setLiveInterviewId(null);
+          setSessionState(null);
+          return;
+        }
+        if (skipReconnectSessionIdRef.current === active.sessionId) {
+          return;
+        }
+        setLiveInterviewId(active.interviewId);
+        setSessionState(active);
+        loadCandidates(active.interviewId);
+      } catch {
+        setLiveInterviewId(null);
+        setSessionState(null);
+      }
     };
     poll();
     const interval = setInterval(poll, 5000);
     return () => clearInterval(interval);
-  }, [liveInterviewId]);
+  }, [markingInterview]);
 
   async function fetchInterviews() {
     setLoadingInterviews(true);
@@ -145,6 +162,7 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
   // ── Start Interview ────────────────────────────────────────────────────────
   async function handleStartInterview(interview: InterviewData) {
     try {
+      skipReconnectSessionIdRef.current = null;
       await loadCandidates(interview.id);
       const state = await startInterviewSession(interview.id);
       setLiveInterviewId(interview.id);
@@ -158,6 +176,7 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
   async function handleEndSession() {
     if (!liveInterviewId) return;
     try { await endInterviewSession(liveInterviewId); } catch { /* ignore */ }
+    skipReconnectSessionIdRef.current = null;
     setLiveInterviewId(null);
     setSessionState(null);
   }
@@ -166,7 +185,9 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
   async function handleLeaveSession() {
     if (!liveInterviewId) return;
     if (!confirm('Leave this session? The interview stays live but your marks will not be included in the average score.')) return;
+    const sid = sessionState?.sessionId ?? null;
     try { await leaveSession(liveInterviewId); } catch { /* ignore */ }
+    if (sid) skipReconnectSessionIdRef.current = sid;
     setLiveInterviewId(null);
     setSessionState(null);
   }
@@ -217,7 +238,14 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
     return (
       <InterviewMarkingPage
         interview={{ id: markingInterview.id, interviewNumber: markingInterview.interviewNumber, date: markingInterview.date }}
-        candidates={candidates.map(c => ({ id: c.candidateId || c.id, name: c.name, email: c.email, phone: c.phone, cvUrl: c.cvUrl }))}
+        candidates={candidates.map(c => ({
+          id: c.id,
+          displayId: c.candidateId,
+          name: c.name,
+          email: c.email,
+          phone: c.phone,
+          cvUrl: c.cvUrl,
+        }))}
         existingScheme={markingSchemeForPage}
         onBack={() => {
           setMarkingInterview(null);
@@ -495,13 +523,9 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
                       </Card>
                     </div>
 
-                    {/* Marking: coordinator defines criteria + max marks here; panel uses same scheme to enter marks */}
-                    <div className="flex flex-col items-end gap-2">
-                      <p className="text-[#555555] text-right max-w-lg" style={{ fontSize: '12px' }}>
-                        Open the marking panel to <strong>create or update</strong> criteria and full marks for this interview, then save. HOD and senior staff cannot edit the scheme.
-                      </p>
+                    <div className="flex justify-end">
                       <Button
-                        className="bg-black hover:bg-gray-800 text-white"
+                        className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white font-semibold shadow-md border-0"
                         onClick={() => handleOpenMarkingPanel(interview)}
                       >
                         <FileText className="h-4 w-4 mr-2" />

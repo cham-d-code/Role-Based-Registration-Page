@@ -174,7 +174,14 @@ export default function HodManageInterviewsPage({ onBack }: HodManageInterviewsP
     return (
       <InterviewMarkingPage
         interview={{ id: markingInterview.id, interviewNumber: markingInterview.interviewNumber, date: markingInterview.date }}
-        candidates={candidates.map(c => ({ id: c.candidateId || c.id, name: c.name, email: c.email, phone: c.phone, cvUrl: c.cvUrl }))}
+        candidates={candidates.map(c => ({
+          id: c.id,
+          displayId: c.candidateId,
+          name: c.name,
+          email: c.email,
+          phone: c.phone,
+          cvUrl: c.cvUrl,
+        }))}
         existingScheme={markingSchemeForPage}
         onBack={() => {
           setMarkingInterview(null);

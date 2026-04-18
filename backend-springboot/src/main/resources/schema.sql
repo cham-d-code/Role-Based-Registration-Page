@@ -292,18 +292,9 @@ CREATE TABLE IF NOT EXISTS candidates (
 CREATE INDEX IF NOT EXISTS idx_candidates_interview ON candidates(interview_id);;
 CREATE INDEX IF NOT EXISTS idx_candidates_shortlisted ON candidates(is_shortlisted);;
 
-CREATE TABLE IF NOT EXISTS marking_schemes (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    interview_id UUID NOT NULL UNIQUE REFERENCES interviews(id) ON DELETE CASCADE,
-    part1_name VARCHAR(100) DEFAULT 'Part 1',
-    part1_max_marks DECIMAL(5,2) DEFAULT 100,
-    part2_name VARCHAR(100) DEFAULT 'Part 2',
-    part2_max_marks DECIMAL(5,2) DEFAULT 100,
-    part3_name VARCHAR(100) DEFAULT 'Part 3',
-    part3_max_marks DECIMAL(5,2) DEFAULT 100,
-    passing_percentage DECIMAL(5,2) DEFAULT 50,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);;
+-- marking_schemes: defined in section 10 (interview live sessions / JPA). Do not add a legacy
+-- definition here — an older script created part1/part2/part3 columns without created_by, which
+-- breaks Hibernate; see SAFE COLUMN MIGRATIONS.
 
 -- ============================================
 -- 4. LEAVE MANAGEMENT
@@ -623,6 +614,23 @@ CREATE INDEX IF NOT EXISTS idx_candidate_marks_candidate ON candidate_marks(cand
 -- ============================================
 -- SAFE COLUMN MIGRATIONS
 -- ============================================
+-- Marking schemes: legacy table had no created_by (JPA requires it). Safe for new DBs too.
+ALTER TABLE IF EXISTS marking_schemes ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id);;
+UPDATE marking_schemes SET created_by = (SELECT id FROM users WHERE role = 'coordinator' ORDER BY created_at ASC LIMIT 1) WHERE created_by IS NULL;;
+UPDATE marking_schemes SET created_by = (SELECT id FROM users ORDER BY created_at ASC LIMIT 1) WHERE created_by IS NULL;;
+DO $markscheme$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'candidate_marks')
+     AND EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'marking_criteria') THEN
+    DELETE FROM candidate_marks WHERE criterion_id IN (
+      SELECT id FROM marking_criteria WHERE scheme_id IN (SELECT id FROM marking_schemes WHERE created_by IS NULL));
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'marking_criteria') THEN
+    DELETE FROM marking_criteria WHERE scheme_id IN (SELECT id FROM marking_schemes WHERE created_by IS NULL);
+  END IF;
+END $markscheme$;;
+DELETE FROM marking_schemes WHERE created_by IS NULL;;
+ALTER TABLE marking_schemes ALTER COLUMN created_by SET NOT NULL;;
 ALTER TABLE IF EXISTS candidates ADD COLUMN IF NOT EXISTS candidate_id VARCHAR(50);;
 ALTER TABLE IF EXISTS session_participants ADD COLUMN IF NOT EXISTS left_session BOOLEAN NOT NULL DEFAULT FALSE;;
 ALTER TABLE IF EXISTS research_opportunities ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;;

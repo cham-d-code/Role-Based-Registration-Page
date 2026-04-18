@@ -186,15 +186,10 @@ CREATE INDEX idx_candidates_shortlisted ON candidates(is_shortlisted);
 
 CREATE TABLE marking_schemes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    interview_id UUID NOT NULL UNIQUE REFERENCES interviews(id) ON DELETE CASCADE,
-    part1_name VARCHAR(100) DEFAULT 'Part 1',
-    part1_max_marks DECIMAL(5,2) DEFAULT 100,
-    part2_name VARCHAR(100) DEFAULT 'Part 2',
-    part2_max_marks DECIMAL(5,2) DEFAULT 100,
-    part3_name VARCHAR(100) DEFAULT 'Part 3',
-    part3_max_marks DECIMAL(5,2) DEFAULT 100,
-    passing_percentage DECIMAL(5,2) DEFAULT 50,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    interview_id UUID NOT NULL REFERENCES interviews(id) ON DELETE CASCADE,
+    created_by UUID NOT NULL REFERENCES users(id),
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(interview_id)
 );
 
 -- ============================================

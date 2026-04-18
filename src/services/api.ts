@@ -157,8 +157,9 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     }
 
     if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Request failed');
+        const errorData = await response.json().catch(() => ({})) as { message?: string; error?: string };
+        const msg = errorData.message || errorData.error || `Request failed (${response.status})`;
+        throw new Error(msg);
     }
 
     return response.json();

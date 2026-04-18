@@ -1,8 +1,10 @@
 package com.tempstaff.exception;
 
 import com.tempstaff.dto.response.AuthResponse;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -46,15 +48,44 @@ public class GlobalExceptionHandler {
         );
     }
 
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<AuthResponse> handleUnreadable(HttpMessageNotReadableException ex) {
+        return ResponseEntity.badRequest().body(
+                AuthResponse.builder()
+                        .success(false)
+                        .message("Invalid request body. Ensure criteria names and max marks are provided.")
+                        .build());
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<AuthResponse> handleDataIntegrity(DataIntegrityViolationException ex) {
+        System.err.println("Data integrity: " + ex.getMostSpecificCause().getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(
+                AuthResponse.builder()
+                        .success(false)
+                        .message("Could not save the marking scheme due to a data conflict. Try again, or end the session and recreate the scheme.")
+                        .build());
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<AuthResponse> handleGenericException(Exception ex) {
-        System.err.println("Unexpected error: " + ex.getMessage());
+        Throwable root = ex;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        String detail = root.getMessage() != null && !root.getMessage().isBlank()
+                ? root.getMessage()
+                : ex.getClass().getSimpleName();
+        if (detail.length() > 220) {
+            detail = detail.substring(0, 217) + "...";
+        }
+        System.err.println("Unexpected error: " + detail);
         ex.printStackTrace();
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
                 AuthResponse.builder()
                         .success(false)
-                        .message("Server error")
+                        .message("Server error: " + detail)
                         .build());
     }
 }

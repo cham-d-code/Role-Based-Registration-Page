@@ -14,7 +14,10 @@ import {
 import { saveMarkingScheme, submitMarks, MarkingSchemeData } from '../services/api';
 
 interface Candidate {
+  /** Database UUID — required for save-marks API */
   id: string;
+  /** Excel / display candidate id (e.g. C0001) — for labels only */
+  displayId?: string;
   name: string;
   email: string;
   phone: string;
@@ -58,7 +61,7 @@ export default function InterviewMarkingPage({
   const [additionalComments, setAdditionalComments] = useState('');
   const [savingMarks, setSavingMarks] = useState(false);
   const [savedResults, setSavedResults] = useState<
-    { candidateId: string; name: string; total: number; max: number }[]
+    { candidateId: string; displayId?: string; name: string; total: number; max: number }[]
   >([]);
 
   const selectedCandidate = candidates.find(c => c.id === selectedCandidateId);
@@ -127,7 +130,13 @@ export default function InterviewMarkingPage({
       );
       setSavedResults(prev => {
         const idx = prev.findIndex(r => r.candidateId === selectedCandidateId);
-        const entry = { candidateId: selectedCandidateId, name: selectedCandidate!.name, total: currentTotal, max: maxTotal };
+        const entry = {
+          candidateId: selectedCandidateId,
+          displayId: selectedCandidate!.displayId,
+          name: selectedCandidate!.name,
+          total: currentTotal,
+          max: maxTotal,
+        };
         return idx >= 0 ? prev.map((r, i) => i === idx ? entry : r) : [...prev, entry];
       });
       alert(`Marks saved for ${selectedCandidate?.name}!`);
@@ -211,38 +220,40 @@ export default function InterviewMarkingPage({
 
             <Button
               variant="outline" onClick={addCriterion}
-              className="w-full border-dashed border-[#4db4ac] text-[#4db4ac] hover:bg-[#e6f7f6] mb-6"
+              className="w-full border-2 border-dashed border-[#2d8a82] text-[#1a5c57] bg-[#f0faf9] hover:bg-[#e6f7f6] mb-6 font-semibold"
             >
               <Plus className="h-4 w-4 mr-2" />Add Marking Criterion
             </Button>
 
-            <div className="bg-[#e6f7f6] border border-[#4db4ac] rounded-lg p-4 mb-4 flex items-center justify-between">
+            <div className="rounded-lg p-4 mb-4 flex items-center justify-between border-2 border-[#2d8a82]" style={{ backgroundColor: '#e8f4f3' }}>
               <div>
-                <p className="text-[#4db4ac]" style={{ fontSize: '13px', fontWeight: 600 }}>
+                <p className="text-neutral-900" style={{ fontSize: '13px', fontWeight: 700 }}>
                   {criteria.length} {criteria.length === 1 ? 'criterion' : 'criteria'} defined
                 </p>
-                <p className="text-[#555555]" style={{ fontSize: '12px' }}>
-                  Total max marks: <strong>{maxTotal}</strong>
+                <p className="text-neutral-700" style={{ fontSize: '12px' }}>
+                  Total max marks: <strong className="text-neutral-900">{maxTotal}</strong>
                 </p>
               </div>
-              <Badge className="bg-[#4db4ac] text-white border-0 text-lg px-4 py-1">/ {maxTotal}</Badge>
+              <Badge className="bg-[#1a5c57] text-white border-0 text-lg px-4 py-1">/ {maxTotal}</Badge>
             </div>
 
             {schemeError && (
               <p className="text-red-500 text-sm mb-3">{schemeError}</p>
             )}
 
-            <div className="flex gap-3 justify-end">
-              <Button variant="outline" onClick={onBack} className="border-[#d0d0d0] text-[#555555]">
+            <div className="flex flex-wrap gap-3 justify-end items-center">
+              <Button variant="outline" onClick={onBack} className="border-neutral-400 text-neutral-800 bg-white">
                 Cancel
               </Button>
               <Button
+                type="button"
                 onClick={finalizeScheme} disabled={savingScheme}
-                className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white px-6"
+                className="min-h-11 px-8 text-base font-semibold shadow-lg ring-2 ring-neutral-900 ring-offset-2 border-2 border-neutral-900"
+                style={{ backgroundColor: '#171717', color: '#ffffff' }}
               >
                 {savingScheme
                   ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving…</>
-                  : <><CheckCircle className="h-4 w-4 mr-2" />Create Marking Assignment</>}
+                  : <><CheckCircle className="h-5 w-5 mr-2" />Save marking scheme</>}
               </Button>
             </div>
           </Card>
@@ -338,13 +349,13 @@ export default function InterviewMarkingPage({
             <div>
               <Label className="text-[#222222] mb-2 block" style={{ fontSize: '14px', fontWeight: 600 }}>Candidate *</Label>
               <Select value={selectedCandidateId} onValueChange={v => { setSelectedCandidateId(v); setMarks({}); }}>
-                <SelectTrigger className="w-full bg-white border-[#d0d0d0] rounded-lg">
+                <SelectTrigger className="w-full bg-white border-2 border-neutral-300 rounded-lg text-neutral-900 data-[placeholder]:text-neutral-500">
                   <SelectValue placeholder="Select candidate to mark" />
                 </SelectTrigger>
                 <SelectContent>
                   {candidates.map(c => (
                     <SelectItem key={c.id} value={c.id}>
-                      <span className="text-[#4db4ac] font-semibold mr-1">{c.id}</span> — {c.name}
+                      <span className="text-[#4db4ac] font-semibold mr-1">{c.displayId || c.id.slice(0, 8)}</span> — {c.name}
                       {savedResults.find(r => r.candidateId === c.id) && (
                         <span className="ml-2 text-green-600 text-xs">✓ marked</span>
                       )}
@@ -356,7 +367,8 @@ export default function InterviewMarkingPage({
             <div className="flex items-end">
               <Button
                 variant="outline"
-                className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#e6f7f6] w-full"
+                type="button"
+                className="w-full border-2 border-neutral-700 text-neutral-900 bg-neutral-50 hover:bg-[#e8f4f3] font-semibold"
                 disabled={!selectedCandidateId || !selectedCandidate?.cvUrl}
                 onClick={() => window.open(selectedCandidate?.cvUrl, '_blank')}
               >
@@ -365,10 +377,14 @@ export default function InterviewMarkingPage({
             </div>
           </div>
           {selectedCandidate && (
-            <div className="mt-4 bg-[#e6f7f6] border border-[#4db4ac] rounded-lg p-4">
-              <p className="text-[#4db4ac] mb-2" style={{ fontSize: '13px', fontWeight: 600 }}>Selected Candidate:</p>
+            <div className="mt-4 rounded-lg p-4 border-2 border-[#2d8a82]" style={{ backgroundColor: '#e8f4f3' }}>
+              <p className="text-neutral-900 mb-2" style={{ fontSize: '13px', fontWeight: 700 }}>Selected Candidate:</p>
               <div className="grid grid-cols-3 gap-3 text-[#222222]" style={{ fontSize: '13px' }}>
-                <div><span className="text-[#555555]">ID: </span><span style={{ fontWeight: 600 }}>{selectedCandidate.id}</span></div>
+                <div>
+                  <span className="text-[#555555]">Candidate ID: </span>
+                  <span style={{ fontWeight: 600 }}>{selectedCandidate.displayId || '—'}</span>
+                  <span className="text-[#999999] text-xs block mt-0.5">Ref: {selectedCandidate.id.slice(0, 8)}…</span>
+                </div>
                 <div><span className="text-[#555555]">Email: </span>{selectedCandidate.email}</div>
                 <div><span className="text-[#555555]">Phone: </span>{selectedCandidate.phone}</div>
               </div>
@@ -389,7 +405,7 @@ export default function InterviewMarkingPage({
                 <div>
                   <p className="text-[#555555]" style={{ fontSize: '11px', fontWeight: 600 }}>CRITERION {idx + 1}</p>
                   <p className="text-[#222222]" style={{ fontSize: '15px', fontWeight: 600 }}>{criterion.name}</p>
-                  <p className="text-[#999999]" style={{ fontSize: '12px' }}>Maximum: {criterion.maxMarks} marks</p>
+                  <p className="text-neutral-600" style={{ fontSize: '12px', fontWeight: 500 }}>Maximum: {criterion.maxMarks} marks</p>
                 </div>
                 <div>
                   <Label className="text-[#222222] mb-1 block" style={{ fontSize: '13px', fontWeight: 600 }}>
@@ -407,14 +423,20 @@ export default function InterviewMarkingPage({
             ))}
           </div>
 
-          {/* Total */}
-          <div className="bg-[#4db4ac] bg-opacity-10 border-2 border-[#4db4ac] rounded-lg p-4 mb-5 flex items-center justify-between">
+          {/* Total — solid light panel + dark text (avoid teal-on-teal / broken bg-opacity) */}
+          <div
+            className="rounded-lg p-4 mb-5 flex items-center justify-between border-2 border-[#2d8a82] shadow-sm"
+            style={{ backgroundColor: '#e8f4f3' }}
+          >
             <div>
-              <p className="text-[#4db4ac]" style={{ fontSize: '14px', fontWeight: 600 }}>Total Marks</p>
-              <p className="text-[#555555]" style={{ fontSize: '12px' }}>Across {criteria.length} criteria</p>
+              <p className="text-neutral-900" style={{ fontSize: '15px', fontWeight: 700 }}>Total Marks</p>
+              <p className="text-neutral-700" style={{ fontSize: '13px', fontWeight: 500 }}>
+                Across {criteria.length} {criteria.length === 1 ? 'criterion' : 'criteria'}
+              </p>
             </div>
-            <p className="text-[#4db4ac]" style={{ fontSize: '36px', fontWeight: 700 }}>
-              {currentTotal} <span style={{ fontSize: '20px', fontWeight: 400 }}>/ {maxTotal}</span>
+            <p className="text-neutral-900 tabular-nums" style={{ fontSize: '36px', fontWeight: 800, lineHeight: 1.1 }}>
+              {currentTotal}{' '}
+              <span className="text-neutral-600" style={{ fontSize: '22px', fontWeight: 600 }}>/ {maxTotal}</span>
             </p>
           </div>
 
@@ -427,17 +449,24 @@ export default function InterviewMarkingPage({
               placeholder="Enter observations about the candidate's performance…"
               value={additionalComments}
               onChange={e => setAdditionalComments(e.target.value)}
-              className="w-full min-h-[90px] bg-white border-[#d0d0d0] rounded-lg focus:border-[#4db4ac]"
+              className="w-full min-h-[90px] bg-white border-2 border-neutral-300 rounded-lg focus:border-[#2d8a82] placeholder:text-neutral-500 placeholder:opacity-100 text-neutral-900"
               style={{ fontSize: '14px' }}
             />
           </div>
 
-          <div className="flex gap-3 justify-end">
-            <Button variant="outline" onClick={onBack} className="border-[#d0d0d0] text-[#555555]">
+          <div className="flex gap-3 justify-end flex-wrap">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onBack}
+              className="min-h-10 border-2 border-neutral-600 text-neutral-900 bg-neutral-100 hover:bg-neutral-200 font-semibold"
+            >
               Cancel
             </Button>
             <Button
-              className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white px-6"
+              type="button"
+              className="min-h-11 px-8 font-semibold shadow-lg ring-2 ring-neutral-900 ring-offset-2 border-2 border-neutral-900"
+              style={{ backgroundColor: '#171717', color: '#ffffff' }}
               onClick={handleAssignMarks}
               disabled={!selectedCandidateId || savingMarks}
             >
@@ -463,7 +492,9 @@ export default function InterviewMarkingPage({
                 <div key={r.candidateId} className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
                   <div>
                     <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>{r.name}</p>
-                    <p className="text-[#555555]" style={{ fontSize: '12px' }}>ID: {r.candidateId}</p>
+                    <p className="text-[#555555]" style={{ fontSize: '12px' }}>
+                      ID: {r.displayId || r.candidateId.slice(0, 8)}…
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className="text-green-700" style={{ fontSize: '18px', fontWeight: 700 }}>{r.total} / {r.max}</p>

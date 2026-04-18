@@ -7,8 +7,10 @@ import com.tempstaff.dto.response.MarkingSchemeResponse;
 import com.tempstaff.entity.*;
 import com.tempstaff.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -30,16 +32,33 @@ public class MarkingService {
     @Transactional
     public MarkingSchemeResponse saveScheme(UUID interviewId, UUID creatorId,
                                             SaveMarkingSchemeRequest req) {
-        Interview interview = interviewRepo.findById(interviewId)
-                .orElseThrow(() -> new RuntimeException("Interview not found"));
-        User creator = userRepo.findById(creatorId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        if (creator.getRole() != UserRole.coordinator) {
-            throw new RuntimeException("Only the Temporary Staff Coordinator can create or update the marking scheme.");
+        if (req.getCriteria() == null || req.getCriteria().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "At least one marking criterion is required.");
+        }
+        for (SaveMarkingSchemeRequest.CriterionInput c : req.getCriteria()) {
+            if (c.getName() == null || c.getName().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Each criterion must have a name.");
+            }
+            if (c.getMaxMarks() <= 0) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Each criterion must have maximum marks greater than zero.");
+            }
         }
 
-        // Delete old scheme if exists
-        schemeRepo.findByInterviewId(interviewId).ifPresent(schemeRepo::delete);
+        Interview interview = interviewRepo.findById(interviewId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Interview not found"));
+        User creator = userRepo.findById(creatorId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        if (creator.getRole() != UserRole.coordinator) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Only the Temporary Staff Coordinator can create or update the marking scheme.");
+        }
+
+        // Replace scheme: delete marks that point at old criteria first (avoids FK / orphan issues), then remove scheme.
+        schemeRepo.findByInterviewId(interviewId).ifPresent(existing -> {
+            markRepo.deleteAllByMarkingSchemeId(existing.getId());
+            schemeRepo.delete(existing);
+        });
 
         MarkingScheme scheme = MarkingScheme.builder()
                 .interview(interview)
@@ -74,25 +93,30 @@ public class MarkingService {
     public void submitMarks(UUID interviewId, UUID candidateId, UUID markerId,
                             SubmitMarksRequest req) {
         InterviewSession session = sessionRepo.findByInterviewIdAndActiveTrue(interviewId)
-                .orElseThrow(() -> new RuntimeException("No active session for this interview"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "No active session for this interview"));
 
         Candidate candidate = candidateRepo.findById(candidateId)
-                .orElseThrow(() -> new RuntimeException("Candidate not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Candidate not found"));
         User marker = userRepo.findById(markerId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
         SessionParticipant markerParticipant = participantRepo
                 .findBySessionIdAndUserId(session.getId(), markerId)
-                .orElseThrow(() -> new RuntimeException("You are not a participant in this interview session."));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "You are not a participant in this interview session."));
         if (!"active".equals(markerParticipant.getStatus())) {
-            throw new RuntimeException("You must be admitted to the session before you can submit marks.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "You must be admitted to the session before you can submit marks.");
         }
         if (markerParticipant.isLeftSession()) {
-            throw new RuntimeException("You have left this session and cannot submit marks.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "You have left this session and cannot submit marks.");
         }
 
         MarkingScheme scheme = schemeRepo.findByInterviewId(interviewId)
-                .orElseThrow(() -> new RuntimeException("No marking scheme for this interview"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "No marking scheme for this interview"));
 
         Map<UUID, MarkingCriterion> criterionMap = scheme.getCriteria().stream()
                 .collect(Collectors.toMap(MarkingCriterion::getId, c -> c));
@@ -101,7 +125,12 @@ public class MarkingService {
         markRepo.deleteBySessionIdAndCandidateIdAndMarkerId(session.getId(), candidateId, markerId);
 
         for (SubmitMarksRequest.MarkEntry entry : req.getMarks()) {
-            UUID criterionId = UUID.fromString(entry.getCriterionId());
+            UUID criterionId;
+            try {
+                criterionId = UUID.fromString(entry.getCriterionId());
+            } catch (IllegalArgumentException ex) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid criterion id.");
+            }
             MarkingCriterion criterion = criterionMap.get(criterionId);
             if (criterion == null) continue;
 
@@ -121,15 +150,17 @@ public class MarkingService {
     @Transactional(readOnly = true)
     public InterviewReportResponse getReport(UUID interviewId) {
         Interview interview = interviewRepo.findById(interviewId)
-                .orElseThrow(() -> new RuntimeException("Interview not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Interview not found"));
 
         // Use most recent session (active or ended)
         InterviewSession session = sessionRepo
                 .findTopByInterviewIdOrderByStartedAtDesc(interviewId)
-                .orElseThrow(() -> new RuntimeException("No session found for this interview"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "No session found for this interview"));
 
         MarkingScheme scheme = schemeRepo.findByInterviewId(interviewId)
-                .orElseThrow(() -> new RuntimeException("No marking scheme for this interview"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "No marking scheme for this interview"));
 
         List<MarkingSchemeResponse.CriterionResponse> criteriaList = scheme.getCriteria().stream()
                 .map(c -> MarkingSchemeResponse.CriterionResponse.builder()
