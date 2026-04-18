@@ -100,6 +100,11 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;;
 
+DO $$ BEGIN
+    ALTER TYPE notification_type ADD VALUE IF NOT EXISTS 'interview_scheduled';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;;
+
 -- ============================================
 -- 1. USERS & AUTHENTICATION
 -- ============================================
@@ -116,7 +121,7 @@ CREATE TABLE IF NOT EXISTS users (
     specialization TEXT,
     contract_start_date DATE,
     contract_end_date DATE,
-    profile_image_url VARCHAR(500),
+    profile_image_url TEXT,
     preferences_requested BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -560,6 +565,8 @@ ALTER TABLE IF EXISTS candidates ADD COLUMN IF NOT EXISTS candidate_id VARCHAR(5
 ALTER TABLE IF EXISTS session_participants ADD COLUMN IF NOT EXISTS left_session BOOLEAN NOT NULL DEFAULT FALSE;;
 ALTER TABLE IF EXISTS research_opportunities ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;;
 ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS specialization TEXT;;
+-- Profile pictures are stored as base64 data URLs; VARCHAR(500) is too small.
+ALTER TABLE IF EXISTS users ALTER COLUMN profile_image_url TYPE TEXT;;
 
 -- Deleting a user must not fail when they started interview sessions (historical rows)
 ALTER TABLE interview_sessions DROP CONSTRAINT IF EXISTS interview_sessions_started_by_fkey;;

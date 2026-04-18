@@ -273,21 +273,33 @@ export interface UserNotificationDto {
     createdAt?: string;
 }
 
-export async function getMyNotifications(unreadOnly = false): Promise<UserNotificationDto[]> {
-    return fetchWithAuth(`${API_BASE_URL}/notifications?unreadOnly=${unreadOnly ? 'true' : 'false'}`);
+export async function getMyNotifications(
+    unreadOnly = false,
+    category?: 'inbox' | 'reminders'
+): Promise<UserNotificationDto[]> {
+    const q = new URLSearchParams();
+    q.set('unreadOnly', unreadOnly ? 'true' : 'false');
+    if (category) q.set('category', category);
+    return fetchWithAuth(`${API_BASE_URL}/notifications?${q.toString()}`);
 }
 
 export async function markNotificationRead(notificationId: string): Promise<{ success: boolean }> {
     return fetchWithAuth(`${API_BASE_URL}/notifications/${notificationId}/read`, { method: 'POST' });
 }
 
-export async function getUnreadNotificationCount(): Promise<number> {
-    const res = await fetchWithAuth(`${API_BASE_URL}/notifications/unread-count`) as { count?: number };
+export async function getUnreadNotificationCount(options?: { inboxOnly?: boolean }): Promise<number> {
+    const q = new URLSearchParams();
+    if (options?.inboxOnly) q.set('inboxOnly', 'true');
+    const suffix = q.toString() ? `?${q.toString()}` : '';
+    const res = await fetchWithAuth(`${API_BASE_URL}/notifications/unread-count${suffix}`) as { count?: number };
     return typeof res.count === 'number' ? res.count : 0;
 }
 
-export async function markAllNotificationsRead(): Promise<{ success: boolean; updated: number }> {
-    return fetchWithAuth(`${API_BASE_URL}/notifications/read-all`, { method: 'POST' });
+export async function markAllNotificationsRead(options?: { inboxOnly?: boolean }): Promise<{ success: boolean; updated: number }> {
+    const q = new URLSearchParams();
+    if (options?.inboxOnly) q.set('inboxOnly', 'true');
+    const suffix = q.toString() ? `?${q.toString()}` : '';
+    return fetchWithAuth(`${API_BASE_URL}/notifications/read-all${suffix}`, { method: 'POST' });
 }
 
 // --- Dashboard APIs ---
@@ -300,6 +312,17 @@ export interface HodDashboardStats {
 
 export async function getHodDashboardStats(): Promise<HodDashboardStats> {
     return fetchWithAuth(`${API_BASE_URL}/dashboard/hod-stats`);
+}
+
+export interface MentorDashboardStats {
+    menteesCount: number;
+    activeResearchPosts: number;
+    pendingResearchApplicants: number;
+    upcomingInterviewRounds: number;
+}
+
+export async function getMentorDashboardStats(): Promise<MentorDashboardStats> {
+    return fetchWithAuth(`${API_BASE_URL}/dashboard/mentor-stats`);
 }
 
 // Check if user is authenticated

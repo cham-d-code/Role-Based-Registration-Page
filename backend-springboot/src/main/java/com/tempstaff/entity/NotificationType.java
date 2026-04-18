@@ -13,6 +13,8 @@ public enum NotificationType {
     leave_request,
     interview_started,
     interview_ended,
+    /** Panel notified when an interview round is created or its date changes */
+    interview_scheduled,
     interview_upcoming,
     review_due,
     contract_expiry

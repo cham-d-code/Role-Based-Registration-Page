@@ -12,9 +12,16 @@ interface ResearchDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   research: ResearchOpportunityDto | null;
+  /** Called after accept/reject succeeds so parent can refresh sidebar counts immediately. */
+  onApplicationDecided?: () => void;
 }
 
-export default function ResearchDetailsDialog({ open, onOpenChange, research }: ResearchDetailsDialogProps) {
+export default function ResearchDetailsDialog({
+  open,
+  onOpenChange,
+  research,
+  onApplicationDecided,
+}: ResearchDetailsDialogProps) {
   if (!research) return null;
 
   const [loading, setLoading] = useState(false);
@@ -57,13 +64,23 @@ export default function ResearchDetailsDialog({ open, onOpenChange, research }: 
   };
 
   const handleAccept = async (applicationId: string) => {
-    const updated = await acceptResearchApplicant(applicationId);
-    setApplicants(prev => prev.map(a => a.applicationId === updated.applicationId ? updated : a));
+    try {
+      const updated = await acceptResearchApplicant(applicationId);
+      setApplicants((prev) => prev.map((a) => (a.applicationId === updated.applicationId ? updated : a)));
+      onApplicationDecided?.();
+    } catch (e: any) {
+      alert(e?.message || 'Failed to accept applicant');
+    }
   };
 
   const handleReject = async (applicationId: string) => {
-    const updated = await rejectResearchApplicant(applicationId);
-    setApplicants(prev => prev.map(a => a.applicationId === updated.applicationId ? updated : a));
+    try {
+      const updated = await rejectResearchApplicant(applicationId);
+      setApplicants((prev) => prev.map((a) => (a.applicationId === updated.applicationId ? updated : a)));
+      onApplicationDecided?.();
+    } catch (e: any) {
+      alert(e?.message || 'Failed to reject applicant');
+    }
   };
 
   const handleViewProfile = async (userId: string) => {

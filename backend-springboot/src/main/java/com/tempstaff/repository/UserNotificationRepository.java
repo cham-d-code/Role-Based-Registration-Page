@@ -21,6 +21,11 @@ public interface UserNotificationRepository extends JpaRepository<UserNotificati
 
     long countByRecipientIdAndIsRead(UUID recipientId, Boolean isRead);
 
+    @Query("select count(n) from UserNotification n where n.recipientId = :recipientId and n.isRead = false and n.type not in :excludeTypes")
+    long countUnreadExcludingTypes(
+            @Param("recipientId") UUID recipientId,
+            @Param("excludeTypes") java.util.Collection<NotificationType> excludeTypes);
+
     boolean existsByRecipientIdAndTypeAndMessage(UUID recipientId, NotificationType type, String message);
 
     boolean existsByRecipientIdAndTypeAndMessageAndCreatedAtAfter(
@@ -39,6 +44,19 @@ public interface UserNotificationRepository extends JpaRepository<UserNotificati
     int markAllAsReadForRecipient(@Param("recipientId") UUID recipientId);
 
     @Modifying
+    @Query("update UserNotification n set n.isRead = true where n.recipientId = :recipientId and n.isRead = false and n.type not in :excludeTypes")
+    int markReadForRecipientExcludingTypes(
+            @Param("recipientId") UUID recipientId,
+            @Param("excludeTypes") java.util.Collection<NotificationType> excludeTypes);
+
+    @Modifying
     @Query("delete from UserNotification n where n.createdAt < :cutoff")
     int deleteOlderThan(@Param("cutoff") LocalDateTime cutoff);
+
+    /** Marks matching notifications read for every recipient (e.g. mentor + HOD copies of the same application). */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update UserNotification n set n.isRead = true where n.type = :type and n.relatedApplicationId = :applicationId and n.isRead = false")
+    int markAllReadByTypeAndRelatedApplicationId(
+            @Param("type") NotificationType type,
+            @Param("applicationId") UUID applicationId);
 }

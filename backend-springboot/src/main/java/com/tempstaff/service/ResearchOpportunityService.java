@@ -218,9 +218,9 @@ public class ResearchOpportunityService {
         app.setStatus(ApplicationStatus.accepted);
         researchApplicationRepository.save(app);
 
-        // Clear the "new application" notification for this specific applicant so
-        // the HOD's/creator's red badge updates once the application is decided.
-        markApplicationNotificationsRead(ownerId, app.getId());
+        // Clear every recipient's "new application" notification for this application
+        // (mentor/creator + HOD copies) so sidebar badges update after accept/reject.
+        markApplicationNotificationsRead(app.getId());
 
         notificationService.notifyUser(
                 app.getUserId(),
@@ -250,9 +250,7 @@ public class ResearchOpportunityService {
         app.setStatus(ApplicationStatus.rejected);
         researchApplicationRepository.save(app);
 
-        // Clear the "new application" notification for this specific applicant so
-        // the HOD's/creator's red badge updates once the application is decided.
-        markApplicationNotificationsRead(ownerId, app.getId());
+        markApplicationNotificationsRead(app.getId());
 
         notificationService.notifyUser(
                 app.getUserId(),
@@ -269,18 +267,9 @@ public class ResearchOpportunityService {
                 .orElseThrow();
     }
 
-    private void markApplicationNotificationsRead(UUID ownerId, UUID applicationId) {
-        List<UserNotification> notifs = userNotificationRepository
-                .findByRecipientIdAndTypeAndRelatedApplicationId(
-                        ownerId, NotificationType.research_applied, applicationId);
-        boolean anyChanged = false;
-        for (UserNotification n : notifs) {
-            if (Boolean.FALSE.equals(n.getIsRead())) {
-                n.setIsRead(true);
-                anyChanged = true;
-            }
-        }
-        if (anyChanged) userNotificationRepository.saveAll(notifs);
+    private void markApplicationNotificationsRead(UUID applicationId) {
+        userNotificationRepository.markAllReadByTypeAndRelatedApplicationId(
+                NotificationType.research_applied, applicationId);
     }
 
     private ResearchOpportunityResponse toOpportunityResponse(ResearchOpportunity opp) {

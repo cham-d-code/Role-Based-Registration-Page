@@ -53,7 +53,7 @@ public class User {
     @Column(name = "contract_end_date")
     private LocalDate contractEndDate;
 
-    @Column(name = "profile_image_url")
+    @Column(name = "profile_image_url", columnDefinition = "TEXT")
     private String profileImageUrl;
 
     @CreationTimestamp

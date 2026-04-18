@@ -43,6 +43,7 @@ import { Checkbox } from './ui/checkbox';
 import SystemNotices from './SystemNotices';
 import LeaveApplicationDialog from './LeaveApplicationDialog';
 import EditProfileDialog from './EditProfileDialog';
+import DashboardIdentityCard from './DashboardIdentityCard';
 import {
   applyLeave,
   applyToResearchOpportunity,
@@ -546,57 +547,28 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
           {activeMenu === 'dashboard' && (
             <>
               {/* Profile Card */}
-              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-                <div className="flex items-start gap-6">
-                  <Avatar className="h-24 w-24 border-4 border-[#4db4ac]">
-                    <AvatarImage src={profileData.avatarUrl} alt={profileData.name} />
-                    <AvatarFallback className="bg-[#4db4ac] text-white" style={{ fontSize: '32px' }}>
-                      {profileData.initials}
-                    </AvatarFallback>
-                  </Avatar>
-                  
-                  <div className="flex-1">
-                    <h2 className="text-[#222222] mb-1" style={{ fontWeight: 700, fontSize: '24px' }}>
-                      {profileData.name}
-                    </h2>
-                    <p className="text-[#4db4ac] mb-2" style={{ fontWeight: 600, fontSize: '16px' }}>
-                      Temporary Lecturer
-                    </p>
-                    <p className="text-[#555555] mb-3" style={{ fontSize: '14px' }}>
-                      Department of Industrial Management
-                    </p>
-                    
-                    <div className="flex items-center gap-2 mb-3">
-                      <UserCheck className="h-4 w-4 text-[#4db4ac]" />
-                      <span className="text-[#555555]" style={{ fontSize: '14px' }}>
-                        Mentor: 
-                      </span>
-                      <Badge className="bg-[#e6f7f6] text-[#4db4ac] border border-[#4db4ac]" style={{ fontSize: '12px' }}>
-                        Dr. T. Mahanama
-                      </Badge>
-                    </div>
-                    
-                    <div className="flex flex-col gap-2 mb-4">
-                      <div className="flex items-center gap-2 text-[#555555]" style={{ fontSize: '14px' }}>
-                        <Mail className="h-4 w-4 text-[#4db4ac]" />
-                        <span>{profileData.email}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-[#555555]" style={{ fontSize: '14px' }}>
-                        <Phone className="h-4 w-4 text-[#4db4ac]" />
-                        <span>{profileData.phone}</span>
-                      </div>
-                    </div>
-
-                    <Button 
-                      className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg"
-                      onClick={() => setEditProfileOpen(true)}
-                    >
-                      <Edit className="h-4 w-4 mr-2" />
-                      Edit Profile
-                    </Button>
-                  </div>
+              <DashboardIdentityCard
+                name={profileData.name}
+                initials={profileData.initials}
+                avatarUrl={profileData.avatarUrl}
+                roleTitle="Temporary Lecturer"
+                department="Department of Industrial Management"
+                email={profileData.email}
+                phone={profileData.phone}
+              >
+                <div className="flex items-center gap-2 mt-2">
+                  <UserCheck className="h-4 w-4 text-[#4db4ac]" />
+                  <span className="text-[#777777]" style={{ fontSize: '12px' }}>
+                    Mentor
+                  </span>
+                  <Badge
+                    className="bg-[#e6f7f6] text-[#4db4ac] border border-[#4db4ac]"
+                    style={{ fontSize: '12px' }}
+                  >
+                    Dr. T. Mahanama
+                  </Badge>
                 </div>
-              </Card>
+              </DashboardIdentityCard>
 
               {/* Quick Stats + Next Task */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

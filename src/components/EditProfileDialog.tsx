@@ -8,6 +8,45 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Camera, Eye, EyeOff, Save, X } from 'lucide-react';
 import { Alert } from './ui/alert';
 
+/** Resize and JPEG-compress so base64 fits DB and requests stay small. */
+function compressImageToDataUrl(file: File, maxEdge = 512, quality = 0.82): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.naturalWidth || img.width;
+      let h = img.naturalHeight || img.height;
+      if (!w || !h) {
+        reject(new Error('Invalid image dimensions'));
+        return;
+      }
+      const scale = Math.min(1, maxEdge / Math.max(w, h));
+      w = Math.round(w * scale);
+      h = Math.round(h * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Could not process image'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, w, h);
+      try {
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      } catch (e) {
+        reject(e);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to read image'));
+    };
+    img.src = url;
+  });
+}
+
 interface EditProfileDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -47,9 +86,21 @@ export default function EditProfileDialog({
   const [passwordError, setPasswordError] = useState('');
   const [avatarPreview, setAvatarPreview] = useState(currentProfile.avatarUrl || '');
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return;
+    const maxBytes = 12 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      alert('Image is too large. Please choose a file under 12 MB.');
+      e.target.value = '';
+      return;
+    }
+    try {
+      const dataUrl = await compressImageToDataUrl(file);
+      setAvatarPreview(dataUrl);
+      setAvatarUrl(dataUrl);
+    } catch {
       const reader = new FileReader();
       reader.onloadend = () => {
         const result = reader.result as string;
@@ -58,6 +109,7 @@ export default function EditProfileDialog({
       };
       reader.readAsDataURL(file);
     }
+    e.target.value = '';
   };
 
   const handleSave = () => {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { LayoutDashboard, Users, ClipboardCheck, FileText, BellRing, UserIcon, ChevronDown, Settings, LogOut, Mail, Phone, Calendar, CalendarCheck, Eye, Clock, Archive, Edit, DollarSign, CheckCircle, XCircle, BarChart2, Loader2, Plus, UserCheck } from 'lucide-react';
 import { approveLeave, createResearchOpportunity, deleteResearchOpportunity, getHodDashboardStats, getInterviewReport, getJobDescriptionForStaff, getMyMentees, getMyLeaveRequests, getMyNotifications, getMyResearchOpportunities, getPendingLeaveRequests, getUnreadNotificationCount, markAllNotificationsRead, markNotificationRead, rejectLeave, HodDashboardStats, InterviewReport, ResearchOpportunityDto, updateMyProfile, updateMySpecialization, updateResearchOpportunity, UserProfile, type LeaveRequestDto, type UserNotificationDto } from '../services/api';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -10,6 +10,7 @@ import { Separator } from './ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Textarea } from './ui/textarea';
+import { Progress } from './ui/progress';
 import ArchivedStaffDialog from './ArchivedStaffDialog';
 import StaffProfileDialog from './StaffProfileDialog';
 import SendNoticeDialog from './SendNoticeDialog';
@@ -22,6 +23,7 @@ import EditResearchDialog from './EditResearchDialog';
 import StructuredJobDescriptionPage from './StructuredJobDescriptionPage';
 import SalaryManagementPage from './SalaryManagementPage';
 import AttendanceReportPage from './AttendanceReportPage';
+import DashboardIdentityCard from './DashboardIdentityCard';
 
 interface HodProfileProps {
   onLogout: () => void;
@@ -36,6 +38,35 @@ function formatPostedDate(input?: string | null): string {
   } catch {
     return '';
   }
+}
+
+function parseLocalDate(isoDate: string) {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
+function calculateDaysUntilExpiry(expiryDate: string) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const expiry = parseLocalDate(expiryDate);
+  expiry.setHours(0, 0, 0, 0);
+  return Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function getExpiryBadgeColor(days: number) {
+  if (days < 30) return 'bg-red-100 text-red-700 border-red-300';
+  if (days < 60) return 'bg-orange-100 text-orange-700 border-orange-300';
+  return 'bg-green-100 text-green-700 border-green-300';
+}
+
+function countDistinctOpportunitiesFromResearchApplied(notifs: UserNotificationDto[]): number {
+  const oppIds = new Set<string>();
+  for (const n of notifs) {
+    if (n.type === 'research_applied' && n.relatedOpportunityId) {
+      oppIds.add(n.relatedOpportunityId);
+    }
+  }
+  return oppIds.size;
 }
 
 export default function HodProfile({ onLogout }: HodProfileProps) {
@@ -462,7 +493,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     let mounted = true;
     const load = async () => {
       try {
-        const notifs = await getMyNotifications(true);
+        const notifs = await getMyNotifications(true, 'inbox');
         const count = notifs.filter((n: UserNotificationDto) => n.type === 'research_new').length;
         if (mounted) setNewResearchCount(count);
       } catch {
@@ -477,21 +508,22 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     };
   }, []);
 
-  // Red badge for pending research applications (distinct opportunities with
-  // unread "research_applied" notifications). Cleared when at least one
-  // applicant is accepted — backend marks those notifications read on accept.
+  const refreshPendingResearchSidebarBadge = useCallback(async () => {
+    try {
+      const notifs = await getMyNotifications(true, 'inbox');
+      setPendingResearchApplicationsCount(countDistinctOpportunitiesFromResearchApplied(notifs));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Red badge: distinct opportunities with unread research_applied (inbox). Cleared for all recipients when an application is decided.
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       try {
-        const notifs = await getMyNotifications(true);
-        const oppIds = new Set<string>();
-        for (const n of notifs) {
-          if (n.type === 'research_applied' && n.relatedOpportunityId) {
-            oppIds.add(n.relatedOpportunityId);
-          }
-        }
-        if (mounted) setPendingResearchApplicationsCount(oppIds.size);
+        const notifs = await getMyNotifications(true, 'inbox');
+        if (mounted) setPendingResearchApplicationsCount(countDistinctOpportunitiesFromResearchApplied(notifs));
       } catch {
         // ignore
       }
@@ -523,16 +555,17 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     };
   }, []);
 
-  // Red badge for total unread notifications (cleared when user opens the Notifications tab).
+  // Red badge for unread inbox notifications only (excludes dashboard reminders).
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [allNotifications, setAllNotifications] = useState<UserNotificationDto[]>([]);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [reminderNotifications, setReminderNotifications] = useState<UserNotificationDto[]>([]);
 
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       try {
-        const count = await getUnreadNotificationCount();
+        const count = await getUnreadNotificationCount({ inboxOnly: true });
         if (mounted) setUnreadNotificationCount(count);
       } catch {
         // ignore
@@ -546,16 +579,16 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     };
   }, []);
 
-  // When user opens the Notifications tab: fetch the full list, mark unread as read, clear badge.
+  // When user opens the Notifications tab: inbox only; mark inbox unread read (reminders stay on dashboard).
   useEffect(() => {
     if (activeMenu !== 'notifications') return;
     let cancelled = false;
     (async () => {
       setLoadingNotifications(true);
       try {
-        const items = await getMyNotifications(false);
+        const items = await getMyNotifications(false, 'inbox');
         if (!cancelled) setAllNotifications(items);
-        await markAllNotificationsRead().catch(() => undefined);
+        await markAllNotificationsRead({ inboxOnly: true }).catch(() => undefined);
         if (!cancelled) setUnreadNotificationCount(0);
       } catch (e) {
         console.error('Failed to load notifications', e);
@@ -574,7 +607,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     if (activeMenu !== 'research') return;
     (async () => {
       try {
-        const notifs = await getMyNotifications(true);
+        const notifs = await getMyNotifications(true, 'inbox');
         const unreadNew = notifs.filter((n: UserNotificationDto) => n.type === 'research_new' && n.id);
         await Promise.all(unreadNew.map((n: UserNotificationDto) => markNotificationRead(n.id)));
       } catch {
@@ -627,14 +660,19 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     if (activeMenu !== 'dashboard') return;
     let mounted = true;
 
-    const loadStats = () => {
+    const load = () => {
       getHodDashboardStats()
         .then(s => { if (mounted) setDashboardStats(s); })
         .catch(err => console.error('Failed to load dashboard stats', err));
+      getMyNotifications(false, 'reminders')
+        .then((rows) => {
+          if (mounted) setReminderNotifications(rows.slice(0, 20));
+        })
+        .catch(() => { if (mounted) setReminderNotifications([]); });
     };
 
-    loadStats();
-    const interval = setInterval(loadStats, 10000);
+    load();
+    const interval = setInterval(load, 10000);
     return () => {
       mounted = false;
       clearInterval(interval);
@@ -808,47 +846,15 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
           {/* Profile Card - Only on Dashboard */}
           {activeMenu === 'dashboard' && (
             <>
-              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-                <div className="flex items-start gap-6">
-                  <Avatar className="h-24 w-24 border-4 border-[#4db4ac]">
-                    <AvatarImage src={profileData.avatarUrl} alt={profileData.name} />
-                    <AvatarFallback className="bg-[#4db4ac] text-white" style={{ fontSize: '32px' }}>
-                      {profileData.initials}
-                    </AvatarFallback>
-                  </Avatar>
-
-                  <div className="flex-1">
-                    <h2 className="text-[#222222] mb-1" style={{ fontWeight: 700, fontSize: '24px' }}>
-                      {profileData.name}
-                    </h2>
-                    <p className="text-[#4db4ac] mb-2" style={{ fontWeight: 600, fontSize: '16px' }}>
-                      Head of Department
-                    </p>
-                    <p className="text-[#555555] mb-4" style={{ fontSize: '14px' }}>
-                      Department of Industrial Management
-                    </p>
-
-                    <div className="flex flex-col gap-2 mb-4">
-                      <div className="flex items-center gap-2 text-[#555555]" style={{ fontSize: '14px' }}>
-                        <Mail className="h-4 w-4 text-[#4db4ac]" />
-                        <span>{profileData.email}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-[#555555]" style={{ fontSize: '14px' }}>
-                        <Phone className="h-4 w-4 text-[#4db4ac]" />
-                        <span>{profileData.phone}</span>
-                      </div>
-                    </div>
-
-                    <Button
-                      className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg px-4 py-2"
-                      onClick={() => setEditProfileOpen(true)}
-                    >
-                      <Edit className="h-4 w-4 mr-2" />
-                      Edit Profile
-                    </Button>
-                  </div>
-                </div>
-              </Card>
+              <DashboardIdentityCard
+                name={profileData.name}
+                initials={profileData.initials}
+                avatarUrl={profileData.avatarUrl}
+                roleTitle="Head of Department"
+                department="Department of Industrial Management"
+                email={profileData.email}
+                phone={profileData.phone}
+              />
 
               {/* Department Statistics Section */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -869,6 +875,54 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                   </Card>
                 ))}
               </div>
+
+              {/* Reminders: contract milestones, interview countdowns, monthly review prompts */}
+              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '18px' }}>
+                    Reminders
+                  </h3>
+                  {reminderNotifications.length > 0 && (
+                    <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '11px' }}>
+                      {reminderNotifications.length}
+                    </Badge>
+                  )}
+                </div>
+
+                {reminderNotifications.length === 0 ? (
+                  <p className="text-[#777777] py-4" style={{ fontSize: '13px' }}>
+                    No reminders right now. Scheduled items (contracts, upcoming interviews, monthly reviews) appear here.
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {reminderNotifications.map((n) => (
+                      <div
+                        key={n.id}
+                        className="flex items-start gap-4 p-3 rounded-lg hover:bg-[#f9f9f9] transition-colors border-l-4 border-[#4db4ac]"
+                      >
+                        <div className="flex-shrink-0 mt-1">
+                          <div className="h-8 w-8 rounded-full bg-[#e6f7f6] flex items-center justify-center">
+                            <Clock className="h-4 w-4 text-[#4db4ac]" />
+                          </div>
+                        </div>
+                        <div className="flex-1 pb-1">
+                          <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
+                            {n.title}
+                          </p>
+                          <p className="text-[#555555] whitespace-pre-line mt-1" style={{ fontSize: '13px' }}>
+                            {n.message}
+                          </p>
+                          {n.createdAt && (
+                            <p className="text-[#999999] mt-1" style={{ fontSize: '12px' }}>
+                              {new Date(n.createdAt).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Card>
             </>
           )}
 
@@ -1107,167 +1161,179 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
             </>
           )}
 
-          {/* My Mentees */}
+          {/* My Mentees — same layout as MentorProfile */}
           {activeMenu === 'mentees' && (
-            <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
-                  My Mentees
-                </h3>
-                <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '12px' }}>
-                  {myMentees.length} Total Mentees
-                </Badge>
-              </div>
-              <Separator className="mb-4" />
+            <>
+              {showStaffJdPage && selectedStaffForJd ? (
+                <StructuredJobDescriptionPage
+                  staffName={selectedStaffForJd?.name || 'Mentee'}
+                  jd={selectedStaffJd}
+                  loading={loadingStaffJd}
+                  onBack={() => setShowStaffJdPage(false)}
+                />
+              ) : (
+                <>
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
+                      My Mentees
+                    </h2>
+                    <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '12px' }}>
+                      {myMentees.length} Total Mentees
+                    </Badge>
+                  </div>
 
-              {loadingMentees && (
-                <div className="flex items-center justify-center py-8 gap-3 text-[#4db4ac]">
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  <span style={{ fontSize: '14px' }}>Loading mentees…</span>
-                </div>
-              )}
+                  <div className="space-y-4">
+                    {loadingMentees && (
+                      <Card className="bg-white rounded-xl border-0 p-6 text-center text-[#4db4ac]">
+                        <Loader2 className="h-5 w-5 animate-spin inline mr-2" />
+                        Loading mentees…
+                      </Card>
+                    )}
 
-              {!loadingMentees && myMentees.length === 0 && (
-                <div className="text-center py-10 text-[#999999]" style={{ fontSize: '14px' }}>
-                  No mentees assigned to you yet.
-                </div>
-              )}
+                    {!loadingMentees && myMentees.length === 0 && (
+                      <Card className="bg-white rounded-xl border-0 p-6 text-center text-[#999999]">
+                        No mentees assigned to you yet.
+                      </Card>
+                    )}
 
-              <div className="space-y-4">
-                {myMentees.map((m) => {
-                  const initials = (m.fullName || '')
-                    .split(' ')
-                    .filter(Boolean)
-                    .map((n) => n[0]?.toUpperCase())
-                    .slice(0, 2)
-                    .join('') || 'TS';
+                    {!loadingMentees &&
+                      myMentees.map((mentee) => {
+                        const contractExpiry = mentee.contractEndDate || '';
+                        const daysUntilExpiry = contractExpiry ? calculateDaysUntilExpiry(contractExpiry) : 0;
+                        const expiryColor = getExpiryBadgeColor(daysUntilExpiry);
 
-                  const end = m.contractEndDate ? new Date(m.contractEndDate) : null;
-                  const endOk = end && !Number.isNaN(end.getTime());
-                  const today = new Date();
-                  today.setHours(0, 0, 0, 0);
-                  const daysLeft = endOk ? Math.ceil((end!.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)) : 0;
+                        return (
+                          <Card
+                            key={mentee.id}
+                            className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6 hover:shadow-lg transition-shadow"
+                          >
+                            <div className="flex flex-col lg:flex-row gap-6">
+                              <div className="flex-1">
+                                <div className="flex items-start gap-4">
+                                  <Avatar className="h-16 w-16 border-2 border-[#4db4ac]">
+                                    <AvatarFallback className="bg-[#4db4ac] text-white" style={{ fontSize: '18px', fontWeight: 600 }}>
+                                      {String(mentee.fullName || '')
+                                        .split(' ')
+                                        .filter(Boolean)
+                                        .map((n) => n[0])
+                                        .join('')}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div className="flex-1">
+                                    <h3 className="text-[#222222] mb-1" style={{ fontSize: '18px', fontWeight: 700 }}>
+                                      {mentee.fullName}
+                                    </h3>
 
-                  const tags = (m.preferredSubjects && m.preferredSubjects.length > 0)
-                    ? m.preferredSubjects
-                    : (m.specialization ? m.specialization.split(/\s*,\s*/).filter(Boolean) : []);
+                                    <div className="flex flex-wrap gap-3 text-[#555555]" style={{ fontSize: '13px' }}>
+                                      <div className="flex items-center gap-1">
+                                        <Mail className="h-3 w-3 text-[#4db4ac]" />
+                                        {mentee.email}
+                                      </div>
+                                      {mentee.mobile && (
+                                        <div className="flex items-center gap-1">
+                                          <Phone className="h-3 w-3 text-[#4db4ac]" />
+                                          {mentee.mobile}
+                                        </div>
+                                      )}
+                                    </div>
 
-                  return (
-                    <Card
-                      key={m.id}
-                      className="border border-[#e0e0e0] rounded-xl p-5 bg-white shadow-sm"
-                    >
-                      <div className="flex flex-col lg:flex-row lg:items-center gap-5">
-                        <div className="flex items-start gap-4 flex-1 min-w-0">
-                          <div className="h-12 w-12 rounded-full bg-[#4db4ac] text-white flex items-center justify-center font-bold">
-                            {initials}
-                          </div>
+                                    {Array.isArray(mentee.preferredSubjects) && mentee.preferredSubjects.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mt-3">
+                                        {mentee.preferredSubjects.slice(0, 6).map((s, idx) => (
+                                          <Badge
+                                            key={idx}
+                                            className="bg-[#e6f7f6] text-[#4db4ac] border border-[#4db4ac]"
+                                            style={{ fontSize: '11px' }}
+                                          >
+                                            {s}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
 
-                          <div className="min-w-0 flex-1">
-                            <div className="text-[#222222] truncate" style={{ fontSize: '16px', fontWeight: 700 }}>
-                              {m.fullName}
-                            </div>
+                              <div className="lg:w-64 space-y-3">
+                                <Card className={`${expiryColor} border p-4 rounded-lg`}>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Clock className="h-4 w-4" />
+                                    <p style={{ fontSize: '12px', fontWeight: 600 }}>
+                                      Contract Expiry
+                                    </p>
+                                  </div>
+                                  {contractExpiry ? (
+                                    <>
+                                      <p style={{ fontSize: '24px', fontWeight: 700 }}>
+                                        {Math.abs(daysUntilExpiry)} days
+                                      </p>
+                                      <p style={{ fontSize: '11px' }} className="mt-1">
+                                        Expires:{' '}
+                                        {parseLocalDate(contractExpiry).toLocaleDateString('en-US', {
+                                          month: 'short',
+                                          day: 'numeric',
+                                          year: 'numeric',
+                                        })}
+                                      </p>
+                                      <Progress
+                                        value={Math.max(0, Math.min(100, (daysUntilExpiry / 90) * 100))}
+                                        className="h-2 mt-2"
+                                      />
+                                    </>
+                                  ) : (
+                                    <p className="text-[#999999]" style={{ fontSize: '12px' }}>
+                                      —
+                                    </p>
+                                  )}
+                                </Card>
 
-                            <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-[#555555]" style={{ fontSize: '13px' }}>
-                              <span className="inline-flex items-center gap-2">
-                                <Mail className="h-4 w-4 text-[#4db4ac]" />
-                                <span className="truncate">{m.email}</span>
-                              </span>
-                              {m.mobile && (
-                                <span className="inline-flex items-center gap-2">
-                                  <Phone className="h-4 w-4 text-[#4db4ac]" />
-                                  <span>{m.mobile}</span>
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="flex flex-wrap gap-2 mt-3">
-                              {tags.length > 0 ? (
-                                tags.slice(0, 6).map((t, idx) => (
-                                  <Badge
-                                    key={`${m.id}-tag-${idx}`}
-                                    className="bg-[#e6f7f6] text-[#2a8f88] border border-[#bfeeee]"
-                                    style={{ fontSize: '11px' }}
-                                  >
-                                    {t}
-                                  </Badge>
-                                ))
-                              ) : (
-                                <span className="text-[#999999]" style={{ fontSize: '12px' }}>—</span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="w-full lg:w-[280px] flex flex-col gap-3">
-                          <div className="rounded-xl border border-[#bfeeee] bg-[#e6f7f6] p-4">
-                            <div className="flex items-center gap-2 text-[#2a8f88]" style={{ fontSize: '12px', fontWeight: 700 }}>
-                              <Clock className="h-4 w-4" />
-                              Contract Expiry
-                            </div>
-
-                            <div className="mt-3 text-[#1b6f69]" style={{ fontSize: '28px', fontWeight: 800 }}>
-                              {endOk ? `${Math.max(daysLeft, 0)} days` : '—'}
-                            </div>
-
-                            <div className="mt-1 text-[#2a8f88]" style={{ fontSize: '12px' }}>
-                              {endOk ? `Expires: ${end!.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : 'No contract end date'}
-                            </div>
-
-                            <div className="mt-3 w-full bg-white/70 rounded-full h-1.5">
-                              <div
-                                className="h-1.5 rounded-full bg-[#222222]"
-                                style={{ width: endOk ? `${Math.min(100, Math.max(2, (Math.max(daysLeft, 0) / 365) * 100))}%` : '0%' }}
-                              />
-                            </div>
-                          </div>
-
-                          <Button
-                            onClick={() => {
-                              setSelectedStaffForJd({ id: m.id, name: m.fullName });
-                              setSelectedStaffJd(null);
-                              setShowStaffJdPage(true);
-                              setLoadingStaffJd(true);
-                              getJobDescriptionForStaff(m.id)
-                                .then((dto) => {
-                                  try {
-                                    const parsed = dto?.content ? JSON.parse(dto.content) : null;
-                                    setSelectedStaffJd(parsed);
-                                  } catch (e) {
-                                    console.error('Failed to parse staff JD content', e);
+                                <Button
+                                  className="w-full bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
+                                  onClick={() => {
+                                    setSelectedStaffForJd({ id: mentee.id, name: mentee.fullName });
                                     setSelectedStaffJd(null);
-                                  }
-                                })
-                                .catch((e) => {
-                                  console.error('Failed to load staff JD', e);
-                                  setSelectedStaffJd(null);
-                                })
-                                .finally(() => setLoadingStaffJd(false));
-                            }}
-                            className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg w-full"
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Job Description
-                          </Button>
-
-                          <Button
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedStaffForProfile({ id: m.id, name: m.fullName });
-                              setShowStaffProfileDialog(true);
-                            }}
-                            className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#e6f7f6] rounded-lg w-full"
-                          >
-                            <UserIcon className="h-4 w-4 mr-2" />
-                            View Profile
-                          </Button>
-                        </div>
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            </Card>
+                                    setShowStaffJdPage(true);
+                                    setLoadingStaffJd(true);
+                                    getJobDescriptionForStaff(mentee.id)
+                                      .then((dto) => {
+                                        try {
+                                          const parsed = dto?.content ? JSON.parse(dto.content) : null;
+                                          setSelectedStaffJd(parsed);
+                                        } catch (e) {
+                                          console.error('Failed to parse mentee JD content', e);
+                                          setSelectedStaffJd(null);
+                                        }
+                                      })
+                                      .catch((e) => {
+                                        console.error('Failed to load mentee JD', e);
+                                        setSelectedStaffJd(null);
+                                      })
+                                      .finally(() => setLoadingStaffJd(false));
+                                  }}
+                                >
+                                  <FileText className="h-4 w-4 mr-2" />
+                                  View Job Description
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  className="w-full border-[#4db4ac] text-[#4db4ac] hover:bg-[#4db4ac] hover:text-white"
+                                  onClick={() => {
+                                    setSelectedStaffForProfile({ id: mentee.id, name: mentee.fullName });
+                                    setShowStaffProfileDialog(true);
+                                  }}
+                                >
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  View Profile
+                                </Button>
+                              </div>
+                            </div>
+                          </Card>
+                        );
+                      })}
+                  </div>
+                </>
+              )}
+            </>
           )}
 
           {/* Leave Requests */}
@@ -1500,7 +1566,6 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                 <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
                   Registration Requests
                 </h3>
-                <Badge className="bg-[#4db4ac] text-white">FR7</Badge>
               </div>
               <Separator className="mb-4" />
 
@@ -1906,6 +1971,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                   <p className="text-[#777777] py-6 text-center" style={{ fontSize: '14px' }}>
                     You have no notifications. New registration requests, leave requests, mentee
                     assignments, interview events and research applications will appear here.
+                    Time-based reminders stay on your dashboard.
                   </p>
                 ) : (
                   <div className="space-y-1">
@@ -2083,6 +2149,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
           open={showResearchDialog}
           onOpenChange={setShowResearchDialog}
           research={selectedResearch}
+          onApplicationDecided={refreshPendingResearchSidebarBadge}
         />
       )}
 

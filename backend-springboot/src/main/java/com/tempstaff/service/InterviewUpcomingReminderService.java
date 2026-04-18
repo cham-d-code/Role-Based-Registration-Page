@@ -44,7 +44,8 @@ public class InterviewUpcomingReminderService {
         if (upcoming.isEmpty()) return;
 
         List<User> hods = userRepository.findByStatusAndRoleIn(UserStatus.approved, List.of(UserRole.hod));
-        if (hods.isEmpty()) return;
+        List<User> mentors = userRepository.findByStatusAndRoleIn(UserStatus.approved, List.of(UserRole.mentor));
+        if (hods.isEmpty() && mentors.isEmpty()) return;
 
         LocalDateTime since = LocalDateTime.now().minusHours(20);
 
@@ -71,6 +72,15 @@ public class InterviewUpcomingReminderService {
                 if (alreadySent) continue;
                 notificationService.notifyUser(
                         hod.getId(), title, message,
+                        NotificationType.interview_upcoming, null, null);
+            }
+            for (User mentor : mentors) {
+                boolean alreadySent = userNotificationRepository
+                        .existsByRecipientIdAndTypeAndMessageAndCreatedAtAfter(
+                                mentor.getId(), NotificationType.interview_upcoming, message, since);
+                if (alreadySent) continue;
+                notificationService.notifyUser(
+                        mentor.getId(), title, message,
                         NotificationType.interview_upcoming, null, null);
             }
         }

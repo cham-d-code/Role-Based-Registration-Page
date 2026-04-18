@@ -5,8 +5,14 @@ import com.tempstaff.dto.response.InterviewResponse;
 import com.tempstaff.entity.Candidate;
 import com.tempstaff.entity.Interview;
 import com.tempstaff.entity.InterviewStatus;
+import com.tempstaff.entity.NotificationType;
+import com.tempstaff.entity.User;
+import com.tempstaff.entity.UserRole;
+import com.tempstaff.entity.UserStatus;
 import com.tempstaff.repository.CandidateRepository;
 import com.tempstaff.repository.InterviewRepository;
+import com.tempstaff.repository.UserNotificationRepository;
+import com.tempstaff.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -27,6 +33,9 @@ public class InterviewService {
 
     private final InterviewRepository interviewRepository;
     private final CandidateRepository candidateRepository;
+    private final UserRepository userRepository;
+    private final NotificationService notificationService;
+    private final UserNotificationRepository userNotificationRepository;
 
     /**
      * Get all interviews ordered newest-first, with candidate counts.
@@ -88,6 +97,8 @@ public class InterviewService {
         List<Candidate> candidates = parseExcelFile(excelFile, interview);
         candidateRepository.saveAll(candidates);
 
+        notifyPanelInterviewScheduled(interview, "New interview scheduled");
+
         return InterviewResponse.builder()
                 .id(interview.getId().toString())
                 .interviewNumber(interview.getInterviewNumber())
@@ -108,6 +119,8 @@ public class InterviewService {
         interview.setDate(newDate);
         interview = interviewRepository.save(interview);
 
+        notifyPanelInterviewScheduled(interview, "Interview rescheduled");
+
         return InterviewResponse.builder()
                 .id(interview.getId().toString())
                 .interviewNumber(interview.getInterviewNumber())
@@ -121,6 +134,33 @@ public class InterviewService {
     // ──────────────────────────────────────────────────
     // Private helpers
     // ──────────────────────────────────────────────────
+
+    private void notifyPanelInterviewScheduled(Interview interview, String actionLabel) {
+        String title = "Interview scheduled";
+        String message = String.format(
+                "%s: %s on %s. [interviewId=%s]",
+                actionLabel,
+                interview.getInterviewNumber(),
+                interview.getDate(),
+                interview.getId());
+
+        List<User> panel = userRepository.findByStatusAndRoleIn(
+                UserStatus.approved,
+                List.of(UserRole.mentor, UserRole.hod, UserRole.coordinator));
+
+        for (User u : panel) {
+            boolean exists = userNotificationRepository.existsByRecipientIdAndTypeAndMessage(
+                    u.getId(), NotificationType.interview_scheduled, message);
+            if (exists) continue;
+            notificationService.notifyUser(
+                    u.getId(),
+                    title,
+                    message,
+                    NotificationType.interview_scheduled,
+                    null,
+                    null);
+        }
+    }
 
     private List<Candidate> parseExcelFile(MultipartFile file, Interview interview) throws IOException {
         List<Candidate> candidates = new ArrayList<>();

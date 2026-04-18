@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   LayoutDashboard,
   Users,
@@ -31,8 +31,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { Separator } from './ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Progress } from './ui/progress';
-import SystemNotices from './SystemNotices';
 import StructuredJobDescriptionPage from './StructuredJobDescriptionPage';
+import DashboardIdentityCard from './DashboardIdentityCard';
 import UpcomingInterviewDetailsDialog from './UpcomingInterviewDetailsDialog';
 import InterviewMarkingPage from './InterviewMarkingPage';
 import ResearchDetailsDialog from './ResearchDetailsDialog';
@@ -42,10 +42,20 @@ import EditProfileDialog from './EditProfileDialog';
 import StaffProfileDialog from './StaffProfileDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Textarea } from './ui/textarea';
-import { createResearchOpportunity, deleteResearchOpportunity, getActiveSession, getInterviews, getInterviewCandidates, getJobDescriptionForStaff, getMarkingScheme, getMyMentees, getMyMenteesCount, getMyNotifications, getMyResearchOpportunities, MarkingSchemeData, ResearchOpportunityDto, SessionState, updateMyProfile, updateResearchOpportunity, UserNotificationDto, UserProfile } from '../services/api';
+import { createResearchOpportunity, deleteResearchOpportunity, getActiveSession, getInterviews, getInterviewCandidates, getJobDescriptionForStaff, getMarkingScheme, getMentorDashboardStats, getMyMentees, getMyNotifications, getMyResearchOpportunities, getUnreadNotificationCount, markAllNotificationsRead, MarkingSchemeData, MentorDashboardStats, ResearchOpportunityDto, SessionState, updateMyProfile, updateResearchOpportunity, UserNotificationDto, UserProfile } from '../services/api';
 
 interface MentorProfileProps {
   onLogout?: () => void;
+}
+
+function countDistinctOpportunitiesFromResearchApplied(notifs: UserNotificationDto[]): number {
+  const oppIds = new Set<string>();
+  for (const n of notifs) {
+    if (n.type === 'research_applied' && n.relatedOpportunityId) {
+      oppIds.add(n.relatedOpportunityId);
+    }
+  }
+  return oppIds.size;
 }
 
 interface Mentee {
@@ -91,12 +101,20 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
   const [loadingResearch, setLoadingResearch] = useState(false);
   // Number of my research opportunities that have at least one pending (unaccepted) application.
   const [pendingResearchApplicationsCount, setPendingResearchApplicationsCount] = useState(0);
-  const [notifications, setNotifications] = useState<UserNotificationDto[]>([]);
   const [myMentees, setMyMentees] = useState<UserProfile[]>([]);
   const [showStaffProfileDialog, setShowStaffProfileDialog] = useState(false);
   const [selectedStaffForProfile, setSelectedStaffForProfile] = useState<{ id: string; name: string } | null>(null);
   const [loadingMentees, setLoadingMentees] = useState(false);
-  const [menteesCount, setMenteesCount] = useState(0);
+  const [mentorDashboardStats, setMentorDashboardStats] = useState<MentorDashboardStats>({
+    menteesCount: 0,
+    activeResearchPosts: 0,
+    pendingResearchApplicants: 0,
+    upcomingInterviewRounds: 0,
+  });
+  const [reminderNotifications, setReminderNotifications] = useState<UserNotificationDto[]>([]);
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [inboxNotifications, setInboxNotifications] = useState<UserNotificationDto[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [profileData, setProfileData] = useState({
     name: 'Loading...',
     email: '',
@@ -194,28 +212,82 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
     { id: 'profile', label: 'Profile', icon: UserIcon },
   ];
 
-  // Load dashboard data from backend (research + notifications)
+  // Dashboard: backend stats + reminder-only notifications (contract / interview / monthly review)
   useEffect(() => {
     if (activeMenu !== 'dashboard') return;
-    Promise.all([
-      getMyResearchOpportunities().catch(() => [] as ResearchOpportunityDto[]),
-      getMyNotifications(true).catch(() => [] as UserNotificationDto[]),
-      getMyMenteesCount().catch(() => ({ count: 0 })),
-    ]).then(([opps, notifs, mentees]) => {
-      setMyResearch(opps);
-      setNotifications(notifs);
-      setMenteesCount(Number((mentees as any)?.count || 0));
-    });
+    let mounted = true;
+    const load = async () => {
+      try {
+        const [stats, reminders] = await Promise.all([
+          getMentorDashboardStats(),
+          getMyNotifications(false, 'reminders').catch(() => [] as UserNotificationDto[]),
+        ]);
+        if (!mounted) return;
+        setMentorDashboardStats(stats);
+        setReminderNotifications(reminders.slice(0, 20));
+      } catch (e) {
+        console.error('Failed to load mentor dashboard', e);
+      }
+    };
+    load();
+    const interval = setInterval(load, 10000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
   }, [activeMenu]);
 
-  const activeResearchPosts = myResearch.filter(r => r.status === 'open').length;
-  const pendingReviews = myResearch.reduce((sum, r) => sum + (r.applicantsCount ?? 0), 0);
-
   const mentorStats = [
-    { label: 'Total Mentees Assigned', value: String(menteesCount), color: '#222222' },
-    { label: 'Active Research Posts', value: String(activeResearchPosts), color: '#222222' },
-    { label: 'Pending Research Applicants', value: String(pendingReviews), color: pendingReviews > 0 ? '#f7a541' : '#222222' },
+    { label: 'Total Mentees Assigned', value: String(mentorDashboardStats.menteesCount), color: '#222222' },
+    { label: 'Active Research Posts', value: String(mentorDashboardStats.activeResearchPosts), color: '#222222' },
+    {
+      label: 'Pending Research Applicants',
+      value: String(mentorDashboardStats.pendingResearchApplicants),
+      color: mentorDashboardStats.pendingResearchApplicants > 0 ? '#f7a541' : '#222222',
+    },
   ];
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        // Sidebar badge: show any unread notifications (inbox + reminders)
+        const count = await getUnreadNotificationCount();
+        if (mounted) setUnreadNotificationCount(count);
+      } catch {
+        // ignore
+      }
+    };
+    load();
+    const interval = setInterval(load, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeMenu !== 'notifications') return;
+    let cancelled = false;
+    (async () => {
+      setLoadingNotifications(true);
+      try {
+        const items = await getMyNotifications(false, 'inbox');
+        if (!cancelled) setInboxNotifications(items);
+        // When opening Notifications tab, clear ALL unread so the sidebar badge disappears.
+        await markAllNotificationsRead().catch(() => undefined);
+        if (!cancelled) setUnreadNotificationCount(0);
+      } catch (e) {
+        console.error('Failed to load notifications', e);
+        if (!cancelled) setInboxNotifications([]);
+      } finally {
+        if (!cancelled) setLoadingNotifications(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMenu]);
 
   useEffect(() => {
     if (activeMenu !== 'mentees') return;
@@ -279,21 +351,32 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
       .finally(() => setLoadingResearch(false));
   }, [activeMenu]);
 
-  // Red badge for pending research applications — distinct opportunities that
-  // have unread "research_applied" notifications. Cleared when at least one
-  // applicant is accepted (backend marks those notifications as read).
+  const refreshPendingResearchSidebarBadge = useCallback(async () => {
+    try {
+      const notifs = await getMyNotifications(true, 'inbox');
+      setPendingResearchApplicationsCount(countDistinctOpportunitiesFromResearchApplied(notifs));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const refreshAfterResearchApplicationDecision = useCallback(async () => {
+    await refreshPendingResearchSidebarBadge();
+    try {
+      const stats = await getMentorDashboardStats();
+      setMentorDashboardStats(stats);
+    } catch {
+      // ignore
+    }
+  }, [refreshPendingResearchSidebarBadge]);
+
+  // Red badge for pending research applications — distinct opportunities with unread research_applied inbox notifications.
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       try {
-        const notifs = await getMyNotifications(true);
-        const oppIds = new Set<string>();
-        for (const n of notifs) {
-          if (n.type === 'research_applied' && n.relatedOpportunityId) {
-            oppIds.add(n.relatedOpportunityId);
-          }
-        }
-        if (mounted) setPendingResearchApplicationsCount(oppIds.size);
+        const notifs = await getMyNotifications(true, 'inbox');
+        if (mounted) setPendingResearchApplicationsCount(countDistinctOpportunitiesFromResearchApplied(notifs));
       } catch {
         // ignore
       }
@@ -305,13 +388,6 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
       clearInterval(interval);
     };
   }, []);
-
-  const recentActivities = notifications.slice(0, 5).map(n => {
-    const d = n.createdAt ? new Date(n.createdAt) : null;
-    const date = d && !isNaN(d.getTime()) ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-    const time = d && !isNaN(d.getTime()) ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
-    return { activity: n.title, detail: n.message, time, date };
-  });
 
   const parseLocalDate = (isoDate: string) => {
     // Backend sends LocalDate like "2026-10-14". Parsing with new Date(string) can shift by timezone.
@@ -461,6 +537,22 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                       {Math.min(pendingResearchApplicationsCount, 99)}
                     </span>
                   )}
+                  {item.id === 'notifications' && unreadNotificationCount > 0 && (
+                    <span
+                      className="inline-flex items-center justify-center text-white ml-auto"
+                      style={{
+                        backgroundColor: '#ef4444',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        width: 20,
+                        height: 20,
+                        borderRadius: 9999,
+                        lineHeight: 1,
+                      }}
+                    >
+                      {Math.min(unreadNotificationCount, 99)}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -473,57 +565,15 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
           {activeMenu === 'dashboard' && (
             <>
               {/* Profile Card */}
-              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-                <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
-                  <Avatar className="h-24 w-24 border-4 border-[#4db4ac] shadow-md">
-                    <AvatarImage src={profileData.avatarUrl} alt={profileData.name} />
-                    <AvatarFallback className="bg-[#4db4ac] text-white" style={{ fontSize: '28px', fontWeight: 700 }}>
-                      {profileData.initials}
-                    </AvatarFallback>
-                  </Avatar>
-
-                  <div className="flex-1 text-center md:text-left">
-                    <h2 className="text-[#222222] mb-1" style={{ fontSize: '24px', fontWeight: 700 }}>
-                      {profileData.name}
-                    </h2>
-                    <p className="text-[#222222] mb-1" style={{ fontSize: '16px', fontWeight: 500 }}>
-                      Senior Lecturer (Mentor)
-                    </p>
-
-
-                    <div className="flex flex-col sm:flex-row gap-3 mb-4">
-                      <div className="flex items-center gap-2 text-[#222222]" style={{ fontSize: '14px' }}>
-                        <Mail className="h-4 w-4 text-[#4db4ac]" />
-                        <span>{profileData.email}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-[#222222]" style={{ fontSize: '14px' }}>
-                        <Phone className="h-4 w-4 text-[#4db4ac]" />
-                        <span>{profileData.phone}</span>
-                      </div>
-                    </div>
-
-                    <Button
-                      className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg px-6"
-                      style={{ fontWeight: 600 }}
-                      onClick={() => setEditProfileOpen(true)}
-                    >
-                      <Edit className="h-4 w-4 mr-2" />
-                      Edit Profile
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-
-              {/* Important Notices */}
-              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <BellRing className="h-5 w-5 text-[#4db4ac]" />
-                  <h3 className="text-[#222222]" style={{ fontSize: '16px', fontWeight: 700 }}>
-                    Important Notices
-                  </h3>
-                </div>
-                <SystemNotices userRole="mentor" />
-              </Card>
+              <DashboardIdentityCard
+                name={profileData.name}
+                initials={profileData.initials}
+                avatarUrl={profileData.avatarUrl}
+                roleTitle="Senior Lecturer (Mentor)"
+                department="Department of Industrial Management"
+                email={profileData.email}
+                phone={profileData.phone}
+              />
 
               {/* Mentorship Summary Statistics */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -543,37 +593,51 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                 ))}
               </div>
 
-              {/* Recent Activities */}
+              {/* Reminders (scheduled): mentee contracts, upcoming interviews, etc. — not the Notifications tab */}
               <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-                <h3 className="text-[#222222] mb-4" style={{ fontWeight: 700, fontSize: '18px' }}>
-                  Recent Activities
-                </h3>
-
-                <div className="space-y-1">
-                  {recentActivities.map((item, index) => (
-                    <div
-                      key={index}
-                      className="flex items-start gap-4 p-3 rounded-lg hover:bg-[#f9f9f9] transition-colors border-l-4 border-[#4db4ac]"
-                    >
-                      <div className="flex-shrink-0 mt-1">
-                        <div className="h-8 w-8 rounded-full bg-[#e6f7f6] flex items-center justify-center">
-                          <CheckCircle className="h-4 w-4 text-[#4db4ac]" />
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '18px' }}>
+                    Reminders
+                  </h3>
+                  {reminderNotifications.length > 0 && (
+                    <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '11px' }}>
+                      {reminderNotifications.length}
+                    </Badge>
+                  )}
+                </div>
+                {reminderNotifications.length === 0 ? (
+                  <p className="text-[#777777] py-4" style={{ fontSize: '13px' }}>
+                    No reminders right now. Contract milestones for your mentees and interview countdowns appear here.
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {reminderNotifications.map((n) => (
+                      <div
+                        key={n.id}
+                        className="flex items-start gap-4 p-3 rounded-lg hover:bg-[#f9f9f9] transition-colors border-l-4 border-[#4db4ac]"
+                      >
+                        <div className="flex-shrink-0 mt-1">
+                          <div className="h-8 w-8 rounded-full bg-[#e6f7f6] flex items-center justify-center">
+                            <Clock className="h-4 w-4 text-[#4db4ac]" />
+                          </div>
+                        </div>
+                        <div className="flex-1 pb-1">
+                          <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
+                            {n.title}
+                          </p>
+                          <p className="text-[#555555] whitespace-pre-line mt-1" style={{ fontSize: '13px' }}>
+                            {n.message}
+                          </p>
+                          {n.createdAt && (
+                            <p className="text-[#999999] mt-1" style={{ fontSize: '12px' }}>
+                              {new Date(n.createdAt).toLocaleString()}
+                            </p>
+                          )}
                         </div>
                       </div>
-                      <div className="flex-1 pb-4">
-                        <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 500 }}>
-                          {item.activity}
-                        </p>
-                        <p className="text-[#555555] mt-1" style={{ fontSize: '13px' }}>
-                          {item.detail}
-                        </p>
-                        <p className="text-[#999999] mt-1" style={{ fontSize: '12px' }}>
-                          {item.time} • {item.date}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </Card>
             </>
           )}
@@ -1061,23 +1125,71 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
             </>
           )}
 
-          {/* Notifications View */}
+          {/* Notifications View — inbox only (excludes dashboard reminders) */}
           {activeMenu === 'notifications' && (
             <>
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
                   Notifications
                 </h2>
+                <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '12px' }}>
+                  {inboxNotifications.length} total
+                </Badge>
               </div>
 
-              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <BellRing className="h-5 w-5 text-[#4db4ac]" />
-                  <h3 className="text-[#222222]" style={{ fontSize: '18px', fontWeight: 700 }}>
-                    Important Notices
-                  </h3>
-                </div>
-                <SystemNotices userRole="mentor" />
+              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6 mb-6">
+                {loadingNotifications ? (
+                  <div className="flex items-center gap-2 text-[#777777]" style={{ fontSize: '14px' }}>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading notifications…
+                  </div>
+                ) : inboxNotifications.length === 0 ? (
+                  <p className="text-[#777777] py-6 text-center" style={{ fontSize: '14px' }}>
+                    You have no notifications. Mentor assignments, research applications, and interview scheduling
+                    updates appear here. Reminders stay on your dashboard.
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {inboxNotifications.map((n) => (
+                      <div
+                        key={n.id}
+                        className={`flex items-start gap-4 p-3 rounded-lg border-l-4 transition-colors ${
+                          n.isRead
+                            ? 'border-[#e0e0e0] hover:bg-[#f9f9f9]'
+                            : 'border-[#4db4ac] bg-[#f0fbfa]'
+                        }`}
+                      >
+                        <div className="flex-shrink-0 mt-1">
+                          <div className="h-8 w-8 rounded-full bg-[#e6f7f6] flex items-center justify-center">
+                            <BellRing className="h-4 w-4 text-[#4db4ac]" />
+                          </div>
+                        </div>
+                        <div className="flex-1 pb-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
+                              {n.title}
+                            </p>
+                            {!n.isRead && (
+                              <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '10px' }}>
+                                New
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-[#555555] whitespace-pre-line mt-1" style={{ fontSize: '13px' }}>
+                            {n.message}
+                          </p>
+                          {n.createdAt && (
+                            <p className="text-[#999999] mt-1" style={{ fontSize: '12px' }}>
+                              {new Date(n.createdAt).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    <p className="text-[#999999] pt-3 text-center" style={{ fontSize: '12px' }}>
+                      Notifications are automatically removed after 7 days.
+                    </p>
+                  </div>
+                )}
               </Card>
             </>
           )}
@@ -1201,6 +1313,7 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
           open={showResearchDialog}
           onOpenChange={setShowResearchDialog}
           research={selectedResearch}
+          onApplicationDecided={refreshAfterResearchApplicationDecision}
         />
       )}
 

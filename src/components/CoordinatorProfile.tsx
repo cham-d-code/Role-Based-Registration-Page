@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   LayoutDashboard,
   Calendar,
@@ -58,6 +58,7 @@ import ResearchDetailsDialog from './ResearchDetailsDialog';
 import AddResearchDialog from './AddResearchDialog';
 import EditResearchDialog from './EditResearchDialog';
 import SalaryManagementPage from './SalaryManagementPage';
+import DashboardIdentityCard from './DashboardIdentityCard';
 import AttendanceReportPage from './AttendanceReportPage';
 import StaffProfileDialog from './StaffProfileDialog';
 import logo from 'figma:asset/39b6269214ec5f8a015cd1f1a1adaa157fd5d025.png';
@@ -84,7 +85,15 @@ interface CoordinatorProfileProps {
   onLogout: () => void;
 }
 
-
+function countDistinctOpportunitiesFromResearchApplied(notifs: UserNotificationDto[]): number {
+  const oppIds = new Set<string>();
+  for (const n of notifs) {
+    if (n.type === 'research_applied' && n.relatedOpportunityId) {
+      oppIds.add(n.relatedOpportunityId);
+    }
+  }
+  return oppIds.size;
+}
 
 interface Candidate {
   id: string;
@@ -675,21 +684,22 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
     };
   }, []);
 
-  // Red badge for pending research applications — distinct opportunities that
-  // have unread "research_applied" notifications. Cleared when at least one
-  // applicant is accepted (backend marks those notifications as read).
+  const refreshPendingResearchSidebarBadge = useCallback(async () => {
+    try {
+      const notifs = await getMyNotifications(true, 'inbox');
+      setPendingResearchApplicationsCount(countDistinctOpportunitiesFromResearchApplied(notifs));
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  // Red badge: distinct opportunities with unread research_applied (inbox).
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       try {
-        const notifs = await getMyNotifications(true);
-        const oppIds = new Set<string>();
-        for (const n of notifs) {
-          if (n.type === 'research_applied' && n.relatedOpportunityId) {
-            oppIds.add(n.relatedOpportunityId);
-          }
-        }
-        if (mounted) setPendingResearchApplicationsCount(oppIds.size);
+        const notifs = await getMyNotifications(true, 'inbox');
+        if (mounted) setPendingResearchApplicationsCount(countDistinctOpportunitiesFromResearchApplied(notifs));
       } catch {
         // ignore
       }
@@ -1117,47 +1127,15 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
           {activeMenu === 'dashboard' && (
             <>
               {/* Profile Card */}
-              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-                <div className="flex items-start gap-6">
-                  <Avatar className="h-24 w-24 border-4 border-[#4db4ac]">
-                    <AvatarImage src={profileData.avatarUrl} alt={profileData.name} />
-                    <AvatarFallback className="bg-[#4db4ac] text-white" style={{ fontSize: '32px' }}>
-                      {profileData.initials}
-                    </AvatarFallback>
-                  </Avatar>
-
-                  <div className="flex-1">
-                    <h2 className="text-[#222222] mb-1" style={{ fontWeight: 700, fontSize: '24px' }}>
-                      {profileData.name}
-                    </h2>
-                    <p className="text-[#4db4ac] mb-2" style={{ fontWeight: 600, fontSize: '16px' }}>
-                      Temporary Staff Coordinator
-                    </p>
-                    <p className="text-[#555555] mb-4" style={{ fontSize: '14px' }}>
-                      Department of Industrial Management
-                    </p>
-
-                    <div className="flex flex-col gap-2 mb-4">
-                      <div className="flex items-center gap-2 text-[#555555]" style={{ fontSize: '14px' }}>
-                        <Mail className="h-4 w-4 text-[#4db4ac]" />
-                        <span>{profileData.email}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-[#555555]" style={{ fontSize: '14px' }}>
-                        <Phone className="h-4 w-4 text-[#4db4ac]" />
-                        <span>{profileData.phone}</span>
-                      </div>
-                    </div>
-
-                    <Button
-                      className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg px-4 py-2"
-                      onClick={() => setEditProfileOpen(true)}
-                    >
-                      <Edit className="h-4 w-4 mr-2" />
-                      Edit Profile
-                    </Button>
-                  </div>
-                </div>
-              </Card>
+              <DashboardIdentityCard
+                name={profileData.name}
+                initials={profileData.initials}
+                avatarUrl={profileData.avatarUrl}
+                roleTitle="Temporary Staff Coordinator"
+                department="Department of Industrial Management"
+                email={profileData.email}
+                phone={profileData.phone}
+              />
 
               {/* Statistics Section */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -2367,6 +2345,7 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
           open={showResearchDialog}
           onOpenChange={setShowResearchDialog}
           research={selectedResearch}
+          onApplicationDecided={refreshPendingResearchSidebarBadge}
         />
       )}
 

@@ -82,6 +82,34 @@ public class ContractExpiryReminderService {
                         null
                 );
             }
+
+            if (s.getMentorId() != null) {
+                userRepository.findById(s.getMentorId()).ifPresent(mentor -> {
+                    if (mentor.getStatus() != UserStatus.approved || mentor.getRole() != UserRole.mentor) {
+                        return;
+                    }
+                    String mentorMessage = String.format(
+                            "Mentee contract reminder (%s before): %s contract ends on %s. [staffId=%s, milestoneDays=%d]",
+                            whenLabel,
+                            s.getFullName(),
+                            s.getContractEndDate(),
+                            s.getId(),
+                            daysLeft
+                    );
+                    if (userNotificationRepository.existsByRecipientIdAndTypeAndMessage(
+                            mentor.getId(), NotificationType.contract_expiry, mentorMessage)) {
+                        return;
+                    }
+                    notificationService.notifyUser(
+                            mentor.getId(),
+                            title,
+                            mentorMessage,
+                            NotificationType.contract_expiry,
+                            null,
+                            null
+                    );
+                });
+            }
         }
     }
 }
