@@ -281,6 +281,18 @@ export async function markNotificationRead(notificationId: string): Promise<{ su
     return fetchWithAuth(`${API_BASE_URL}/notifications/${notificationId}/read`, { method: 'POST' });
 }
 
+// --- Dashboard APIs ---
+export interface HodDashboardStats {
+    totalTemporaryStaff: number;
+    activeMentorships: number;
+    contractsExpiringSoon: number;
+    upcomingInterviewRounds: number;
+}
+
+export async function getHodDashboardStats(): Promise<HodDashboardStats> {
+    return fetchWithAuth(`${API_BASE_URL}/dashboard/hod-stats`);
+}
+
 // Check if user is authenticated
 export function isAuthenticated(): boolean {
     return !!getAuthToken();

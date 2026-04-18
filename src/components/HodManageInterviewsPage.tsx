@@ -373,10 +373,10 @@ export default function HodManageInterviewsPage({ onBack }: HodManageInterviewsP
                         )}
                         {isLive && (
                           <>
-                            <Button className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => { loadCandidates(interview.id); setMarkingInterview(interview); }}>
+                            <Button className="bg-black hover:bg-gray-800 text-white" onClick={() => { loadCandidates(interview.id); setMarkingInterview(interview); }}>
                               <UserCheck className="h-4 w-4 mr-2" />Mark Candidates
                             </Button>
-                            <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={handleEndSession}>
+                            <Button className="bg-black hover:bg-gray-800 text-white" onClick={handleEndSession}>
                               <Square className="h-4 w-4 mr-2" />End Session
                             </Button>
                           </>

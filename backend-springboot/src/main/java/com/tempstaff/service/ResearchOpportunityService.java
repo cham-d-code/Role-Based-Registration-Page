@@ -25,6 +25,7 @@ public class ResearchOpportunityService {
     private final UserSubjectRepository userSubjectRepository;
     private final ModuleRepository moduleRepository;
     private final NotificationService notificationService;
+    private final UserNotificationRepository userNotificationRepository;
 
     @Transactional
     public ResearchOpportunityResponse createOpportunity(UUID creatorId, CreateResearchOpportunityRequest request) {
@@ -201,6 +202,21 @@ public class ResearchOpportunityService {
 
         app.setStatus(ApplicationStatus.accepted);
         researchApplicationRepository.save(app);
+
+        // Clear the "new application" badge for this opportunity on the owner's inbox.
+        // Once at least one applicant is accepted for a research opportunity, we mark all
+        // research_applied notifications for that opportunity as read, so the red count drops.
+        List<UserNotification> appliedNotifs = userNotificationRepository
+                .findByRecipientIdAndTypeAndRelatedOpportunityId(
+                        ownerId, NotificationType.research_applied, opp.getId());
+        for (UserNotification n : appliedNotifs) {
+            if (Boolean.FALSE.equals(n.getIsRead())) {
+                n.setIsRead(true);
+            }
+        }
+        if (!appliedNotifs.isEmpty()) {
+            userNotificationRepository.saveAll(appliedNotifs);
+        }
 
         notificationService.notifyUser(
                 app.getUserId(),

@@ -398,7 +398,7 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
                         </Button>
                         <Button
                           onClick={handleEndSession}
-                          className="bg-white text-green-700 hover:bg-green-50 font-semibold"
+                          className="bg-black hover:bg-gray-800 text-white font-semibold"
                         >
                           <Square className="h-4 w-4 mr-2" />
                           End Session
@@ -486,7 +486,7 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
                     {/* Marking Button */}
                     <div className="flex justify-end">
                       <Button
-                        className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
+                        className="bg-black hover:bg-gray-800 text-white"
                         onClick={() => setMarkingInterview(interview)}
                       >
                         <FileText className="h-4 w-4 mr-2" />

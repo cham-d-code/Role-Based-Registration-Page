@@ -191,16 +191,12 @@ public class AuthService {
         }
 
         // Verify password
-        // DEBUG: Bypass password check
-        /*
-         * if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash()))
-         * {
-         * return AuthResponse.builder()
-         * .success(false)
-         * .message("Invalid email or password")
-         * .build();
-         * }
-         */
+        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+            return AuthResponse.builder()
+                    .success(false)
+                    .message("Invalid email or password")
+                    .build();
+        }
 
         // Update last login
         user.setLastLoginAt(LocalDateTime.now());

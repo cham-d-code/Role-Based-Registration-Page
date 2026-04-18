@@ -39,6 +39,7 @@ import ResearchDetailsDialog from './ResearchDetailsDialog';
 import AddResearchDialog from './AddResearchDialog';
 import EditResearchDialog from './EditResearchDialog';
 import EditProfileDialog from './EditProfileDialog';
+import StaffProfileDialog from './StaffProfileDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Textarea } from './ui/textarea';
 import { createResearchOpportunity, deleteResearchOpportunity, getActiveSession, getInterviews, getInterviewCandidates, getJobDescriptionForStaff, getMarkingScheme, getMyMentees, getMyMenteesCount, getMyNotifications, getMyResearchOpportunities, MarkingSchemeData, ResearchOpportunityDto, SessionState, updateMyProfile, updateResearchOpportunity, UserNotificationDto, UserProfile } from '../services/api';
@@ -88,8 +89,12 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
   const [savingSpec, setSavingSpec] = useState(false);
   const [myResearch, setMyResearch] = useState<ResearchOpportunityDto[]>([]);
   const [loadingResearch, setLoadingResearch] = useState(false);
+  // Number of my research opportunities that have at least one pending (unaccepted) application.
+  const [pendingResearchApplicationsCount, setPendingResearchApplicationsCount] = useState(0);
   const [notifications, setNotifications] = useState<UserNotificationDto[]>([]);
   const [myMentees, setMyMentees] = useState<UserProfile[]>([]);
+  const [showStaffProfileDialog, setShowStaffProfileDialog] = useState(false);
+  const [selectedStaffForProfile, setSelectedStaffForProfile] = useState<{ id: string; name: string } | null>(null);
   const [loadingMentees, setLoadingMentees] = useState(false);
   const [menteesCount, setMenteesCount] = useState(0);
   const [profileData, setProfileData] = useState({
@@ -274,6 +279,33 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
       .finally(() => setLoadingResearch(false));
   }, [activeMenu]);
 
+  // Red badge for pending research applications — distinct opportunities that
+  // have unread "research_applied" notifications. Cleared when at least one
+  // applicant is accepted (backend marks those notifications as read).
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const notifs = await getMyNotifications(true);
+        const oppIds = new Set<string>();
+        for (const n of notifs) {
+          if (n.type === 'research_applied' && n.relatedOpportunityId) {
+            oppIds.add(n.relatedOpportunityId);
+          }
+        }
+        if (mounted) setPendingResearchApplicationsCount(oppIds.size);
+      } catch {
+        // ignore
+      }
+    };
+    load();
+    const interval = setInterval(load, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
   const recentActivities = notifications.slice(0, 5).map(n => {
     const d = n.createdAt ? new Date(n.createdAt) : null;
     const date = d && !isNaN(d.getTime()) ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
@@ -410,9 +442,25 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                   style={{ fontSize: '14px', fontWeight: isActive ? 600 : 500 }}
                 >
                   <Icon className="h-5 w-5" />
-                  <span className="whitespace-nowrap overflow-hidden text-ellipsis">
+                  <span className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis text-left">
                     {item.label}
                   </span>
+                  {item.id === 'research' && pendingResearchApplicationsCount > 0 && (
+                    <span
+                      className="inline-flex items-center justify-center text-white ml-auto"
+                      style={{
+                        backgroundColor: '#dc2626',
+                        width: 20,
+                        height: 20,
+                        borderRadius: 9999,
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        lineHeight: 1,
+                      }}
+                    >
+                      {Math.min(pendingResearchApplicationsCount, 99)}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -674,6 +722,17 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                           >
                             <FileText className="h-4 w-4 mr-2" />
                             View Job Description
+                          </Button>
+                          <Button
+                            variant="outline"
+                            className="w-full border-[#4db4ac] text-[#4db4ac] hover:bg-[#4db4ac] hover:text-white"
+                            onClick={() => {
+                              setSelectedStaffForProfile({ id: (mentee as any).id, name: (mentee as any).fullName });
+                              setShowStaffProfileDialog(true);
+                            }}
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Profile
                           </Button>
                         </div>
                       </div>
@@ -1182,6 +1241,14 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
         onOpenChange={setEditProfileOpen}
         currentProfile={profileData}
         onSave={handleProfileSave}
+      />
+
+      {/* Staff Profile Dialog (used by My Mentees view) */}
+      <StaffProfileDialog
+        open={showStaffProfileDialog}
+        onOpenChange={setShowStaffProfileDialog}
+        staffId={selectedStaffForProfile?.id ?? null}
+        fallbackName={selectedStaffForProfile?.name}
       />
 
       <Dialog open={editSpecOpen} onOpenChange={setEditSpecOpen}>

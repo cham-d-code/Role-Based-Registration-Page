@@ -58,6 +58,8 @@ import ResearchDetailsDialog from './ResearchDetailsDialog';
 import AddResearchDialog from './AddResearchDialog';
 import EditResearchDialog from './EditResearchDialog';
 import SalaryManagementPage from './SalaryManagementPage';
+import AttendanceReportPage from './AttendanceReportPage';
+import StaffProfileDialog from './StaffProfileDialog';
 import logo from 'figma:asset/39b6269214ec5f8a015cd1f1a1adaa157fd5d025.png';
 import {
   approveLeave,
@@ -187,13 +189,16 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
   const [myResearch, setMyResearch] = useState<ResearchOpportunityDto[]>([]);
   const [loadingResearch, setLoadingResearch] = useState(false);
   const [newResearchCount, setNewResearchCount] = useState(0);
-  const [reminderNotifications, setReminderNotifications] = useState<UserNotificationDto[]>([]);
+  // Number of my research opportunities that have at least one pending (unaccepted) application.
+  const [pendingResearchApplicationsCount, setPendingResearchApplicationsCount] = useState(0);
   const [showAddResearchDialog, setShowAddResearchDialog] = useState(false);
   const [showEditResearchDialog, setShowEditResearchDialog] = useState(false);
   const [showResearchDialog, setShowResearchDialog] = useState(false);
   const [selectedResearch, setSelectedResearch] = useState<ResearchOpportunityDto | null>(null);
 
   const [myMentees, setMyMentees] = useState<UserProfile[]>([]);
+  const [showStaffProfileDialog, setShowStaffProfileDialog] = useState(false);
+  const [selectedStaffForProfile, setSelectedStaffForProfile] = useState<{ id: string; name: string } | null>(null);
   const [loadingMentees, setLoadingMentees] = useState(false);
 
   // Fetch real profile data from backend on mount
@@ -344,19 +349,42 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
   // Leave requests data (pending approvals)
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequestDto[]>([]);
   const [loadingLeaveApprovals, setLoadingLeaveApprovals] = useState(false);
+  const [pendingLeaveCount, setPendingLeaveCount] = useState(0);
 
   // Fetch pending leave requests for approvals
   useEffect(() => {
     if (activeMenu !== 'leave') return;
     setLoadingLeaveApprovals(true);
     getPendingLeaveRequests()
-      .then((items) => setLeaveRequests(items))
+      .then((items) => {
+        setLeaveRequests(items);
+        setPendingLeaveCount(items.length);
+      })
       .catch((e) => {
         console.error('Failed to load pending leave requests', e);
         setLeaveRequests([]);
       })
       .finally(() => setLoadingLeaveApprovals(false));
   }, [activeMenu]);
+
+  // Red badge: poll pending leave requests count regardless of active tab
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const items = await getPendingLeaveRequests();
+        if (mounted) setPendingLeaveCount(items.length);
+      } catch {
+        // ignore
+      }
+    };
+    load();
+    const interval = setInterval(load, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   // FR7: Registration requests
   const [registrationRequests, setRegistrationRequests] = useState<any[]>([]);
@@ -474,7 +502,9 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
     try {
       setLoadingLeaveApprovals(true);
       await approveLeave(id);
-      setLeaveRequests(await getPendingLeaveRequests());
+      const pending = await getPendingLeaveRequests();
+      setLeaveRequests(pending);
+      setPendingLeaveCount(pending.length);
       alert('Leave request approved successfully!');
     } catch (e: any) {
       alert(e?.message || 'Failed to approve leave request');
@@ -488,7 +518,9 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
     try {
       setLoadingLeaveApprovals(true);
       await rejectLeave(id);
-      setLeaveRequests(await getPendingLeaveRequests());
+      const pending = await getPendingLeaveRequests();
+      setLeaveRequests(pending);
+      setPendingLeaveCount(pending.length);
       alert('Leave request rejected.');
     } catch (e: any) {
       alert(e?.message || 'Failed to reject leave request');
@@ -584,7 +616,8 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
     { id: 'research', label: 'Research Opportunities', icon: FileText },
     { id: 'staff', label: 'Temporary Staff List', icon: Users },
     { id: 'modules', label: 'Module Notifications', icon: BellRing },
-    { id: 'salary', label: 'Salary Reports', icon: CalendarCheck },
+    { id: 'attendance', label: 'Attendance Report', icon: CalendarCheck },
+    { id: 'salary', label: 'Salary Report', icon: CalendarCheck },
     { id: 'leave', label: 'Leave Requests', icon: FileText },
     { id: 'profile', label: 'Profile', icon: UserIcon },
   ];
@@ -618,28 +651,32 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
     };
   }, []);
 
-  // Reminders panel (unread notifications except research_new)
+  // Red badge for pending research applications — distinct opportunities that
+  // have unread "research_applied" notifications. Cleared when at least one
+  // applicant is accepted (backend marks those notifications as read).
   useEffect(() => {
-    if (activeMenu !== 'dashboard') return;
     let mounted = true;
-
     const load = async () => {
       try {
         const notifs = await getMyNotifications(true);
-        const filtered = notifs.filter((n: UserNotificationDto) => n.type !== 'research_new');
-        if (mounted) setReminderNotifications(filtered.slice(0, 12));
+        const oppIds = new Set<string>();
+        for (const n of notifs) {
+          if (n.type === 'research_applied' && n.relatedOpportunityId) {
+            oppIds.add(n.relatedOpportunityId);
+          }
+        }
+        if (mounted) setPendingResearchApplicationsCount(oppIds.size);
       } catch {
-        if (mounted) setReminderNotifications([]);
+        // ignore
       }
     };
-
     load();
     const interval = setInterval(load, 5000);
     return () => {
       mounted = false;
       clearInterval(interval);
     };
-  }, [activeMenu]);
+  }, []);
 
   // When opening Research tab, mark research_new notifications as read
   useEffect(() => {
@@ -992,9 +1029,12 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                   style={{ fontSize: '14px', fontWeight: isActive ? 600 : 500 }}
                 >
                   <Icon className="h-5 w-5" />
-                  {item.id === 'research' && newResearchCount > 0 && (
+                  <span className="flex-1 whitespace-nowrap overflow-hidden text-ellipsis text-left">
+                    {item.label}
+                  </span>
+                  {item.id === 'research' && pendingResearchApplicationsCount > 0 && (
                     <span
-                      className="inline-flex items-center justify-center text-white"
+                      className="inline-flex items-center justify-center text-white ml-auto"
                       style={{
                         backgroundColor: '#dc2626',
                         width: 20,
@@ -1005,12 +1045,25 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                         lineHeight: 1,
                       }}
                     >
-                      {Math.min(newResearchCount, 99)}
+                      {Math.min(pendingResearchApplicationsCount, 99)}
                     </span>
                   )}
-                  <span className="whitespace-nowrap overflow-hidden text-ellipsis">
-                    {item.label}
-                  </span>
+                  {item.id === 'leave' && pendingLeaveCount > 0 && (
+                    <span
+                      className="inline-flex items-center justify-center text-white ml-auto"
+                      style={{
+                        backgroundColor: '#dc2626',
+                        width: 20,
+                        height: 20,
+                        borderRadius: 9999,
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        lineHeight: 1,
+                      }}
+                    >
+                      {Math.min(pendingLeaveCount, 99)}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -1018,7 +1071,7 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
         </aside>
 
         {/* Main Content Area */}
-        <main className={`flex-1 ml-64 p-6 space-y-6 ${activeMenu === 'dashboard' ? 'mr-80' : ''}`}>
+        <main className="flex-1 ml-64 p-6 space-y-6">
           {/* Dashboard View */}
           {activeMenu === 'dashboard' && (
             <>
@@ -1945,6 +1998,17 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                             <FileText className="h-4 w-4 mr-2" />
                             View Job Description
                           </Button>
+                          <Button
+                            variant="outline"
+                            className="w-full border-[#4db4ac] text-[#4db4ac] hover:bg-[#4db4ac] hover:text-white"
+                            onClick={() => {
+                              setSelectedStaffForProfile({ id: mentee.id, name: mentee.fullName });
+                              setShowStaffProfileDialog(true);
+                            }}
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Profile
+                          </Button>
                         </div>
                       </div>
                     </Card>
@@ -2161,6 +2225,10 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
             </Card>
           )}
 
+          {activeMenu === 'attendance' && (
+            <AttendanceReportPage staffMembers={staffMembers} userRole="coordinator" />
+          )}
+
           {activeMenu === 'salary' && <SalaryManagementPage userRole="coordinator" />}
 
           {/* Profile View */}
@@ -2235,42 +2303,6 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
           )}
         </main>
 
-        {/* Right Sidebar - only on Dashboard */}
-        {activeMenu === 'dashboard' && (
-          <aside className="fixed right-0 top-16 bottom-0 w-80 bg-white shadow-lg overflow-y-auto p-6">
-            <h3 className="text-[#222222] mb-4" style={{ fontWeight: 700, fontSize: '18px' }}>
-              Reminders
-            </h3>
-            <Separator className="mb-4" />
-
-            {reminderNotifications.length === 0 ? (
-              <p className="text-[#777777]" style={{ fontSize: '13px' }}>
-                No new reminders right now.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {reminderNotifications.map((n) => (
-                  <Card
-                    key={n.id}
-                    className="bg-[#f9f9f9] border border-[#e0e0e0] rounded-lg p-4 hover:shadow-md transition-shadow"
-                  >
-                    <p className="text-[#222222] mb-1" style={{ fontSize: '13px', fontWeight: 700 }}>
-                      {n.title}
-                    </p>
-                    <p className="text-[#555555] whitespace-pre-line" style={{ fontSize: '12px' }}>
-                      {n.message}
-                    </p>
-                    {n.createdAt && (
-                      <p className="text-[#999999] mt-2" style={{ fontSize: '11px' }}>
-                        {new Date(n.createdAt).toLocaleString()}
-                      </p>
-                    )}
-                  </Card>
-                ))}
-              </div>
-            )}
-          </aside>
-        )}
       </div>
 
 
@@ -2349,6 +2381,14 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
         onOpenChange={setShowAttendanceDialog}
         staffName={selectedStaffForAttendance?.name || ''}
         staffId={selectedStaffForAttendance?.id || ''}
+      />
+
+      {/* Staff Profile Dialog (used by My Mentees view) */}
+      <StaffProfileDialog
+        open={showStaffProfileDialog}
+        onOpenChange={setShowStaffProfileDialog}
+        staffId={selectedStaffForProfile?.id ?? null}
+        fallbackName={selectedStaffForProfile?.name}
       />
 
       <Dialog open={extendContractOpen} onOpenChange={setExtendContractOpen}>

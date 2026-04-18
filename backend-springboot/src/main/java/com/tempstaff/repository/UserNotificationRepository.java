@@ -18,5 +18,8 @@ public interface UserNotificationRepository extends JpaRepository<UserNotificati
     boolean existsByRecipientIdAndTypeAndMessage(UUID recipientId, NotificationType type, String message);
 
     Optional<UserNotification> findByIdAndRecipientId(UUID id, UUID recipientId);
+
+    List<UserNotification> findByRecipientIdAndTypeAndRelatedOpportunityId(
+            UUID recipientId, NotificationType type, UUID relatedOpportunityId);
 }
 
