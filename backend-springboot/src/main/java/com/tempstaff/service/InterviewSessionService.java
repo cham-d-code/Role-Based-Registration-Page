@@ -36,6 +36,15 @@ public class InterviewSessionService {
             throw new RuntimeException("Only the Temporary Staff Coordinator can start an interview session.");
         }
 
+        // Repair: rows still active while interview is already ended (should not block a new live session)
+        for (InterviewSession stale : sessionRepo.findAllByActiveTrueAndInterview_Status(InterviewStatus.ended)) {
+            stale.setActive(false);
+            if (stale.getEndedAt() == null) {
+                stale.setEndedAt(LocalDateTime.now());
+            }
+            sessionRepo.save(stale);
+        }
+
         // End any existing active session for this interview
         sessionRepo.findByInterviewIdAndActiveTrue(interviewId).ifPresent(s -> {
             s.setActive(false);
@@ -122,10 +131,15 @@ public class InterviewSessionService {
         return buildSessionState(session, callerId);
     }
 
-    /** Get any active session across all interviews (used for polling by mentor/HOD/coordinator) */
+    /**
+     * Get any active session across all interviews (used for polling by mentor/HOD/coordinator).
+     * Only sessions for {@link InterviewStatus#upcoming} interviews count — avoids ghost "live" UI when
+     * {@code is_active} was left true but the interview was already marked ended.
+     */
     @Transactional(readOnly = true)
     public SessionStateResponse getActiveSession(UUID callerId) {
-        return sessionRepo.findFirstByActiveTrue()
+        return sessionRepo
+                .findFirstByActiveTrueAndInterview_StatusOrderByStartedAtDesc(InterviewStatus.upcoming)
                 .map(s -> buildSessionState(s, callerId))
                 .orElse(null);
     }

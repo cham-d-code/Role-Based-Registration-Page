@@ -92,6 +92,17 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
     return () => clearInterval(interval);
   }, [markingInterview]);
 
+  // Ending a session marks the interview "ended" — it leaves `upcomingInterviews` while `liveInterviewId` could linger and block Start.
+  useEffect(() => {
+    if (!liveInterviewId) return;
+    const stillUpcoming = interviews.some(i => i.id === liveInterviewId && i.status === 'upcoming');
+    if (!stillUpcoming) {
+      skipReconnectSessionIdRef.current = null;
+      setLiveInterviewId(null);
+      setSessionState(null);
+    }
+  }, [interviews, liveInterviewId]);
+
   async function fetchInterviews() {
     setLoadingInterviews(true);
     try {
@@ -175,10 +186,15 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
   // ── End Session ────────────────────────────────────────────────────────────
   async function handleEndSession() {
     if (!liveInterviewId) return;
-    try { await endInterviewSession(liveInterviewId); } catch { /* ignore */ }
-    skipReconnectSessionIdRef.current = null;
-    setLiveInterviewId(null);
-    setSessionState(null);
+    try {
+      await endInterviewSession(liveInterviewId);
+      skipReconnectSessionIdRef.current = null;
+      setLiveInterviewId(null);
+      setSessionState(null);
+      await fetchInterviews();
+    } catch (e: any) {
+      alert(e?.message || 'Failed to end the interview session.');
+    }
   }
 
   // ── Leave Session (coordinator exits but session stays live; marks excluded from average) ──
@@ -231,6 +247,9 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
 
   const upcomingInterviews = interviews.filter(i => i.status === 'upcoming');
   const endedInterviews = interviews.filter(i => i.status === 'ended');
+  /** True only when the live session points at an interview still listed as upcoming (avoids stale UI after End). */
+  const hasCoordinatorLiveSession =
+    liveInterviewId != null && upcomingInterviews.some(i => i.id === liveInterviewId);
 
   // Navigate to marking page
   if (markingInterview) {
@@ -267,7 +286,7 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
             Manage Interviews
           </h1>
         </div>
-        {liveInterviewId && (
+        {hasCoordinatorLiveSession && (
           <div className="flex items-center gap-2 bg-green-600 px-4 py-2 rounded-lg">
             <Wifi className="h-4 w-4 text-white animate-pulse" />
             <span className="text-white text-sm font-semibold">Interview Live</span>
@@ -588,7 +607,7 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
                       </div>
 
                       {/* Start Interview — coordinator only (enforced on backend) */}
-                      {!isLive && !liveInterviewId && (
+                      {!isLive && !hasCoordinatorLiveSession && (
                         <Button
                           className="bg-green-600 hover:bg-green-700 text-white"
                           onClick={() => handleStartInterview(interview)}
