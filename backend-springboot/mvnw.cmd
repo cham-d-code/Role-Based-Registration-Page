@@ -18,6 +18,6 @@ if not exist "%WRAPPER_JAR%" (
     powershell -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%WRAPPER_URL%' -OutFile '%WRAPPER_JAR%'"
 )
 
-"%JAVA_EXE%" -jar "%WRAPPER_JAR%" %*
+"%JAVA_EXE%" -classpath "%WRAPPER_JAR%" "-Dmaven.multiModuleProjectDirectory=%DIRNAME%." org.apache.maven.wrapper.MavenWrapperMain %*
 
 endlocal
