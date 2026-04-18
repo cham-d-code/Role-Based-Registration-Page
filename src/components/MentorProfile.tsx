@@ -19,7 +19,6 @@ import {
   Trash2,
   FileText,
   Calendar,
-  Play,
   ClipboardList,
   Loader2,
 } from 'lucide-react';
@@ -129,8 +128,10 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
   // Marking scheme fetched from backend when active in a session
   const [markingScheme, setMarkingScheme] = useState<MarkingSchemeData | null>(null);
   const [loadingScheme, setLoadingScheme] = useState(false);
-  // Candidates for the live interview
+  // Candidates for the live interview (admitted markers)
   const [liveCandidates, setLiveCandidates] = useState<{ id: string; name: string; email: string; phone: string }[]>([]);
+  const [waitingRoomCandidates, setWaitingRoomCandidates] = useState<{ id: string; name: string; email: string; phone: string }[]>([]);
+  const [loadingWaitingCandidates, setLoadingWaitingCandidates] = useState(false);
 
   // Fetch profile on mount
   useEffect(() => {
@@ -178,9 +179,16 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
     return () => clearInterval(interval);
   }, []);
 
-  // When we become active in a session, fetch the marking scheme + candidates
+  // Active: scheme + candidates for marking. Waiting: candidates only (read-only) until coordinator admits.
   useEffect(() => {
-    if (liveSession?.myStatus === 'active' && liveSession.interviewId) {
+    if (!liveSession?.interviewId) {
+      setMarkingScheme(null);
+      setLiveCandidates([]);
+      setWaitingRoomCandidates([]);
+      return;
+    }
+    if (liveSession.myStatus === 'active') {
+      setWaitingRoomCandidates([]);
       setLoadingScheme(true);
       Promise.all([
         getMarkingScheme(liveSession.interviewId),
@@ -189,7 +197,7 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
         .then(([scheme, cands]) => {
           setMarkingScheme(scheme);
           setLiveCandidates(cands.map(c => ({
-            id: c.id,
+            id: (c as any).candidateId || c.id,
             name: c.name,
             email: c.email,
             phone: c.phone,
@@ -197,9 +205,27 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
         })
         .catch(e => console.error('Failed to load scheme/candidates', e))
         .finally(() => setLoadingScheme(false));
-    } else if (!liveSession || liveSession.myStatus !== 'active') {
+    } else if (liveSession.myStatus === 'waiting') {
       setMarkingScheme(null);
       setLiveCandidates([]);
+      setLoadingWaitingCandidates(true);
+      getInterviewCandidates(liveSession.interviewId)
+        .then((cands) =>
+          setWaitingRoomCandidates(
+            cands.map((c) => ({
+              id: (c as any).candidateId || c.id,
+              name: c.name,
+              email: c.email,
+              phone: c.phone,
+            }))
+          )
+        )
+        .catch((e) => console.error('Failed to load candidates for waiting room', e))
+        .finally(() => setLoadingWaitingCandidates(false));
+    } else {
+      setMarkingScheme(null);
+      setLiveCandidates([]);
+      setWaitingRoomCandidates([]);
     }
   }, [liveSession?.interviewId, liveSession?.myStatus]);
 
@@ -835,12 +861,13 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                           {liveSession.myStatus === 'active'
                             ? `You are in the live session — ${liveSession.interviewNumber}`
                             : liveSession.myStatus === 'waiting'
-                            ? `Waiting for approval — ${liveSession.interviewNumber} is live`
+                            ? `Waiting room — ${liveSession.interviewNumber} is live`
                             : `You have been removed from ${liveSession.interviewNumber}`}
                         </p>
                         <p className="text-white/80 text-sm">
                           Started by {liveSession.startedByName}
-                          {liveSession.myStatus === 'waiting' && ' · Waiting for coordinator/HOD to allow you in'}
+                          {liveSession.myStatus === 'waiting' &&
+                            ' · The coordinator will admit you when ready. Review candidates below.'}
                           {liveSession.myStatus === 'active' && ` · ${liveSession.activeParticipants.length} active participant(s)`}
                         </p>
                       </div>
@@ -855,11 +882,12 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                           </div>
                         ) : (
                           <Button
-                            className="bg-white text-green-700 hover:bg-green-50 font-semibold"
-                            onClick={() => setCurrentPage('interviewMarking')}
+                            className="bg-white text-green-700 hover:bg-green-50 font-semibold disabled:opacity-60"
+                            disabled={!markingScheme}
+                            onClick={() => markingScheme && setCurrentPage('interviewMarking')}
                           >
                             <ClipboardList className="h-4 w-4 mr-2" />
-                            {markingScheme ? 'Enter Marks' : 'Enter Marks (No Scheme Set)'}
+                            {markingScheme ? 'Enter Marks' : 'Waiting for coordinator’s marking scheme'}
                           </Button>
                         )}
                       </div>
@@ -879,6 +907,41 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                           </span>
                         ))}
                       </div>
+                    </div>
+                  )}
+
+                  {liveSession.myStatus === 'waiting' && (
+                    <div className="mt-3 pt-3 border-t border-white/30">
+                      <p className="text-white text-sm font-semibold mb-2">Candidates (read-only until admitted)</p>
+                      {loadingWaitingCandidates ? (
+                        <div className="flex items-center gap-2 text-white/80 text-sm">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Loading candidates…
+                        </div>
+                      ) : waitingRoomCandidates.length === 0 ? (
+                        <p className="text-white/80 text-sm">No candidates loaded.</p>
+                      ) : (
+                        <div className="max-h-48 overflow-y-auto rounded-lg bg-white/10">
+                          <table className="w-full text-left text-xs text-white">
+                            <thead>
+                              <tr className="border-b border-white/20">
+                                <th className="p-2 font-semibold">Name</th>
+                                <th className="p-2 font-semibold">Email</th>
+                                <th className="p-2 font-semibold">Phone</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {waitingRoomCandidates.map((c) => (
+                                <tr key={c.id} className="border-b border-white/10">
+                                  <td className="p-2">{c.name}</td>
+                                  <td className="p-2">{c.email}</td>
+                                  <td className="p-2">{c.phone}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
                   )}
                 </Card>
@@ -923,16 +986,9 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
                           </div>
                         </div>
 
-                        <Button
-                          className="bg-green-600 hover:bg-green-700 text-white"
-                          onClick={() => {
-                            setSelectedInterview(interview);
-                            setCurrentPage('interviewMarking');
-                          }}
-                        >
-                          <Play className="h-4 w-4 mr-2" />
-                          Start Interview
-                        </Button>
+                        <p className="text-[#555555] max-w-md text-right" style={{ fontSize: '12px' }}>
+                          Live interviews are started by the Temporary Staff Coordinator only. When a session runs, your status appears in the banner above.
+                        </p>
                       </div>
                     </Card>
 

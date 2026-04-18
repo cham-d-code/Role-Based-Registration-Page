@@ -24,13 +24,18 @@ public class InterviewSessionService {
     private final NotificationService notificationService;
 
     /**
-     * Start a live interview session.
-     * - Caller is added as 'active'
-     * - If caller is coordinator: HODs are auto-approved (active), mentors go to waiting
-     * - If caller is HOD: coordinators are auto-approved (active), mentors go to waiting
+     * Start a live interview session (Temporary Staff Coordinator only).
+     * The coordinator is active; all other panel members (HOD, mentors, other coordinators) start in the waiting room
+     * until the coordinator admits them.
      */
     @Transactional
     public SessionStateResponse startSession(UUID interviewId, UUID callerId) {
+        User caller = userRepo.findById(callerId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        if (caller.getRole() != UserRole.coordinator) {
+            throw new RuntimeException("Only the Temporary Staff Coordinator can start an interview session.");
+        }
+
         // End any existing active session for this interview
         sessionRepo.findByInterviewIdAndActiveTrue(interviewId).ifPresent(s -> {
             s.setActive(false);
@@ -40,8 +45,6 @@ public class InterviewSessionService {
 
         Interview interview = interviewRepo.findById(interviewId)
                 .orElseThrow(() -> new RuntimeException("Interview not found"));
-        User caller = userRepo.findById(callerId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
 
         InterviewSession session = InterviewSession.builder()
                 .interview(interview)
@@ -49,29 +52,18 @@ public class InterviewSessionService {
                 .build();
         session = sessionRepo.save(session);
 
-        // Determine which roles to auto-approve vs put in waiting
-        UserRole autoApproveRole = caller.getRole() == UserRole.coordinator
-                ? UserRole.hod : UserRole.coordinator;
-
-        // Fetch all approved panel members (HOD+mentor for coordinator, coordinator+mentor for HOD)
-        List<UserRole> panelRoles = caller.getRole() == UserRole.coordinator
-                ? Arrays.asList(UserRole.hod, UserRole.mentor)
-                : Arrays.asList(UserRole.coordinator, UserRole.mentor);
-
+        List<UserRole> panelRoles = Arrays.asList(UserRole.hod, UserRole.mentor, UserRole.coordinator);
         List<User> panelMembers = userRepo.findByStatusAndRoleIn(UserStatus.approved, panelRoles);
 
-        // Add caller as active
         saveParticipant(session, caller, "active");
 
-        // Add panel members
         for (User member : panelMembers) {
-            if (member.getId().equals(callerId)) continue;
-            String status = member.getRole() == autoApproveRole ? "active" : "waiting";
-            saveParticipant(session, member, status);
+            if (member.getId().equals(callerId)) {
+                continue;
+            }
+            saveParticipant(session, member, "waiting");
         }
 
-        // Notify HODs that an interview session has started (they can join from waiting room / active).
-        // Skip if the caller is the HOD themselves.
         List<User> hods = userRepo.findByStatusAndRoleIn(UserStatus.approved, List.of(UserRole.hod));
         String startTitle = "Interview session started";
         String startMsg = String.format(
@@ -88,9 +80,14 @@ public class InterviewSessionService {
         return buildSessionState(session, callerId);
     }
 
-    /** End the active session for an interview */
+    /** End the active session for an interview (coordinator only). */
     @Transactional
-    public void endSession(UUID interviewId) {
+    public void endSession(UUID interviewId, UUID callerId) {
+        User caller = userRepo.findById(callerId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        if (caller.getRole() != UserRole.coordinator) {
+            throw new RuntimeException("Only the Temporary Staff Coordinator can end an interview session.");
+        }
         sessionRepo.findByInterviewIdAndActiveTrue(interviewId).ifPresent(s -> {
             s.setActive(false);
             s.setEndedAt(LocalDateTime.now());
@@ -133,9 +130,14 @@ public class InterviewSessionService {
                 .orElse(null);
     }
 
-    /** Approve a waiting participant */
+    /** Approve a waiting participant (coordinator only). */
     @Transactional
-    public void approveParticipant(UUID interviewId, UUID targetUserId) {
+    public void approveParticipant(UUID interviewId, UUID targetUserId, UUID callerId) {
+        User caller = userRepo.findById(callerId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        if (caller.getRole() != UserRole.coordinator) {
+            throw new RuntimeException("Only the Temporary Staff Coordinator can admit participants.");
+        }
         InterviewSession session = sessionRepo.findByInterviewIdAndActiveTrue(interviewId)
                 .orElseThrow(() -> new RuntimeException("No active session"));
         SessionParticipant p = participantRepo.findBySessionIdAndUserId(session.getId(), targetUserId)
@@ -158,9 +160,14 @@ public class InterviewSessionService {
         });
     }
 
-    /** Remove an active participant back to waiting */
+    /** Remove an active participant (coordinator only). */
     @Transactional
-    public void removeParticipant(UUID interviewId, UUID targetUserId) {
+    public void removeParticipant(UUID interviewId, UUID targetUserId, UUID callerId) {
+        User caller = userRepo.findById(callerId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        if (caller.getRole() != UserRole.coordinator) {
+            throw new RuntimeException("Only the Temporary Staff Coordinator can remove participants.");
+        }
         InterviewSession session = sessionRepo.findByInterviewIdAndActiveTrue(interviewId)
                 .orElseThrow(() -> new RuntimeException("No active session"));
         SessionParticipant p = participantRepo.findBySessionIdAndUserId(session.getId(), targetUserId)

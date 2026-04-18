@@ -12,8 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import {
   getInterviews, getInterviewCandidates, createInterview, updateInterviewDate,
   startInterviewSession, endInterviewSession, getInterviewSession,
-  approveParticipant, removeParticipant, leaveSession,
-  InterviewData, CandidateData, SessionState
+  approveParticipant, removeParticipant, leaveSession, getMarkingScheme,
+  InterviewData, CandidateData, SessionState, MarkingSchemeData,
 } from '../services/api';
 import InterviewMarkingPage from './InterviewMarkingPage';
 
@@ -50,6 +50,7 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
 
   // ── InterviewMarkingPage navigation ───────────────────────────────────────
   const [markingInterview, setMarkingInterview] = useState<InterviewData | null>(null);
+  const [markingSchemeForPage, setMarkingSchemeForPage] = useState<MarkingSchemeData | undefined>(undefined);
 
   const _today = new Date();
   const todayStr = `${_today.getFullYear()}-${String(_today.getMonth() + 1).padStart(2, '0')}-${String(_today.getDate()).padStart(2, '0')}`;
@@ -186,6 +187,13 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
     setSessionState(state);
   }
 
+  async function handleOpenMarkingPanel(interview: InterviewData) {
+    await loadCandidates(interview.id);
+    const scheme = await getMarkingScheme(interview.id).catch(() => null);
+    setMarkingSchemeForPage(scheme ?? undefined);
+    setMarkingInterview(interview);
+  }
+
   function daysUntil(dateStr: string): number {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const target = new Date(dateStr);
@@ -210,7 +218,11 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
       <InterviewMarkingPage
         interview={{ id: markingInterview.id, interviewNumber: markingInterview.interviewNumber, date: markingInterview.date }}
         candidates={candidates.map(c => ({ id: c.candidateId || c.id, name: c.name, email: c.email, phone: c.phone, cvUrl: c.cvUrl }))}
-        onBack={() => setMarkingInterview(null)}
+        existingScheme={markingSchemeForPage}
+        onBack={() => {
+          setMarkingInterview(null);
+          setMarkingSchemeForPage(undefined);
+        }}
       />
     );
   }
@@ -487,7 +499,7 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
                     <div className="flex justify-end">
                       <Button
                         className="bg-black hover:bg-gray-800 text-white"
-                        onClick={() => setMarkingInterview(interview)}
+                        onClick={() => handleOpenMarkingPanel(interview)}
                       >
                         <FileText className="h-4 w-4 mr-2" />
                         Open Marking Panel
@@ -548,8 +560,8 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
                         )}
                       </div>
 
-                      {/* Start Interview Button (Coordinator-only) */}
-                      {!isLive && (
+                      {/* Start Interview — coordinator only (enforced on backend) */}
+                      {!isLive && !liveInterviewId && (
                         <Button
                           className="bg-green-600 hover:bg-green-700 text-white"
                           onClick={() => handleStartInterview(interview)}

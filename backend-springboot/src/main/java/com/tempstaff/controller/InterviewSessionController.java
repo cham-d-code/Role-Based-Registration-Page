@@ -29,10 +29,13 @@ public class InterviewSessionController {
         return ResponseEntity.ok(sessionService.startSession(interviewId, caller.getId()));
     }
 
-    /** End the active session */
+    /** End the active session (coordinator only) */
     @DeleteMapping("/{interviewId}/session")
-    public ResponseEntity<Void> endSession(@PathVariable UUID interviewId) {
-        sessionService.endSession(interviewId);
+    public ResponseEntity<Void> endSession(
+            @PathVariable UUID interviewId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        User caller = getUser(userDetails);
+        sessionService.endSession(interviewId, caller.getId());
         return ResponseEntity.ok().build();
     }
 
@@ -45,21 +48,25 @@ public class InterviewSessionController {
         return ResponseEntity.ok(sessionService.getSessionState(interviewId, caller.getId()));
     }
 
-    /** Approve a waiting participant */
+    /** Approve a waiting participant (coordinator only) */
     @PutMapping("/{interviewId}/session/approve/{userId}")
     public ResponseEntity<Void> approve(
             @PathVariable UUID interviewId,
-            @PathVariable UUID userId) {
-        sessionService.approveParticipant(interviewId, userId);
+            @PathVariable UUID userId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        User caller = getUser(userDetails);
+        sessionService.approveParticipant(interviewId, userId, caller.getId());
         return ResponseEntity.ok().build();
     }
 
-    /** Remove an active participant */
+    /** Remove an active participant (coordinator only) */
     @PutMapping("/{interviewId}/session/remove/{userId}")
     public ResponseEntity<Void> remove(
             @PathVariable UUID interviewId,
-            @PathVariable UUID userId) {
-        sessionService.removeParticipant(interviewId, userId);
+            @PathVariable UUID userId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        User caller = getUser(userDetails);
+        sessionService.removeParticipant(interviewId, userId, caller.getId());
         return ResponseEntity.ok().build();
     }
 

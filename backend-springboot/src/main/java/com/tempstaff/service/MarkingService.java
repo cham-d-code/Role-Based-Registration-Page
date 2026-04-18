@@ -34,6 +34,9 @@ public class MarkingService {
                 .orElseThrow(() -> new RuntimeException("Interview not found"));
         User creator = userRepo.findById(creatorId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+        if (creator.getRole() != UserRole.coordinator) {
+            throw new RuntimeException("Only the Temporary Staff Coordinator can create or update the marking scheme.");
+        }
 
         // Delete old scheme if exists
         schemeRepo.findByInterviewId(interviewId).ifPresent(schemeRepo::delete);
@@ -77,6 +80,16 @@ public class MarkingService {
                 .orElseThrow(() -> new RuntimeException("Candidate not found"));
         User marker = userRepo.findById(markerId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
+
+        SessionParticipant markerParticipant = participantRepo
+                .findBySessionIdAndUserId(session.getId(), markerId)
+                .orElseThrow(() -> new RuntimeException("You are not a participant in this interview session."));
+        if (!"active".equals(markerParticipant.getStatus())) {
+            throw new RuntimeException("You must be admitted to the session before you can submit marks.");
+        }
+        if (markerParticipant.isLeftSession()) {
+            throw new RuntimeException("You have left this session and cannot submit marks.");
+        }
 
         MarkingScheme scheme = schemeRepo.findByInterviewId(interviewId)
                 .orElseThrow(() -> new RuntimeException("No marking scheme for this interview"));

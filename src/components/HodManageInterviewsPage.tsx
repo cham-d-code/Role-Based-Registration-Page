@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Calendar as CalendarIcon, Users, Mail, Phone, FileText, Edit, Plus, ArrowLeft,
-  Check, X, Loader2, Upload, Play, Square, UserCheck, UserX, Wifi
+  Check, X, Loader2, Upload, UserCheck, Wifi
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -12,9 +12,8 @@ import { Input } from './ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import {
   getInterviews, getInterviewCandidates, createInterview, updateInterviewDate,
-  startInterviewSession, endInterviewSession, getInterviewSession,
-  approveParticipant, removeParticipant,
-  InterviewData, CandidateData, SessionState
+  getActiveSession, getMarkingScheme,
+  InterviewData, CandidateData, SessionState, MarkingSchemeData,
 } from '../services/api';
 import InterviewMarkingPage from './InterviewMarkingPage';
 
@@ -47,10 +46,9 @@ export default function HodManageInterviewsPage({ onBack }: HodManageInterviewsP
   // ── Live Session State ────────────────────────────────────────────────────
   const [liveInterviewId, setLiveInterviewId] = useState<string | null>(null);
   const [sessionState, setSessionState] = useState<SessionState | null>(null);
-  const [sessionError, setSessionError] = useState('');
-
   // ── Navigation ────────────────────────────────────────────────────────────
   const [markingInterview, setMarkingInterview] = useState<InterviewData | null>(null);
+  const [markingSchemeForPage, setMarkingSchemeForPage] = useState<MarkingSchemeData | undefined>(undefined);
 
   const _today = new Date();
   const todayStr = `${_today.getFullYear()}-${String(_today.getMonth() + 1).padStart(2, '0')}-${String(_today.getDate()).padStart(2, '0')}`;
@@ -60,19 +58,28 @@ export default function HodManageInterviewsPage({ onBack }: HodManageInterviewsP
 
   useEffect(() => { fetchInterviews(); }, []);
 
-  // Poll session state every 5s while live
+  // Discover live session (coordinator starts); HOD joins from waiting room after admission.
   useEffect(() => {
-    if (!liveInterviewId) return;
     const poll = async () => {
       try {
-        const state = await getInterviewSession(liveInterviewId);
-        setSessionState(state);
-      } catch { /* session may have ended */ }
+        const active = await getActiveSession();
+        if (!active) {
+          setLiveInterviewId(null);
+          setSessionState(null);
+          return;
+        }
+        setLiveInterviewId(active.interviewId);
+        setSessionState(active);
+        loadCandidates(active.interviewId);
+      } catch {
+        setLiveInterviewId(null);
+        setSessionState(null);
+      }
     };
     poll();
     const interval = setInterval(poll, 5000);
     return () => clearInterval(interval);
-  }, [liveInterviewId]);
+  }, []);
 
   async function fetchInterviews() {
     setLoadingInterviews(true);
@@ -138,47 +145,15 @@ export default function HodManageInterviewsPage({ onBack }: HodManageInterviewsP
     }
   }
 
-  async function handleStartInterview(interview: InterviewData) {
-    setSessionError('');
-    try {
-      await loadCandidates(interview.id);
-      const state = await startInterviewSession(interview.id);
-      setLiveInterviewId(interview.id);
-      setSessionState(state);
-    } catch (e: any) {
-      setSessionError(e.message || 'Failed to start interview session.');
+  async function handleOpenMarking(interview: InterviewData) {
+    await loadCandidates(interview.id);
+    const scheme = await getMarkingScheme(interview.id).catch(() => null);
+    if (!scheme) {
+      alert('The coordinator has not created a marking scheme for this interview yet.');
+      return;
     }
-  }
-
-  async function handleEndSession() {
-    if (!liveInterviewId) return;
-    try {
-      await endInterviewSession(liveInterviewId);
-    } catch { /* ignore */ }
-    setLiveInterviewId(null);
-    setSessionState(null);
-  }
-
-  async function handleAllow(userId: string) {
-    if (!liveInterviewId) return;
-    try {
-      await approveParticipant(liveInterviewId, userId);
-      const state = await getInterviewSession(liveInterviewId);
-      setSessionState(state);
-    } catch (e: any) {
-      console.error('Failed to approve participant', e);
-    }
-  }
-
-  async function handleRemove(userId: string) {
-    if (!liveInterviewId) return;
-    try {
-      await removeParticipant(liveInterviewId, userId);
-      const state = await getInterviewSession(liveInterviewId);
-      setSessionState(state);
-    } catch (e: any) {
-      console.error('Failed to remove participant', e);
-    }
+    setMarkingSchemeForPage(scheme);
+    setMarkingInterview(interview);
   }
 
   function daysUntil(dateStr: string): number {
@@ -200,7 +175,11 @@ export default function HodManageInterviewsPage({ onBack }: HodManageInterviewsP
       <InterviewMarkingPage
         interview={{ id: markingInterview.id, interviewNumber: markingInterview.interviewNumber, date: markingInterview.date }}
         candidates={candidates.map(c => ({ id: c.candidateId || c.id, name: c.name, email: c.email, phone: c.phone, cvUrl: c.cvUrl }))}
-        onBack={() => setMarkingInterview(null)}
+        existingScheme={markingSchemeForPage}
+        onBack={() => {
+          setMarkingInterview(null);
+          setMarkingSchemeForPage(undefined);
+        }}
       />
     );
   }
@@ -365,93 +344,50 @@ export default function HodManageInterviewsPage({ onBack }: HodManageInterviewsP
                         )}
                       </div>
 
-                      <div className="flex gap-2">
-                        {!isLive && !liveInterviewId && (
-                          <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleStartInterview(interview)}>
-                            <Play className="h-4 w-4 mr-2" />Start Interview
-                          </Button>
+                      <div className="flex flex-col items-end gap-2 max-w-md text-right">
+                        {!isLive && (
+                          <p className="text-[#555555]" style={{ fontSize: '12px' }}>
+                            Only the Temporary Staff Coordinator can start the live session. You will appear in the waiting room until admitted.
+                          </p>
                         )}
-                        {isLive && (
+                        {isLive && sessionState && (
                           <>
-                            <Button className="bg-black hover:bg-gray-800 text-white" onClick={() => { loadCandidates(interview.id); setMarkingInterview(interview); }}>
-                              <UserCheck className="h-4 w-4 mr-2" />Mark Candidates
-                            </Button>
-                            <Button className="bg-black hover:bg-gray-800 text-white" onClick={handleEndSession}>
-                              <Square className="h-4 w-4 mr-2" />End Session
-                            </Button>
+                            <Badge
+                              className={
+                                sessionState.myStatus === 'active'
+                                  ? 'bg-green-100 text-green-800 border-green-300'
+                                  : 'bg-amber-100 text-amber-900 border-amber-300'
+                              }
+                              style={{ fontSize: '11px' }}
+                            >
+                              {sessionState.myStatus === 'active' ? 'Admitted — panel' : 'Waiting room'}
+                            </Badge>
+                            {sessionState.myStatus === 'active' && (
+                              <Button
+                                className="bg-black hover:bg-gray-800 text-white"
+                                onClick={() => handleOpenMarking(interview)}
+                              >
+                                <UserCheck className="h-4 w-4 mr-2" />
+                                Mark Candidates
+                              </Button>
+                            )}
                           </>
                         )}
                       </div>
                     </div>
-
-                    {sessionError && <div className="mt-3 p-2 bg-red-50 border border-red-200 text-red-600 rounded text-sm">{sessionError}</div>}
                   </Card>
 
-                  {/* ── Live Session Panel ── */}
                   {isLive && sessionState && (
-                    <div className="grid grid-cols-2 gap-4">
-                      {/* Waiting for Approval */}
-                      <Card className="border border-yellow-200 rounded-lg p-4 bg-yellow-50">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Users className="h-5 w-5 text-yellow-600" />
-                          <h4 className="text-yellow-800" style={{ fontSize: '15px', fontWeight: 600 }}>Waiting for Approval</h4>
-                          <Badge className="bg-yellow-200 text-yellow-800 border-0" style={{ fontSize: '11px' }}>
-                            {sessionState.waitingParticipants.length}
-                          </Badge>
-                        </div>
-                        {sessionState.waitingParticipants.length === 0 ? (
-                          <p className="text-yellow-600 text-center py-4" style={{ fontSize: '13px' }}>No one waiting</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {sessionState.waitingParticipants.map(member => (
-                              <div key={member.userId} className="flex items-center justify-between bg-white border border-yellow-200 rounded-lg p-3">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-8 h-8 rounded-full bg-yellow-200 flex items-center justify-center text-yellow-800 font-bold text-xs">{member.initials}</div>
-                                  <div>
-                                    <p className="text-[#222222]" style={{ fontSize: '13px', fontWeight: 600 }}>{member.fullName}</p>
-                                    <p className="text-[#999999]" style={{ fontSize: '11px' }}>{member.role === 'mentor' ? 'Senior Lecturer' : member.role}</p>
-                                  </div>
-                                </div>
-                                <Button size="sm" onClick={() => handleAllow(member.userId)} className="bg-green-600 hover:bg-green-700 text-white">
-                                  <UserCheck className="h-3 w-3 mr-1" />Allow
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </Card>
-
-                      {/* Active Participants */}
-                      <Card className="border border-green-200 rounded-lg p-4 bg-green-50">
-                        <div className="flex items-center gap-2 mb-3">
-                          <UserCheck className="h-5 w-5 text-green-600" />
-                          <h4 className="text-green-800" style={{ fontSize: '15px', fontWeight: 600 }}>Active Participants</h4>
-                          <Badge className="bg-green-200 text-green-800 border-0" style={{ fontSize: '11px' }}>
-                            {sessionState.activeParticipants.length}
-                          </Badge>
-                        </div>
-                        {sessionState.activeParticipants.length === 0 ? (
-                          <p className="text-green-600 text-center py-4" style={{ fontSize: '13px' }}>No active participants</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {sessionState.activeParticipants.map(member => (
-                              <div key={member.userId} className="flex items-center justify-between bg-white border border-green-200 rounded-lg p-3">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-8 h-8 rounded-full bg-green-200 flex items-center justify-center text-green-800 font-bold text-xs">{member.initials}</div>
-                                  <div>
-                                    <p className="text-[#222222]" style={{ fontSize: '13px', fontWeight: 600 }}>{member.fullName}</p>
-                                    <p className="text-[#999999]" style={{ fontSize: '11px' }}>{member.role === 'mentor' ? 'Senior Lecturer' : member.role}</p>
-                                  </div>
-                                </div>
-                                <Button size="sm" variant="outline" onClick={() => handleRemove(member.userId)} className="border-red-300 text-red-500 hover:bg-red-50">
-                                  <UserX className="h-3 w-3 mr-1" />Remove
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </Card>
-                    </div>
+                    <Card className="border border-blue-200 rounded-lg p-4 bg-blue-50/80">
+                      <p className="text-[#1e3a5f]" style={{ fontSize: '13px', fontWeight: 600 }}>
+                        {sessionState.myStatus === 'waiting'
+                          ? 'Waiting room — the coordinator will admit you when ready. You can review candidate details below.'
+                          : 'You are admitted. Open the marking panel to score candidates using the coordinator’s scheme.'}
+                      </p>
+                      <p className="text-[#555555] mt-2" style={{ fontSize: '12px' }}>
+                        Session started by {sessionState.startedByName ?? 'coordinator'}. Admitting participants is coordinator-only.
+                      </p>
+                    </Card>
                   )}
 
                   {/* Stats */}
