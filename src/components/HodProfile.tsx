@@ -129,6 +129,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     phone?: string;
     contractStartDate?: string;
     contractEndDate?: string;
+    mentor?: string;
   }[]>([]);
   const [loadingStaff, setLoadingStaff] = useState(false);
   const [contractFilter, setContractFilter] = useState<'all' | 'expired' | 'remaining'>('all');
@@ -173,6 +174,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
               phone: u.mobile,
               contractStartDate: u.contractStartDate,
               contractEndDate: u.contractEndDate,
+              mentor: u.mentorName,
             })));
           })
           .catch(err => console.error('Failed to fetch staff:', err))
@@ -987,6 +989,10 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                                     {staff.phone}
                                   </div>
                                 )}
+                                <div className="flex items-center gap-1">
+                                  <UserCheck className="h-3 w-3 text-[#4db4ac]" />
+                                  <span>Mentor: {staff.mentor ? staff.mentor : '—'}</span>
+                                </div>
                               </div>
                             </div>
                           </div>
