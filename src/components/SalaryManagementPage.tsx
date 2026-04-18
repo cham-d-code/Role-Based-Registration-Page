@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Calendar, DollarSign, Loader2, Save, Send, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
+import { Calendar, DollarSign, Loader2, Save, Send, CheckCircle, XCircle, RefreshCw, Download } from 'lucide-react';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Input } from './ui/input';
@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import { Badge } from './ui/badge';
 import {
   approveSalaryReport,
+  downloadSalaryReportsExcel,
   generateSalaryReports,
   getSalaryReports,
   getSalaryTemplate,
@@ -56,6 +57,7 @@ export default function SalaryManagementPage({ userRole }: SalaryManagementPageP
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [sending, setSending] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [templateForm, setTemplateForm] = useState({
     dayRate: '',
     extraLeaveDayDeduction: '',
@@ -139,6 +141,17 @@ export default function SalaryManagementPage({ userRole }: SalaryManagementPageP
       alert(e?.message || 'Failed to send salary reports');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleDownloadExcel = async () => {
+    try {
+      setDownloading(true);
+      await downloadSalaryReportsExcel(periodKey);
+    } catch (e: any) {
+      alert(e?.message || 'Failed to download salary report');
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -275,11 +288,25 @@ export default function SalaryManagementPage({ userRole }: SalaryManagementPageP
       </div>
 
       <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <h3 className="text-[#222222]" style={{ fontSize: '18px', fontWeight: 700 }}>
-            Monthly Salary Summary
-          </h3>
-          {loading && <Loader2 className="h-4 w-4 animate-spin text-[#4db4ac]" />}
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <div className="flex items-center gap-2">
+            <h3 className="text-[#222222]" style={{ fontSize: '18px', fontWeight: 700 }}>
+              Monthly Salary Summary
+            </h3>
+            {loading && <Loader2 className="h-4 w-4 animate-spin text-[#4db4ac]" />}
+          </div>
+          <Button
+            onClick={handleDownloadExcel}
+            disabled={downloading || reports.length === 0}
+            className="bg-[#16a34a] hover:bg-[#15803d] text-white"
+          >
+            {downloading ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
+            Download Excel
+          </Button>
         </div>
         <Separator className="mb-4" />
 

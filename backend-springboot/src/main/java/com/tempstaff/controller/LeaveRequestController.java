@@ -85,7 +85,7 @@ public class LeaveRequestController {
                 me.getId()
         );
         for (User m : management) {
-            notificationService.notifyUser(m.getId(), title, msg, NotificationType.info, null, null);
+            notificationService.notifyUser(m.getId(), title, msg, NotificationType.leave_request, null, null);
         }
 
         return toResponse(lr);

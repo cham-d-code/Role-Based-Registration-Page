@@ -6,8 +6,9 @@ import { Badge } from './ui/badge';
 import { Separator } from './ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Search, Eye, Save, RefreshCw } from 'lucide-react';
+import { Search, Eye, Save, RefreshCw, Download, Loader2 } from 'lucide-react';
 import StaffAttendanceDialog from './StaffAttendanceDialog';
+import { downloadAttendanceReportExcel } from '../services/api';
 import {
   computeWorkingDays,
   getPeriodLabel,
@@ -76,6 +77,19 @@ export default function AttendanceReportPage({
   const [selected, setSelected] = useState<StaffLite | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<number>(currentMonth);
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+  const [downloading, setDownloading] = useState<boolean>(false);
+
+  const handleDownloadExcel = async () => {
+    try {
+      setDownloading(true);
+      const periodKey = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}`;
+      await downloadAttendanceReportExcel(periodKey);
+    } catch (e: any) {
+      alert(e?.message || 'Failed to download attendance report');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const period = useMemo(
     () => getPeriodRange(selectedYear, selectedMonth),
@@ -141,7 +155,7 @@ export default function AttendanceReportPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
             Attendance Report
@@ -150,6 +164,19 @@ export default function AttendanceReportPage({
             Monitor attendance summaries of all temporary staff. Period: {getPeriodLabel(period)}
           </p>
         </div>
+        <Button
+          onClick={handleDownloadExcel}
+          disabled={downloading}
+          className="bg-[#16a34a] hover:bg-[#15803d] text-white self-start md:self-auto"
+          style={{ minWidth: '180px' }}
+        >
+          {downloading ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Download className="h-4 w-4 mr-2" />
+          )}
+          Download Excel
+        </Button>
       </div>
 
       {/* Period + Working Days Controls */}

@@ -21,6 +21,7 @@ public class InterviewSessionService {
     private final SessionParticipantRepository participantRepo;
     private final InterviewRepository interviewRepo;
     private final UserRepository userRepo;
+    private final NotificationService notificationService;
 
     /**
      * Start a live interview session.
@@ -69,6 +70,21 @@ public class InterviewSessionService {
             saveParticipant(session, member, status);
         }
 
+        // Notify HODs that an interview session has started (they can join from waiting room / active).
+        // Skip if the caller is the HOD themselves.
+        List<User> hods = userRepo.findByStatusAndRoleIn(UserStatus.approved, List.of(UserRole.hod));
+        String startTitle = "Interview session started";
+        String startMsg = String.format(
+                "%s started the session for interview %s.",
+                caller.getFullName(),
+                interview.getInterviewNumber());
+        for (User hod : hods) {
+            if (hod.getId().equals(callerId)) continue;
+            notificationService.notifyUser(
+                    hod.getId(), startTitle, startMsg,
+                    NotificationType.interview_started, null, null);
+        }
+
         return buildSessionState(session, callerId);
     }
 
@@ -79,6 +95,25 @@ public class InterviewSessionService {
             s.setActive(false);
             s.setEndedAt(LocalDateTime.now());
             sessionRepo.save(s);
+
+            // Mark the interview itself as ended so HODs know to review the report.
+            Interview interview = s.getInterview();
+            if (interview != null && interview.getStatus() != InterviewStatus.ended) {
+                interview.setStatus(InterviewStatus.ended);
+                interviewRepo.save(interview);
+            }
+
+            // Remind HODs to review the interview report.
+            List<User> hods = userRepo.findByStatusAndRoleIn(UserStatus.approved, List.of(UserRole.hod));
+            String title = "Interview ended — review report";
+            String msg = String.format(
+                    "The session for interview %s has ended. Please review the interview report.",
+                    interview != null ? interview.getInterviewNumber() : "");
+            for (User hod : hods) {
+                notificationService.notifyUser(
+                        hod.getId(), title, msg,
+                        NotificationType.interview_ended, null, null);
+            }
         });
     }
 

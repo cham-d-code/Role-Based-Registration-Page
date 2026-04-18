@@ -9,9 +9,13 @@ import com.tempstaff.repository.SalaryReportRepository;
 import com.tempstaff.repository.SalaryTemplateRepository;
 import com.tempstaff.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
@@ -242,6 +246,121 @@ public class SalaryService {
                 .reviewNote(r.getReviewNote())
                 .build();
     }
+
+    /**
+     * Build an Excel (.xlsx) workbook for salary reports in the given period.
+     */
+    @Transactional(readOnly = true)
+    public byte[] exportReportsAsExcel(String periodKey) {
+        String key = normalizePeriodKey(periodKey);
+        List<SalaryReportResponse> rows = listReports(key);
+
+        try (Workbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            Sheet sheet = wb.createSheet("Salary Reports " + key);
+
+            // Styles
+            CellStyle headerStyle = wb.createCellStyle();
+            Font headerFont = wb.createFont();
+            headerFont.setBold(true);
+            headerStyle.setFont(headerFont);
+            headerStyle.setAlignment(HorizontalAlignment.CENTER);
+            headerStyle.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            headerStyle.setBorderBottom(BorderStyle.THIN);
+
+            CellStyle moneyStyle = wb.createCellStyle();
+            DataFormat df = wb.createDataFormat();
+            moneyStyle.setDataFormat(df.getFormat("#,##0.00"));
+
+            CellStyle dateStyle = wb.createCellStyle();
+            dateStyle.setDataFormat(df.getFormat("yyyy-mm-dd"));
+
+            String[] headers = {
+                    "Staff Name", "Email", "Period", "Period Start", "Period End",
+                    "Workable Days", "Present Days", "Leave Days", "Absent/Half Days",
+                    "Free Leave Days", "Extra Leave Days",
+                    "Day Rate (LKR)", "Gross Salary (LKR)", "Deduction (LKR)", "Net Salary (LKR)",
+                    "Status", "Reviewed By", "Reviewed At", "Review Note"
+            };
+            Row headerRow = sheet.createRow(0);
+            for (int c = 0; c < headers.length; c++) {
+                Cell cell = headerRow.createCell(c);
+                cell.setCellValue(headers[c]);
+                cell.setCellStyle(headerStyle);
+            }
+
+            int rowIdx = 1;
+            for (SalaryReportResponse r : rows) {
+                Row row = sheet.createRow(rowIdx++);
+                int c = 0;
+                row.createCell(c++).setCellValue(nullToEmpty(r.getStaffName()));
+                row.createCell(c++).setCellValue(nullToEmpty(r.getStaffEmail()));
+                row.createCell(c++).setCellValue(nullToEmpty(r.getPeriodKey()));
+                writeDate(row.createCell(c++), r.getPeriodStart(), dateStyle);
+                writeDate(row.createCell(c++), r.getPeriodEnd(), dateStyle);
+                row.createCell(c++).setCellValue(r.getTotalWorkableDays());
+                writeDecimal(row.createCell(c++), r.getPresentDays());
+                writeDecimal(row.createCell(c++), r.getLeaveDays());
+                writeDecimal(row.createCell(c++), r.getAbsentDays());
+                writeDecimal(row.createCell(c++), r.getFreeLeaveDays());
+                writeDecimal(row.createCell(c++), r.getExtraLeaveDays());
+                writeMoney(row.createCell(c++), r.getDayRate(), moneyStyle);
+                writeMoney(row.createCell(c++), r.getGrossSalary(), moneyStyle);
+                writeMoney(row.createCell(c++), r.getDeductionAmount(), moneyStyle);
+                writeMoney(row.createCell(c++), r.getNetSalary(), moneyStyle);
+                row.createCell(c++).setCellValue(nullToEmpty(r.getStatus()));
+                row.createCell(c++).setCellValue(nullToEmpty(r.getReviewedByName()));
+                row.createCell(c++).setCellValue(r.getReviewedAt() == null ? "" : r.getReviewedAt().toString());
+                row.createCell(c).setCellValue(nullToEmpty(r.getReviewNote()));
+            }
+
+            // Totals row
+            if (!rows.isEmpty()) {
+                Row totalRow = sheet.createRow(rowIdx);
+                Cell label = totalRow.createCell(0);
+                label.setCellValue("TOTAL");
+                label.setCellStyle(headerStyle);
+
+                BigDecimal totalGross = BigDecimal.ZERO;
+                BigDecimal totalDed = BigDecimal.ZERO;
+                BigDecimal totalNet = BigDecimal.ZERO;
+                for (SalaryReportResponse r : rows) {
+                    if (r.getGrossSalary() != null) totalGross = totalGross.add(r.getGrossSalary());
+                    if (r.getDeductionAmount() != null) totalDed = totalDed.add(r.getDeductionAmount());
+                    if (r.getNetSalary() != null) totalNet = totalNet.add(r.getNetSalary());
+                }
+                writeMoney(totalRow.createCell(12), totalGross, moneyStyle);
+                writeMoney(totalRow.createCell(13), totalDed, moneyStyle);
+                writeMoney(totalRow.createCell(14), totalNet, moneyStyle);
+            }
+
+            for (int c = 0; c < headers.length; c++) sheet.autoSizeColumn(c);
+
+            wb.write(out);
+            return out.toByteArray();
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to generate salary Excel: " + e.getMessage(), e);
+        }
+    }
+
+    private static void writeDate(Cell cell, LocalDate date, CellStyle style) {
+        if (date == null) { cell.setCellValue(""); return; }
+        cell.setCellValue(java.sql.Date.valueOf(date));
+        cell.setCellStyle(style);
+    }
+
+    private static void writeDecimal(Cell cell, BigDecimal value) {
+        if (value == null) { cell.setCellValue(0d); return; }
+        cell.setCellValue(value.doubleValue());
+    }
+
+    private static void writeMoney(Cell cell, BigDecimal value, CellStyle style) {
+        if (value == null) { cell.setCellValue(0d); }
+        else { cell.setCellValue(value.doubleValue()); }
+        cell.setCellStyle(style);
+    }
+
+    private static String nullToEmpty(String s) { return s == null ? "" : s; }
 
     private static String normalizePeriodKey(String raw) {
         if (raw == null) throw new RuntimeException("periodKey is required");

@@ -136,6 +136,21 @@ public class ResearchOpportunityService {
                 saved.getId()
         );
 
+        // Also notify every approved HOD (skip if the HOD is already the creator).
+        List<User> hods = userRepository.findByStatusAndRoleIn(
+                com.tempstaff.entity.UserStatus.approved,
+                java.util.List.of(com.tempstaff.entity.UserRole.hod));
+        for (User hod : hods) {
+            if (hod.getId().equals(opp.getCreatedBy())) continue;
+            notificationService.notifyUser(
+                    hod.getId(),
+                    "New research application",
+                    staffName + " applied for: " + opp.getTitle(),
+                    NotificationType.research_applied,
+                    opportunityId,
+                    saved.getId());
+        }
+
         return ResearchApplicationResponse.builder()
                 .id(saved.getId())
                 .opportunityId(saved.getOpportunityId())

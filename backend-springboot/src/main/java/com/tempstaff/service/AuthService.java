@@ -29,6 +29,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final ImStaffDirectoryService imStaffDirectoryService;
+    private final NotificationService notificationService;
 
     @Value("${spring.profiles.active:development}")
     private String activeProfile;
@@ -133,6 +134,23 @@ public class AuthService {
         String successMessage = (user.getStatus() == UserStatus.approved)
                 ? "Registration successful and auto-approved."
                 : "Registration successful. Awaiting approval.";
+
+        // Notify HOD + Coordinator when a pending registration request comes in.
+        if (user.getStatus() == UserStatus.pending) {
+            List<User> management = userRepository.findByStatusAndRoleIn(
+                    UserStatus.approved, List.of(UserRole.hod, UserRole.coordinator));
+            String nTitle = "New registration request";
+            String nMsg = String.format(
+                    "%s (%s) registered as %s and is awaiting approval.",
+                    user.getFullName(),
+                    user.getEmail(),
+                    role.name());
+            for (User m : management) {
+                notificationService.notifyUser(
+                        m.getId(), nTitle, nMsg,
+                        NotificationType.registration_request, null, null);
+            }
+        }
 
         return AuthResponse.builder()
                 .success(true)

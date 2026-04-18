@@ -34,5 +34,16 @@ public interface AttendanceRepository extends JpaRepository<Attendance, UUID> {
             LocalDate toExclusive,
             AttendanceStatus status
     );
+
+    List<Attendance> findByUserIdAndAttendanceDateGreaterThanEqualAndAttendanceDateLessThanOrderByAttendanceDateAsc(
+            UUID userId,
+            LocalDate from,
+            LocalDate toExclusive
+    );
+
+    List<Attendance> findByAttendanceDateGreaterThanEqualAndAttendanceDateLessThan(
+            LocalDate from,
+            LocalDate toExclusive
+    );
 }
 

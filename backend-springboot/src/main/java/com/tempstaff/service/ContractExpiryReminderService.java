@@ -70,14 +70,14 @@ public class ContractExpiryReminderService {
 
             for (User m : management) {
                 boolean alreadySent = userNotificationRepository.existsByRecipientIdAndTypeAndMessage(
-                        m.getId(), NotificationType.info, message);
+                        m.getId(), NotificationType.contract_expiry, message);
                 if (alreadySent) continue;
 
                 notificationService.notifyUser(
                         m.getId(),
                         title,
                         message,
-                        NotificationType.info,
+                        NotificationType.contract_expiry,
                         null,
                         null
                 );

@@ -9,6 +9,9 @@ import com.tempstaff.service.SalaryService;
 import com.tempstaff.repository.UserRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -58,6 +61,17 @@ public class SalaryController {
     @PreAuthorize("hasAnyRole('HOD', 'COORDINATOR')")
     public List<SalaryReportResponse> list(@PathVariable String periodKey) {
         return salaryService.listReports(periodKey);
+    }
+
+    @GetMapping("/reports/{periodKey}/export")
+    @PreAuthorize("hasAnyRole('HOD', 'COORDINATOR')")
+    public ResponseEntity<byte[]> exportReports(@PathVariable String periodKey) {
+        byte[] body = salaryService.exportReportsAsExcel(periodKey);
+        String filename = "salary-report-" + periodKey + ".xlsx";
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .body(body);
     }
 
     @PostMapping("/reports/{periodKey}/send-to-hod")

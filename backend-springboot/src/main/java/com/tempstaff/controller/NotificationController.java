@@ -62,5 +62,24 @@ public class NotificationController {
         userNotificationRepository.save(n);
         return ResponseEntity.ok(Map.of("success", true));
     }
+
+    @GetMapping("/unread-count")
+    public ResponseEntity<Map<String, Object>> unreadCount(
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        User me = currentUser(userDetails);
+        long count = userNotificationRepository.countByRecipientIdAndIsRead(me.getId(), false);
+        return ResponseEntity.ok(Map.of("count", count));
+    }
+
+    @PostMapping("/read-all")
+    @org.springframework.transaction.annotation.Transactional
+    public ResponseEntity<Map<String, Object>> markAllRead(
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        User me = currentUser(userDetails);
+        int updated = userNotificationRepository.markAllAsReadForRecipient(me.getId());
+        return ResponseEntity.ok(Map.of("success", true, "updated", updated));
+    }
 }
 

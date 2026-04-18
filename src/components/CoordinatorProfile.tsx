@@ -388,6 +388,7 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
 
   // FR7: Registration requests
   const [registrationRequests, setRegistrationRequests] = useState<any[]>([]);
+  const [pendingRegistrationCount, setPendingRegistrationCount] = useState(0);
 
   // Fetch pending requests
   useEffect(() => {
@@ -405,11 +406,32 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
               status: 'pending'
             }));
             setRegistrationRequests(formattedData);
+            setPendingRegistrationCount(formattedData.length);
           })
           .catch(err => console.error("Failed to fetch pending registrations:", err));
       });
     }
   }, [activeMenu]);
+
+  // Red badge: poll pending registration count regardless of active tab
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const api = await import('../services/api');
+        const items = await api.getPendingRegistrations();
+        if (mounted) setPendingRegistrationCount(items.length);
+      } catch {
+        // ignore
+      }
+    };
+    load();
+    const interval = setInterval(load, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   // FR9, FR10, FR11, FR12: Staff members
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
@@ -552,6 +574,7 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
         status: 'pending'
       }));
       setRegistrationRequests(formattedData);
+      setPendingRegistrationCount(formattedData.length);
 
     } catch (error: any) {
       alert(`Approval failed: ${error.message}`);
@@ -568,6 +591,7 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
       setRegistrationRequests(prev =>
         prev.filter(req => req.id !== id) // Remove from list
       );
+      setPendingRegistrationCount(prev => Math.max(0, prev - 1));
       alert('Registration request rejected.');
     } catch (error: any) {
       alert(`Rejection failed: ${error.message}`);
@@ -1046,6 +1070,23 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                       }}
                     >
                       {Math.min(pendingResearchApplicationsCount, 99)}
+                    </span>
+                  )}
+                  {item.id === 'registrations' && pendingRegistrationCount > 0 && (
+                    <span
+                      className="inline-flex items-center justify-center text-white ml-auto"
+                      style={{
+                        backgroundColor: '#ef4444',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        minWidth: '20px',
+                        height: '20px',
+                        padding: '0 6px',
+                        borderRadius: '10px',
+                        lineHeight: 1,
+                      }}
+                    >
+                      {Math.min(pendingRegistrationCount, 99)}
                     </span>
                   )}
                   {item.id === 'leave' && pendingLeaveCount > 0 && (

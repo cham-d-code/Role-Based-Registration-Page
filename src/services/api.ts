@@ -281,6 +281,15 @@ export async function markNotificationRead(notificationId: string): Promise<{ su
     return fetchWithAuth(`${API_BASE_URL}/notifications/${notificationId}/read`, { method: 'POST' });
 }
 
+export async function getUnreadNotificationCount(): Promise<number> {
+    const res = await fetchWithAuth(`${API_BASE_URL}/notifications/unread-count`) as { count?: number };
+    return typeof res.count === 'number' ? res.count : 0;
+}
+
+export async function markAllNotificationsRead(): Promise<{ success: boolean; updated: number }> {
+    return fetchWithAuth(`${API_BASE_URL}/notifications/read-all`, { method: 'POST' });
+}
+
 // --- Dashboard APIs ---
 export interface HodDashboardStats {
     totalTemporaryStaff: number;
@@ -916,6 +925,53 @@ export async function rejectSalaryReport(reportId: string, note?: string): Promi
         method: 'POST',
         body: JSON.stringify({ note: note ?? '' }),
     });
+}
+
+async function downloadBlobWithAuth(url: string, filename: string): Promise<void> {
+    const token = getAuthToken();
+    if (!token) throw new Error('No authentication token found');
+
+    const response = await fetch(url, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (response.status === 401) {
+        logout();
+        window.location.href = '/';
+        throw new Error('Session expired');
+    }
+    if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(text || 'Failed to download file');
+    }
+
+    const blob = await response.blob();
+    const href = URL.createObjectURL(blob);
+    try {
+        const a = document.createElement('a');
+        a.href = href;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    } finally {
+        URL.revokeObjectURL(href);
+    }
+}
+
+export async function downloadSalaryReportsExcel(periodKey: string): Promise<void> {
+    return downloadBlobWithAuth(
+        `${API_BASE_URL}/salary/reports/${periodKey}/export`,
+        `salary-report-${periodKey}.xlsx`,
+    );
+}
+
+export async function downloadAttendanceReportExcel(periodKey: string): Promise<void> {
+    return downloadBlobWithAuth(
+        `${API_BASE_URL}/attendance/export?periodKey=${encodeURIComponent(periodKey)}`,
+        `attendance-report-${periodKey}.xlsx`,
+    );
 }
 
 // ─── Weekly Tasks (Temp Staff) ────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { LayoutDashboard, Users, ClipboardCheck, FileText, BellRing, UserIcon, ChevronDown, Settings, LogOut, Mail, Phone, Calendar, CalendarCheck, Eye, Clock, Archive, Edit, DollarSign, CheckCircle, XCircle, BarChart2, Loader2, Plus, UserCheck } from 'lucide-react';
-import { approveLeave, createResearchOpportunity, deleteResearchOpportunity, getHodDashboardStats, getInterviewReport, getJobDescriptionForStaff, getMyMentees, getMyLeaveRequests, getMyNotifications, getMyResearchOpportunities, getPendingLeaveRequests, markNotificationRead, rejectLeave, HodDashboardStats, InterviewReport, ResearchOpportunityDto, updateMyProfile, updateResearchOpportunity, UserProfile, type LeaveRequestDto, type UserNotificationDto } from '../services/api';
+import { approveLeave, createResearchOpportunity, deleteResearchOpportunity, getHodDashboardStats, getInterviewReport, getJobDescriptionForStaff, getMyMentees, getMyLeaveRequests, getMyNotifications, getMyResearchOpportunities, getPendingLeaveRequests, getUnreadNotificationCount, markAllNotificationsRead, markNotificationRead, rejectLeave, HodDashboardStats, InterviewReport, ResearchOpportunityDto, updateMyProfile, updateMySpecialization, updateResearchOpportunity, UserProfile, type LeaveRequestDto, type UserNotificationDto } from '../services/api';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -10,7 +10,6 @@ import { Separator } from './ui/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table';
 import ArchivedStaffDialog from './ArchivedStaffDialog';
 import StaffProfileDialog from './StaffProfileDialog';
-import SystemNotices from './SystemNotices';
 import SendNoticeDialog from './SendNoticeDialog';
 import HodEndedInterviewApprovalPage from './HodEndedInterviewApprovalPage';
 import HodManageInterviewsPage from './HodManageInterviewsPage';
@@ -53,7 +52,8 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     email: '',
     phone: '',
     avatarUrl: '',
-    initials: '...'
+    initials: '...',
+    specialization: '',
   });
   // Interview report state
   const [reportData, setReportData] = useState<InterviewReport | null>(null);
@@ -96,7 +96,8 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
             email: profile.email,
             phone: profile.mobile || '',
             avatarUrl: profile.profileImageUrl || '',
-            initials
+            initials,
+            specialization: profile.specialization || '',
           });
         })
         .catch(() => {
@@ -131,6 +132,27 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
 
   // Registration requests data
   const [registrationRequests, setRegistrationRequests] = useState<any[]>([]);
+  const [pendingRegistrationCount, setPendingRegistrationCount] = useState(0);
+
+  // Red badge: poll pending registration count regardless of active tab
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const api = await import('../services/api');
+        const items = await api.getPendingRegistrations();
+        if (mounted) setPendingRegistrationCount(items.length);
+      } catch {
+        // ignore
+      }
+    };
+    load();
+    const interval = setInterval(load, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   // Fetch staff list from backend
   useEffect(() => {
@@ -172,6 +194,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
               status: 'pending'
             }));
             setRegistrationRequests(formattedData);
+            setPendingRegistrationCount(formattedData.length);
           })
           .catch(err => console.error("Failed to fetch pending registrations:", err));
       });
@@ -202,6 +225,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
         status: 'pending'
       }));
       setRegistrationRequests(formattedData);
+      setPendingRegistrationCount(formattedData.length);
 
     } catch (error: any) {
       alert(`Approval failed: ${error.message}`);
@@ -218,6 +242,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
       setRegistrationRequests(prev =>
         prev.filter(req => req.id !== id) // Remove from list
       );
+      setPendingRegistrationCount(prev => Math.max(0, prev - 1));
       alert('Registration request rejected.');
     } catch (error: any) {
       alert(`Rejection failed: ${error.message}`);
@@ -347,7 +372,13 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
         newPassword: updatedProfile.newPassword,
       });
 
-      const initials = (next.fullName || '')
+      let latest = next;
+      if (updatedProfile.specialization !== undefined &&
+          (updatedProfile.specialization || '') !== (profileData.specialization || '')) {
+        latest = await updateMySpecialization(updatedProfile.specialization || '');
+      }
+
+      const initials = (latest.fullName || '')
         .split(' ')
         .filter(Boolean)
         .map((n: string) => n[0].toUpperCase())
@@ -356,11 +387,12 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
 
       setProfileData({
         ...profileData,
-        name: next.fullName,
-        email: next.email,
-        phone: next.mobile || '',
-        avatarUrl: next.profileImageUrl || '',
+        name: latest.fullName,
+        email: latest.email,
+        phone: latest.mobile || '',
+        avatarUrl: latest.profileImageUrl || '',
         initials: initials || profileData.initials,
+        specialization: latest.specialization || '',
       });
 
       alert(updatedProfile.newPassword ? 'Profile & password updated successfully!' : 'Profile updated successfully!');
@@ -490,6 +522,52 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
       clearInterval(interval);
     };
   }, []);
+
+  // Red badge for total unread notifications (cleared when user opens the Notifications tab).
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [allNotifications, setAllNotifications] = useState<UserNotificationDto[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const count = await getUnreadNotificationCount();
+        if (mounted) setUnreadNotificationCount(count);
+      } catch {
+        // ignore
+      }
+    };
+    load();
+    const interval = setInterval(load, 5000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // When user opens the Notifications tab: fetch the full list, mark unread as read, clear badge.
+  useEffect(() => {
+    if (activeMenu !== 'notifications') return;
+    let cancelled = false;
+    (async () => {
+      setLoadingNotifications(true);
+      try {
+        const items = await getMyNotifications(false);
+        if (!cancelled) setAllNotifications(items);
+        await markAllNotificationsRead().catch(() => undefined);
+        if (!cancelled) setUnreadNotificationCount(0);
+      } catch (e) {
+        console.error('Failed to load notifications', e);
+        if (!cancelled) setAllNotifications([]);
+      } finally {
+        if (!cancelled) setLoadingNotifications(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMenu]);
 
   // When opening Research tab, mark research_new notifications as read
   useEffect(() => {
@@ -685,6 +763,23 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                       {Math.min(pendingResearchApplicationsCount, 99)}
                     </span>
                   )}
+                  {item.id === 'approve' && pendingRegistrationCount > 0 && (
+                    <span
+                      className="inline-flex items-center justify-center text-white ml-auto"
+                      style={{
+                        backgroundColor: '#ef4444',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        minWidth: '20px',
+                        height: '20px',
+                        padding: '0 6px',
+                        borderRadius: '10px',
+                        lineHeight: 1,
+                      }}
+                    >
+                      {Math.min(pendingRegistrationCount, 99)}
+                    </span>
+                  )}
                   {item.id === 'leave' && pendingLeaveCount > 0 && (
                     <span
                       className="inline-flex items-center justify-center text-white ml-auto"
@@ -699,6 +794,23 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                       }}
                     >
                       {Math.min(pendingLeaveCount, 99)}
+                    </span>
+                  )}
+                  {item.id === 'notifications' && unreadNotificationCount > 0 && (
+                    <span
+                      className="inline-flex items-center justify-center text-white ml-auto"
+                      style={{
+                        backgroundColor: '#ef4444',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        minWidth: '20px',
+                        height: '20px',
+                        padding: '0 6px',
+                        borderRadius: '10px',
+                        lineHeight: 1,
+                      }}
+                    >
+                      {Math.min(unreadNotificationCount, 99)}
                     </span>
                   )}
                 </button>
@@ -1730,14 +1842,71 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
             <>
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-[#222222]" style={{ fontSize: '24px', fontWeight: 700 }}>
-                  Important Notices
+                  Notifications
                 </h2>
                 <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '12px' }}>
-                  System Notifications
+                  {allNotifications.length} total
                 </Badge>
               </div>
 
-              <SystemNotices userRole="hod" />
+              <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6 mb-6">
+                {loadingNotifications ? (
+                  <div className="flex items-center gap-2 text-[#777777]" style={{ fontSize: '14px' }}>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Loading notifications…
+                  </div>
+                ) : allNotifications.length === 0 ? (
+                  <p className="text-[#777777] py-6 text-center" style={{ fontSize: '14px' }}>
+                    You have no notifications. New registration requests, leave requests, mentee
+                    assignments, interview events and research applications will appear here.
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {allNotifications.map((n) => (
+                      <div
+                        key={n.id}
+                        className={`flex items-start gap-4 p-3 rounded-lg border-l-4 transition-colors ${
+                          n.isRead
+                            ? 'border-[#e0e0e0] hover:bg-[#f9f9f9]'
+                            : 'border-[#4db4ac] bg-[#f0fbfa]'
+                        }`}
+                      >
+                        <div className="flex-shrink-0 mt-1">
+                          <div className="h-8 w-8 rounded-full bg-[#e6f7f6] flex items-center justify-center">
+                            <BellRing className="h-4 w-4 text-[#4db4ac]" />
+                          </div>
+                        </div>
+                        <div className="flex-1 pb-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
+                              {n.title}
+                            </p>
+                            {!n.isRead && (
+                              <Badge className="bg-[#4db4ac] text-white" style={{ fontSize: '10px' }}>
+                                New
+                              </Badge>
+                            )}
+                          </div>
+                          <p
+                            className="text-[#555555] whitespace-pre-line mt-1"
+                            style={{ fontSize: '13px' }}
+                          >
+                            {n.message}
+                          </p>
+                          {n.createdAt && (
+                            <p className="text-[#999999] mt-1" style={{ fontSize: '12px' }}>
+                              {new Date(n.createdAt).toLocaleString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    <p className="text-[#999999] pt-3 text-center" style={{ fontSize: '12px' }}>
+                      Notifications are automatically removed after 7 days.
+                    </p>
+                  </div>
+                )}
+              </Card>
+
             </>
           )}
 
@@ -1793,22 +1962,20 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
 
                   <div>
                     <h3 className="text-[#222222] mb-4" style={{ fontWeight: 600, fontSize: '16px' }}>
-                      Department Statistics
+                      Specializations
                     </h3>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[#555555]" style={{ fontSize: '14px' }}>Total Staff</span>
-                        <span className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>42</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[#555555]" style={{ fontSize: '14px' }}>Active Mentorships</span>
-                        <span className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>15</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[#555555]" style={{ fontSize: '14px' }}>Pending Approvals</span>
-                        <span className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>8</span>
-                      </div>
-                    </div>
+                    {profileData.specialization ? (
+                      <p
+                        className="text-[#222222] whitespace-pre-wrap leading-relaxed"
+                        style={{ fontSize: '14px' }}
+                      >
+                        {profileData.specialization}
+                      </p>
+                    ) : (
+                      <p className="text-[#999999] italic" style={{ fontSize: '13px' }}>
+                        No specializations added yet. Click "Edit Profile" to add your areas of expertise.
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -1842,6 +2009,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
         open={editProfileOpen}
         onOpenChange={setEditProfileOpen}
         currentProfile={profileData}
+        showSpecialization
         onSave={handleProfileSave}
       />
 
