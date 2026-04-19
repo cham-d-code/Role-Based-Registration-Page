@@ -113,10 +113,22 @@ export async function resetPassword(token: string, newPassword: string): Promise
     return response.json();
 }
 
+const DASHBOARD_ROLE_KEY = 'dashboardRole';
+
+/** Role chosen at sign-in (may differ from DB role when HOD/coordinator use the Mentor dashboard). */
+export function setDashboardRoleForSession(role: string): void {
+    localStorage.setItem(DASHBOARD_ROLE_KEY, role);
+}
+
+export function getDashboardRole(): string | null {
+    return localStorage.getItem(DASHBOARD_ROLE_KEY);
+}
+
 // Logout user
 export function logout(): void {
     localStorage.removeItem('authToken');
     localStorage.removeItem('user');
+    localStorage.removeItem(DASHBOARD_ROLE_KEY);
 }
 
 // Get current user from localStorage

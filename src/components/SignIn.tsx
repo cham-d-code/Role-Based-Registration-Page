@@ -7,7 +7,7 @@ import { Button } from './ui/button';
 import { Checkbox } from './ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import Logo from './Logo';
-import { login } from '../services/api';
+import { login, setDashboardRoleForSession } from '../services/api';
 
 type UserRole = 'hod' | 'coordinator' | 'mentor' | 'staff';
 
@@ -105,6 +105,7 @@ export default function SignIn({ onSwitchToSignUp, onSignIn, onForgotPassword }:
       });
 
       if (result.success) {
+        setDashboardRoleForSession(formData.role);
         onSignIn(formData.role as UserRole);
       } else {
         setError(result.message || 'Login failed. Please try again.');

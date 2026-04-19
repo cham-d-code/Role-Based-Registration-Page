@@ -8,8 +8,29 @@ import TempStaffProfile from './components/TempStaffProfile';
 import MentorProfile from './components/MentorProfile';
 import ErrorBoundary from './components/ErrorBoundary';
 import CoordinatorInterviewReportPage from './components/CoordinatorInterviewReportPage';
+import { getAuthToken, getCurrentUser, getDashboardRole } from './services/api';
 
 type UserRole = 'hod' | 'coordinator' | 'mentor' | 'staff';
+
+function parseUserRole(value: string | null | undefined): UserRole | null {
+  if (!value) return null;
+  const r = String(value).toLowerCase();
+  if (r === 'hod' || r === 'coordinator' || r === 'mentor' || r === 'staff') return r;
+  return null;
+}
+
+function initialDashboardRole(): UserRole {
+  const fromSession = parseUserRole(getDashboardRole());
+  if (fromSession) return fromSession;
+  const u = getCurrentUser();
+  const fromUser = parseUserRole(u?.role);
+  if (fromUser) return fromUser;
+  return 'hod';
+}
+
+function initialPage(): 'signin' | 'signup' | 'passwordreset' | 'dashboard' {
+  return getAuthToken() ? 'dashboard' : 'signin';
+}
 
 const COORD_REPORT_HASH_PREFIX = '#coord-interview-report=';
 
@@ -48,8 +69,8 @@ export default function App() {
     }, 0);
   };
 
-  const [currentPage, setCurrentPage] = useState<'signin' | 'signup' | 'passwordreset' | 'dashboard'>('dashboard');
-  const [userRole, setUserRole] = useState<UserRole>('hod');
+  const [currentPage, setCurrentPage] = useState<'signin' | 'signup' | 'passwordreset' | 'dashboard'>(initialPage);
+  const [userRole, setUserRole] = useState<UserRole>(initialDashboardRole);
 
   const handleLogout = () => {
     setCurrentPage('signin');

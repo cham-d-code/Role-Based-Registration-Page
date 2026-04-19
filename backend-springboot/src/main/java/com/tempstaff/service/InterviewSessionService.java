@@ -4,8 +4,10 @@ import com.tempstaff.dto.response.SessionStateResponse;
 import com.tempstaff.entity.*;
 import com.tempstaff.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -89,13 +91,14 @@ public class InterviewSessionService {
         return buildSessionState(session, callerId);
     }
 
-    /** End the active session for an interview (coordinator only). */
+    /** End the active session for an interview (coordinator or HOD — HOD may be on the panel when co-chairing). */
     @Transactional
     public void endSession(UUID interviewId, UUID callerId) {
         User caller = userRepo.findById(callerId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-        if (caller.getRole() != UserRole.coordinator) {
-            throw new RuntimeException("Only the Temporary Staff Coordinator can end an interview session.");
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        if (caller.getRole() != UserRole.coordinator && caller.getRole() != UserRole.hod) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Only the Temporary Staff Coordinator or Head of Department can end an interview session.");
         }
         sessionRepo.findByInterviewIdAndActiveTrue(interviewId).ifPresent(s -> {
             s.setActive(false);
