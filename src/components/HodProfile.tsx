@@ -1738,10 +1738,10 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                         <div className="flex items-center justify-between gap-3 flex-wrap">
                           <div>
                             <p className="text-[#222222] mb-1" style={{ fontSize: '14px', fontWeight: 600 }}>
-                              Shortlist approval
+                              Interview report
                             </p>
                             <p className="text-[#555555]" style={{ fontSize: '13px' }}>
-                              Review candidates and approve the shortlist when ready.
+                              Open the summary, rankings, and download an Excel report when ready.
                             </p>
                           </div>
                           <Button
@@ -1752,7 +1752,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                             className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white shrink-0"
                           >
                             <CheckCircle className="h-4 w-4 mr-2" />
-                            Review & Approve
+                            Review interview
                           </Button>
                         </div>
                       </div>

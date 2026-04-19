@@ -9,14 +9,11 @@ import {
   ArrowLeft, 
   FileText, 
   Download, 
-  Mail,
   CheckCircle,
   Calendar,
   Users,
   Award,
-  TrendingUp,
-  Check,
-  X
+  TrendingUp
 } from 'lucide-react';
 
 interface Candidate {
@@ -50,24 +47,11 @@ interface HodEndedInterviewApprovalPageProps {
 }
 
 export default function HodEndedInterviewApprovalPage({ interview, onBack }: HodEndedInterviewApprovalPageProps) {
-  const [approved, setApproved] = useState(false);
   const [downloading, setDownloading] = useState(false);
   
   const candidates = interview.candidates || [];
   const sortedCandidates = [...candidates].sort((a, b) => b.marks.total - a.marks.total);
   const shortlistedCandidates = sortedCandidates.filter(c => c.shortlisted);
-
-  const handleApprove = () => {
-    alert(`Interview results approved successfully!\\n${shortlistedCandidates.length} candidates will be notified.`);
-    setApproved(true);
-  };
-
-  const handleReject = () => {
-    if (confirm('Are you sure you want to reject this interview shortlist? The coordinator will need to revise the selection.')) {
-      alert('Interview results rejected. The coordinator has been notified to revise the shortlist.');
-      onBack();
-    }
-  };
 
   return (
     <div className="min-h-screen bg-white">
@@ -84,7 +68,7 @@ export default function HodEndedInterviewApprovalPage({ interview, onBack }: Hod
           </Button>
           <Separator orientation="vertical" className="h-8 bg-white/30" />
           <h1 className="text-white" style={{ fontWeight: 600, fontSize: '18px' }}>
-            {interview.interviewNumber} - Approval Review
+            {interview.interviewNumber} — Interview review
           </h1>
         </div>
         
@@ -118,8 +102,8 @@ export default function HodEndedInterviewApprovalPage({ interview, onBack }: Hod
                 Interview Report Summary
               </h2>
             </div>
-            <Badge className={`${approved ? 'bg-green-100 text-green-700 border-green-300' : 'bg-yellow-100 text-yellow-700 border-yellow-300'} border`}>
-              {approved ? 'APPROVED' : 'PENDING APPROVAL'}
+            <Badge className="bg-[#e6f7f6] text-[#2a7a72] border-[#4db4ac] border">
+              HOD REVIEW
             </Badge>
           </div>
           
@@ -180,54 +164,6 @@ export default function HodEndedInterviewApprovalPage({ interview, onBack }: Hod
             </div>
           </div>
 
-          {/* Approval Decision Box */}
-          {!approved && (
-            <div className="bg-[#fff8e1] border-2 border-[#ffd54f] rounded-lg p-5">
-              <div className="flex items-start gap-4">
-                <div className="flex-1">
-                  <h3 className="text-[#222222] mb-2" style={{ fontSize: '16px', fontWeight: 600 }}>
-                    Approval Required
-                  </h3>
-                  <p className="text-[#555555]" style={{ fontSize: '14px' }}>
-                    Please review the interview results and shortlisted candidates below. Approve to finalize the selection or reject to request revisions from the coordinator.
-                  </p>
-                </div>
-                <div className="flex gap-3">
-                  <Button
-                    onClick={handleReject}
-                    variant="outline"
-                    className="border-2 border-red-500 text-red-600 hover:bg-red-50"
-                  >
-                    <X className="h-4 w-4 mr-2" />
-                    Reject
-                  </Button>
-                  <Button
-                    onClick={handleApprove}
-                    className="bg-green-600 hover:bg-green-700 text-white"
-                  >
-                    <Check className="h-4 w-4 mr-2" />
-                    Approve Results
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {approved && (
-            <div className="bg-[#e8f5e9] border-2 border-[#66bb6a] rounded-lg p-5">
-              <div className="flex items-center gap-3">
-                <CheckCircle className="h-6 w-6 text-green-600" />
-                <div>
-                  <h3 className="text-[#222222] mb-1" style={{ fontSize: '16px', fontWeight: 600 }}>
-                    Interview Results Approved
-                  </h3>
-                  <p className="text-[#555555]" style={{ fontSize: '14px' }}>
-                    The shortlisted candidates have been notified via email. The coordinator can proceed with the next steps.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
         </Card>
 
         {/* Shortlisted Candidates */}
