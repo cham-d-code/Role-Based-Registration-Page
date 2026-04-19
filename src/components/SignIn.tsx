@@ -4,7 +4,6 @@ import { Card } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
-import { Checkbox } from './ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import Logo from './Logo';
 import { login, setDashboardRoleForSession } from '../services/api';
@@ -33,7 +32,6 @@ export default function SignIn({ onSwitchToSignUp, onSignIn, onForgotPassword }:
     email: '',
     password: '',
     role: '' as UserRole | '',
-    rememberMe: false
   });
 
   // Validation functions
@@ -274,23 +272,8 @@ export default function SignIn({ onSwitchToSignUp, onSignIn, onForgotPassword }:
             )}
           </div>
 
-          {/* Remember Me & Forgot Password */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="rememberMe"
-                checked={formData.rememberMe}
-                onCheckedChange={(checked: boolean) => handleChange('rememberMe', checked)}
-                className="border-[#e0e0e0] data-[state=checked]:bg-[#4db4ac] data-[state=checked]:border-[#4db4ac]"
-              />
-              <label
-                htmlFor="rememberMe"
-                className="text-[#555555] cursor-pointer"
-                style={{ fontSize: '14px' }}
-              >
-                Remember me
-              </label>
-            </div>
+          {/* Forgot Password */}
+          <div className="flex justify-end">
             <button
               type="button"
               onClick={onForgotPassword}
