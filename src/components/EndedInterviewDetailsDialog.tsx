@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { downloadInterviewReportExcel } from '../services/api';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -50,6 +51,7 @@ interface EndedInterviewDetailsDialogProps {
 const EndedInterviewDetailsDialog = React.forwardRef<HTMLDivElement, EndedInterviewDetailsDialogProps>(
   ({ open, onOpenChange, interview }, ref) => {
     const [activeTab, setActiveTab] = useState('all');
+    const [downloading, setDownloading] = useState(false);
 
     if (!interview) return null;
 
@@ -76,10 +78,21 @@ const EndedInterviewDetailsDialog = React.forwardRef<HTMLDivElement, EndedInterv
               <Button
                 variant="outline"
                 className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#e6f7f6]"
-                onClick={() => alert('Downloading report...')}
+                disabled={downloading}
+                onClick={async () => {
+                  if (!interview) return;
+                  setDownloading(true);
+                  try {
+                    await downloadInterviewReportExcel(interview.id);
+                  } catch (e: unknown) {
+                    alert(e instanceof Error ? e.message : 'Failed to download report.');
+                  } finally {
+                    setDownloading(false);
+                  }
+                }}
               >
                 <Download className="h-4 w-4 mr-2" />
-                Download Report
+                {downloading ? 'Downloading…' : 'Download Report'}
               </Button>
             </div>
           </DialogHeader>

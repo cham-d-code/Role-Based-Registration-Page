@@ -6,6 +6,7 @@ import com.tempstaff.dto.response.InterviewReportResponse;
 import com.tempstaff.dto.response.MarkingSchemeResponse;
 import com.tempstaff.entity.*;
 import com.tempstaff.repository.*;
+import com.tempstaff.support.InterviewReportExcelExporter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -278,6 +279,21 @@ public class MarkingService {
                 .totalMaxMarks(totalMaxMarks)
                 .candidates(candReports)
                 .build();
+    }
+
+    /** Same data as {@link #getReport(UUID)} as an Excel workbook (HOD after release, or coordinator). */
+    @Transactional(readOnly = true)
+    public byte[] exportInterviewReportExcel(UUID interviewId) {
+        Interview interview = interviewRepo.findById(interviewId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Interview not found"));
+        InterviewReportResponse report = getReport(interviewId);
+        Map<String, InterviewReportExcelExporter.CandidateMeta> meta = candidateRepo.findByInterviewId(interviewId).stream()
+                .collect(Collectors.toMap(
+                        c -> c.getId().toString(),
+                        c -> new InterviewReportExcelExporter.CandidateMeta(
+                                c.getPhone() != null ? c.getPhone() : "",
+                                Boolean.TRUE.equals(c.getShortlisted()))));
+        return InterviewReportExcelExporter.build(report, meta, interview.getDate());
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────

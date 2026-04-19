@@ -918,6 +918,50 @@ export async function getInterviewReport(interviewId: string): Promise<Interview
     return fetchWithAuth(`${API_BASE_URL}/interviews/${interviewId}/report`);
 }
 
+/** Download averaged interview report as .xlsx (same auth as getInterviewReport). Triggers a browser file download. */
+export async function downloadInterviewReportExcel(interviewId: string): Promise<void> {
+    const token = getAuthToken();
+    if (!token) throw new Error('No authentication token found');
+    const response = await fetch(`${API_BASE_URL}/interviews/${interviewId}/report/export`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    if (response.status === 401) {
+        logout();
+        window.location.href = '/';
+        throw new Error('Session expired');
+    }
+    if (!response.ok) {
+        const errText = await response.text();
+        let msg = `Request failed (${response.status})`;
+        if (errText.trim()) {
+            try {
+                const errorData = JSON.parse(errText) as { message?: string };
+                msg = errorData.message || msg;
+            } catch {
+                if (errText.length < 300) msg = errText;
+            }
+        }
+        throw new Error(msg);
+    }
+    const blob = await response.blob();
+    const cd = response.headers.get('Content-Disposition');
+    let filename = `interview-report-${interviewId}.xlsx`;
+    if (cd) {
+        const quoted = /filename="([^"]+)"/i.exec(cd);
+        const plain = /filename=([^;\s]+)/i.exec(cd);
+        const raw = quoted?.[1] ?? plain?.[1];
+        if (raw) filename = raw.trim();
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+}
+
 /** Coordinator sends averaged results to HOD after reviewing (ended interview only). */
 export async function releaseInterviewReportToHod(interviewId: string): Promise<InterviewData> {
     // POST avoids some reverse proxies / static hosts that do not forward PUT to Spring (404 "No static resource").

@@ -13,7 +13,9 @@ import com.tempstaff.repository.UserRepository;
 import com.tempstaff.service.InterviewService;
 import com.tempstaff.service.MarkingService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -75,6 +77,38 @@ public class MarkingController {
         User caller = getUser(userDetails);
         Interview interview = interviewRepository.findById(interviewId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Interview not found"));
+        assertCanViewInterviewReport(interview, caller);
+        return ResponseEntity.ok(markingService.getReport(interviewId));
+    }
+
+    /**
+     * Download averaged interview report as Excel (same visibility rules as {@link #getReport}).
+     */
+    @GetMapping("/{interviewId}/report/export")
+    public ResponseEntity<byte[]> exportReportExcel(
+            @PathVariable UUID interviewId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+
+        User caller = getUser(userDetails);
+        Interview interview = interviewRepository.findById(interviewId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Interview not found"));
+        assertCanViewInterviewReport(interview, caller);
+
+        byte[] body = markingService.exportInterviewReportExcel(interviewId);
+        String safe = interview.getInterviewNumber() == null ? "interview"
+                : interview.getInterviewNumber().replaceAll("[^a-zA-Z0-9-_]+", "_");
+        if (safe.isBlank()) {
+            safe = "interview";
+        }
+        String filename = safe + "-report.xlsx";
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .body(body);
+    }
+
+    private void assertCanViewInterviewReport(Interview interview, User caller) {
         if (caller.getRole() == UserRole.hod) {
             if (interview.getReportSentToHodAt() == null) {
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN,
@@ -83,7 +117,6 @@ public class MarkingController {
         } else if (caller.getRole() != UserRole.coordinator) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You cannot view this report.");
         }
-        return ResponseEntity.ok(markingService.getReport(interviewId));
     }
 
     /**

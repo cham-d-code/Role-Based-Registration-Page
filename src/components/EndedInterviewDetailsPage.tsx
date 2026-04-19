@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { downloadInterviewReportExcel } from '../services/api';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -46,6 +47,7 @@ interface EndedInterviewDetailsPageProps {
 }
 
 export default function EndedInterviewDetailsPage({ interview, onBack }: EndedInterviewDetailsPageProps) {
+  const [downloading, setDownloading] = useState(false);
   const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(
     new Set(interview.candidates?.filter(c => c.shortlisted).map(c => c.id) || [])
   );
@@ -97,10 +99,20 @@ export default function EndedInterviewDetailsPage({ interview, onBack }: EndedIn
         <Button
           variant="ghost"
           className="text-white hover:bg-[#3c9a93]"
-          onClick={() => alert('Downloading report...')}
+          disabled={downloading}
+          onClick={async () => {
+            setDownloading(true);
+            try {
+              await downloadInterviewReportExcel(interview.id);
+            } catch (e: unknown) {
+              alert(e instanceof Error ? e.message : 'Failed to download report.');
+            } finally {
+              setDownloading(false);
+            }
+          }}
         >
           <Download className="h-4 w-4 mr-2" />
-          Download Report
+          {downloading ? 'Downloading…' : 'Download Report'}
         </Button>
       </header>
 

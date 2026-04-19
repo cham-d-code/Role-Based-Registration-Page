@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { downloadInterviewReportExcel } from '../services/api';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -50,6 +51,7 @@ interface HodEndedInterviewApprovalPageProps {
 
 export default function HodEndedInterviewApprovalPage({ interview, onBack }: HodEndedInterviewApprovalPageProps) {
   const [approved, setApproved] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   
   const candidates = interview.candidates || [];
   const sortedCandidates = [...candidates].sort((a, b) => b.marks.total - a.marks.total);
@@ -89,10 +91,20 @@ export default function HodEndedInterviewApprovalPage({ interview, onBack }: Hod
         <Button
           variant="ghost"
           className="text-white hover:bg-[#3c9a93]"
-          onClick={() => alert('Downloading report...')}
+          disabled={downloading}
+          onClick={async () => {
+            setDownloading(true);
+            try {
+              await downloadInterviewReportExcel(interview.id);
+            } catch (e: unknown) {
+              alert(e instanceof Error ? e.message : 'Failed to download report.');
+            } finally {
+              setDownloading(false);
+            }
+          }}
         >
           <Download className="h-4 w-4 mr-2" />
-          Download Report
+          {downloading ? 'Downloading…' : 'Download Report'}
         </Button>
       </header>
 
