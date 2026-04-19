@@ -298,7 +298,8 @@ export default function SalaryManagementPage({ userRole }: SalaryManagementPageP
           <Button
             onClick={handleDownloadExcel}
             disabled={downloading || reports.length === 0}
-            className="bg-[#16a34a] hover:bg-[#15803d] text-white"
+            variant="outline"
+            className="border-2 border-[#15803d] bg-[#f0fdf4] !text-black font-semibold hover:bg-[#dcfce7] hover:!text-black [&_svg]:!text-black disabled:!text-neutral-600 disabled:border-neutral-400 disabled:bg-neutral-100 shrink-0"
           >
             {downloading ? (
               <Loader2 className="h-4 w-4 mr-2 animate-spin" />

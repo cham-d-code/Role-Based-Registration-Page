@@ -24,6 +24,7 @@ import StructuredJobDescriptionPage from './StructuredJobDescriptionPage';
 import SalaryManagementPage from './SalaryManagementPage';
 import AttendanceReportPage from './AttendanceReportPage';
 import DashboardIdentityCard from './DashboardIdentityCard';
+import DeleteAccountDialog from './DeleteAccountDialog';
 
 interface HodProfileProps {
   onLogout: () => void;
@@ -79,6 +80,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
   const [showStaffJdPage, setShowStaffJdPage] = useState(false);
   const [selectedStaffJd, setSelectedStaffJd] = useState<any | null>(null);
   const [loadingStaffJd, setLoadingStaffJd] = useState(false);
+  const [deleteAccountDialogOpen, setDeleteAccountDialogOpen] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [editSpecOpen, setEditSpecOpen] = useState(false);
   const [specializationText, setSpecializationText] = useState('');
@@ -672,6 +674,14 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
               Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-red-600 focus:text-red-600"
+              onClick={() => setDeleteAccountDialogOpen(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete my account
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem className="text-red-600" onClick={onLogout}>
               <LogOut className="mr-2 h-4 w-4" />
               Logout
@@ -679,6 +689,8 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
+
+      <DeleteAccountDialog open={deleteAccountDialogOpen} onOpenChange={setDeleteAccountDialogOpen} />
 
       <div className="flex pt-16">
         {/* Left Sidebar */}

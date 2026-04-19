@@ -16,6 +16,7 @@ import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 @Service
@@ -39,8 +40,20 @@ public class AuthService {
      */
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        // Check if email already exists
-        if (userRepository.existsByEmail(request.getEmail())) {
+        String email = request.getEmail() == null ? "" : request.getEmail().trim().toLowerCase(Locale.ROOT);
+        if (email.isBlank()) {
+            return AuthResponse.builder()
+                    .success(false)
+                    .message("Email is required")
+                    .build();
+        }
+        if (!email.endsWith("@kln.ac.lk")) {
+            return AuthResponse.builder()
+                    .success(false)
+                    .message("Registration is only available for University of Kelaniya staff (@kln.ac.lk emails).")
+                    .build();
+        }
+        if (userRepository.existsByEmail(email)) {
             return AuthResponse.builder()
                     .success(false)
                     .message("Email already registered")
@@ -74,7 +87,7 @@ public class AuthService {
         }
 
         User user = User.builder()
-                .email(request.getEmail())
+                .email(email)
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .fullName(request.getFullName())
                 .mobile(request.getMobile())
@@ -87,9 +100,7 @@ public class AuthService {
         user = userRepository.save(user);
 
         // Best-effort enrichment for senior academic staff (site does not expose email addresses)
-        if (request.getEmail() != null
-                && request.getEmail().toLowerCase().endsWith("@kln.ac.lk")
-                && role != UserRole.staff) {
+        if (email.endsWith("@kln.ac.lk") && role != UserRole.staff) {
             String specialization = imStaffDirectoryService.lookupSpecializationByFullName(request.getFullName());
             if (specialization != null && !specialization.isBlank()) {
                 user.setSpecialization(specialization);
@@ -164,8 +175,8 @@ public class AuthService {
      */
     @Transactional
     public AuthResponse login(LoginRequest request) {
-        // Find user by email
-        Optional<User> userOpt = userRepository.findByEmail(request.getEmail());
+        String loginEmail = request.getEmail() == null ? "" : request.getEmail().trim().toLowerCase(Locale.ROOT);
+        Optional<User> userOpt = userRepository.findByEmail(loginEmail);
 
         if (userOpt.isEmpty()) {
             return AuthResponse.builder()

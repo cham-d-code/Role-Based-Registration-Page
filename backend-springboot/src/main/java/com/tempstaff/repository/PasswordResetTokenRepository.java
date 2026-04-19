@@ -4,6 +4,7 @@ import com.tempstaff.entity.PasswordResetToken;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -20,4 +21,8 @@ public interface PasswordResetTokenRepository extends JpaRepository<PasswordRese
     @Modifying
     @Query("UPDATE PasswordResetToken prt SET prt.usedAt = :usedAt WHERE prt.id = :id")
     void markAsUsed(UUID id, LocalDateTime usedAt);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM PasswordResetToken p WHERE p.userId = :userId")
+    void deleteAllByUserId(@Param("userId") UUID userId);
 }

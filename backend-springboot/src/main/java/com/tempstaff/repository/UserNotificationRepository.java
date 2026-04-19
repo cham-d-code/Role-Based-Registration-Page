@@ -59,4 +59,8 @@ public interface UserNotificationRepository extends JpaRepository<UserNotificati
     int markAllReadByTypeAndRelatedApplicationId(
             @Param("type") NotificationType type,
             @Param("applicationId") UUID applicationId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM UserNotification n WHERE n.recipientId = :userId")
+    void deleteAllByRecipientId(@Param("userId") UUID userId);
 }

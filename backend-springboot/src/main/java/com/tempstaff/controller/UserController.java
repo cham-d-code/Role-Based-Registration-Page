@@ -7,6 +7,7 @@ import com.tempstaff.dto.request.UpdateSpecializationRequest;
 import com.tempstaff.service.ImStaffDirectoryService;
 import com.tempstaff.service.NotificationService;
 import com.tempstaff.service.ModulePreferenceService;
+import com.tempstaff.service.UserAccountDeletionService;
 import com.tempstaff.dto.response.UserProfileResponse;
 import com.tempstaff.entity.NotificationType;
 import com.tempstaff.entity.User;
@@ -17,12 +18,14 @@ import com.tempstaff.repository.ModuleRepository;
 import com.tempstaff.repository.UserRepository;
 import com.tempstaff.repository.UserSubjectRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -41,6 +44,7 @@ public class UserController {
     private final NotificationService notificationService;
     private final ModulePreferenceService modulePreferenceService;
     private final PasswordEncoder passwordEncoder;
+    private final UserAccountDeletionService userAccountDeletionService;
 
     /**
      * GET /api/user/me
@@ -96,6 +100,22 @@ public class UserController {
                 .build();
 
         return ResponseEntity.ok(profile);
+    }
+
+    /**
+     * DELETE /api/user/me — permanently delete the authenticated user and related data.
+     */
+    @DeleteMapping("/me")
+    public ResponseEntity<Void> deleteMyAccount(@AuthenticationPrincipal UserDetails userDetails) {
+        User user = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+        try {
+            userAccountDeletionService.deleteUserAccount(user.getId());
+        } catch (org.springframework.dao.DataIntegrityViolationException ex) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Could not delete account because some linked records could not be removed. Contact support.");
+        }
+        return ResponseEntity.noContent().build();
     }
 
     /**

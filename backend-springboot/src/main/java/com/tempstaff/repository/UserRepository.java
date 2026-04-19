@@ -48,4 +48,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Modifying
     @Query("UPDATE User u SET u.status = :status WHERE u.id = :userId")
     void updateStatus(@Param("userId") UUID userId, @Param("status") UserStatus status);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("UPDATE User u SET u.mentorId = NULL WHERE u.mentorId = :mentorId")
+    void clearMentorIdReferences(@Param("mentorId") UUID mentorId);
 }

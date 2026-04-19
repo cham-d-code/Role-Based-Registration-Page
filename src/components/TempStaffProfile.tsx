@@ -43,6 +43,7 @@ import { Checkbox } from './ui/checkbox';
 import SystemNotices from './SystemNotices';
 import LeaveApplicationDialog from './LeaveApplicationDialog';
 import EditProfileDialog from './EditProfileDialog';
+import DeleteAccountDialog from './DeleteAccountDialog';
 import DashboardIdentityCard from './DashboardIdentityCard';
 import {
   applyLeave,
@@ -82,6 +83,7 @@ interface TempStaffProfileProps {
 export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {}) {
   const [activeMenu, setActiveMenu] = useState('dashboard');
   const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const [deleteAccountDialogOpen, setDeleteAccountDialogOpen] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [editSubjectsOpen, setEditSubjectsOpen] = useState(false);
   const [preferredSubjects, setPreferredSubjects] = useState<string[]>([]);
@@ -712,6 +714,14 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
                 Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="cursor-pointer text-red-600 focus:text-red-600"
+                onClick={() => setDeleteAccountDialogOpen(true)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete my account
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem className="cursor-pointer text-red-600" onClick={onLogout}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Logout
@@ -720,6 +730,8 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
           </DropdownMenu>
         </div>
       </header>
+
+      <DeleteAccountDialog open={deleteAccountDialogOpen} onOpenChange={setDeleteAccountDialogOpen} />
 
       <div className="flex pt-16">
         {/* Left Sidebar Navigation */}

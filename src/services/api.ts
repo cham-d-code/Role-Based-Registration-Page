@@ -425,6 +425,11 @@ export async function updateMyProfile(body: {
     });
 }
 
+/** Permanently deletes the authenticated user (see backend DELETE /api/user/me). */
+export async function deleteMyAccount(): Promise<void> {
+    await fetchWithAuth(`${API_BASE_URL}/user/me`, { method: 'DELETE' });
+}
+
 export async function updateMyPreferredSubjects(preferredSubjects: string[]): Promise<UserProfile> {
     return fetchWithAuth(`${API_BASE_URL}/user/me/preferred-subjects`, {
         method: 'PUT',

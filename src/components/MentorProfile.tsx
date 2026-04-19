@@ -38,6 +38,7 @@ import ResearchDetailsDialog from './ResearchDetailsDialog';
 import AddResearchDialog from './AddResearchDialog';
 import EditResearchDialog from './EditResearchDialog';
 import EditProfileDialog from './EditProfileDialog';
+import DeleteAccountDialog from './DeleteAccountDialog';
 import StaffProfileDialog from './StaffProfileDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
 import { Textarea } from './ui/textarea';
@@ -90,6 +91,7 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
   const [selectedResearch, setSelectedResearch] = useState<any>(null);
   const [showAddResearchDialog, setShowAddResearchDialog] = useState(false);
   const [showEditResearchDialog, setShowEditResearchDialog] = useState(false);
+  const [deleteAccountDialogOpen, setDeleteAccountDialogOpen] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [editSpecOpen, setEditSpecOpen] = useState(false);
   const [specializationText, setSpecializationText] = useState('');
@@ -563,6 +565,14 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
               <span className="text-[#222222]">Settings</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="cursor-pointer hover:bg-[#f9f9f9] py-2 text-red-600 focus:text-red-600"
+              onClick={() => setDeleteAccountDialogOpen(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              <span>Delete my account</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem className="cursor-pointer hover:bg-[#f9f9f9] py-2" onClick={onLogout}>
               <LogOut className="mr-2 h-4 w-4 text-red-500" />
               <span className="text-red-500">Logout</span>
@@ -570,6 +580,8 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
+
+      <DeleteAccountDialog open={deleteAccountDialogOpen} onOpenChange={setDeleteAccountDialogOpen} />
 
       <div className="flex pt-16">
         {/* Left Sidebar */}

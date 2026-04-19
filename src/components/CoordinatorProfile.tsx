@@ -53,6 +53,7 @@ import InterviewMarkingPage from './InterviewMarkingPage';
 import EndedInterviewDetailsPage from './EndedInterviewDetailsPage';
 import CoordinatorManageInterviewsPage from './CoordinatorManageInterviewsPage';
 import EditProfileDialog from './EditProfileDialog';
+import DeleteAccountDialog from './DeleteAccountDialog';
 import StaffAttendanceDialog from './StaffAttendanceDialog';
 import ResearchDetailsDialog from './ResearchDetailsDialog';
 import AddResearchDialog from './AddResearchDialog';
@@ -185,6 +186,7 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
   const [selectedInterview, setSelectedInterview] = useState<Interview | null>(null);
   const [editingInterviewId, setEditingInterviewId] = useState<string | null>(null);
   const [editedDate, setEditedDate] = useState<string>('');
+  const [deleteAccountDialogOpen, setDeleteAccountDialogOpen] = useState(false);
   const [editProfileOpen, setEditProfileOpen] = useState(false);
   const [editSpecOpen, setEditSpecOpen] = useState(false);
   const [specializationText, setSpecializationText] = useState('');
@@ -1168,6 +1170,14 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
               Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-red-600 focus:text-red-600"
+              onClick={() => setDeleteAccountDialogOpen(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete my account
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem className="text-red-600" onClick={onLogout}>
               <LogOut className="mr-2 h-4 w-4" />
               Logout
@@ -1175,6 +1185,8 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
+
+      <DeleteAccountDialog open={deleteAccountDialogOpen} onOpenChange={setDeleteAccountDialogOpen} />
 
       <div className="flex pt-16">
         {/* Left Sidebar */}

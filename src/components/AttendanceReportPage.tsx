@@ -167,7 +167,8 @@ export default function AttendanceReportPage({
         <Button
           onClick={handleDownloadExcel}
           disabled={downloading}
-          className="bg-[#16a34a] hover:bg-[#15803d] text-white self-start md:self-auto"
+          variant="outline"
+          className="self-start md:self-auto border-2 border-[#15803d] bg-[#f0fdf4] !text-black font-semibold hover:bg-[#dcfce7] hover:!text-black [&_svg]:!text-black disabled:!text-neutral-600 disabled:border-neutral-400 disabled:bg-neutral-100"
           style={{ minWidth: '180px' }}
         >
           {downloading ? (

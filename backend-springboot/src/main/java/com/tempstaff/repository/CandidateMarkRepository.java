@@ -19,4 +19,8 @@ public interface CandidateMarkRepository extends JpaRepository<CandidateMark, UU
     @Query(value = "DELETE FROM candidate_marks WHERE criterion_id IN (SELECT id FROM marking_criteria WHERE scheme_id = :schemeId)",
             nativeQuery = true)
     void deleteAllByMarkingSchemeId(@Param("schemeId") UUID schemeId);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("DELETE FROM CandidateMark m WHERE m.marker.id = :userId")
+    void deleteAllByMarkerId(@Param("userId") UUID userId);
 }
