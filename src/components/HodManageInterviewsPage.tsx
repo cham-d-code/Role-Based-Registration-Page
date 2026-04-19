@@ -50,6 +50,11 @@ export default function HodManageInterviewsPage({ onBack }: HodManageInterviewsP
   const [markingInterview, setMarkingInterview] = useState<InterviewData | null>(null);
   const [markingSchemeForPage, setMarkingSchemeForPage] = useState<MarkingSchemeData | undefined>(undefined);
 
+  const [hodReportInterviewId, setHodReportInterviewId] = useState<string | null>(null);
+  const [hodReportData, setHodReportData] = useState<InterviewReport | null>(null);
+  const [hodReportLoading, setHodReportLoading] = useState(false);
+  const [hodReportError, setHodReportError] = useState('');
+
   const _today = new Date();
   const todayStr = `${_today.getFullYear()}-${String(_today.getMonth() + 1).padStart(2, '0')}-${String(_today.getDate()).padStart(2, '0')}`;
 
