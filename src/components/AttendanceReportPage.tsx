@@ -175,7 +175,7 @@ export default function AttendanceReportPage({
           ) : (
             <Download className="h-4 w-4 mr-2" />
           )}
-          Download Excel
+          Download attendance (Excel)
         </Button>
       </div>
 

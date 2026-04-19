@@ -1070,7 +1070,16 @@ async function downloadBlobWithAuth(url: string, filename: string): Promise<void
     }
     if (!response.ok) {
         const text = await response.text().catch(() => '');
-        throw new Error(text || 'Failed to download file');
+        let msg = `Download failed (${response.status})`;
+        if (text.trim()) {
+            try {
+                const j = JSON.parse(text) as { message?: string };
+                if (j.message) msg = j.message;
+            } catch {
+                if (text.length < 240) msg = text;
+            }
+        }
+        throw new Error(msg);
     }
 
     const blob = await response.blob();

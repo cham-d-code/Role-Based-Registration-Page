@@ -305,7 +305,7 @@ export default function SalaryManagementPage({ userRole }: SalaryManagementPageP
             ) : (
               <Download className="h-4 w-4 mr-2" />
             )}
-            Download Excel
+            Download salary (Excel)
           </Button>
         </div>
         <Separator className="mb-4" />
