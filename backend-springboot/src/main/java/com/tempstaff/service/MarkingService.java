@@ -173,9 +173,13 @@ public class MarkingService {
 
         int totalMaxMarks = scheme.getCriteria().stream().mapToInt(MarkingCriterion::getMaxMarks).sum();
 
-        // Exclude markers who left voluntarily or were removed from the panel (marks not averaged)
+        // Averages use marks from panelists who were not removed and did not step off the active panel
+        // (left_session). Do not exclude everyone with status "waiting" — that includes people still in
+        // the waiting room who never submitted marks; it also wrongly excluded some DB rows where status
+        // lagged behind active marking.
         Set<UUID> excludedMarkers = participantRepo.findBySessionId(session.getId()).stream()
-                .filter(p -> p.isLeftSession() || "removed".equalsIgnoreCase(p.getStatus()))
+                .filter(p -> p.isLeftSession()
+                        || "removed".equalsIgnoreCase(p.getStatus()))
                 .map(p -> p.getUser().getId())
                 .collect(Collectors.toSet());
 

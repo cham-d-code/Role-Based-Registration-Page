@@ -89,7 +89,9 @@ public class InterviewController {
     }
 
     /**
-     * Coordinator releases averaged marking results to HOD after reviewing (ended interview only).
+     * Legacy: coordinator releases averaged marking results to HOD. Prefer
+     * {@code POST /api/interviews/{id}/report/release} (see {@link com.tempstaff.controller.MarkingController})
+     * if PUT is blocked by a proxy.
      */
     @PutMapping("/{id}/report/release")
     public ResponseEntity<InterviewResponse> releaseReportToHod(

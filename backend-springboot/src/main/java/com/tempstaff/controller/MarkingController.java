@@ -3,12 +3,14 @@ package com.tempstaff.controller;
 import com.tempstaff.dto.request.SaveMarkingSchemeRequest;
 import com.tempstaff.dto.request.SubmitMarksRequest;
 import com.tempstaff.dto.response.InterviewReportResponse;
+import com.tempstaff.dto.response.InterviewResponse;
 import com.tempstaff.dto.response.MarkingSchemeResponse;
 import com.tempstaff.entity.Interview;
 import com.tempstaff.entity.User;
 import com.tempstaff.entity.UserRole;
 import com.tempstaff.repository.InterviewRepository;
 import com.tempstaff.repository.UserRepository;
+import com.tempstaff.service.InterviewService;
 import com.tempstaff.service.MarkingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -26,6 +28,7 @@ import java.util.UUID;
 public class MarkingController {
 
     private final MarkingService markingService;
+    private final InterviewService interviewService;
     private final UserRepository userRepository;
     private final InterviewRepository interviewRepository;
 
@@ -81,6 +84,23 @@ public class MarkingController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "You cannot view this report.");
         }
         return ResponseEntity.ok(markingService.getReport(interviewId));
+    }
+
+    /**
+     * Coordinator releases averaged results to HOD (ended interview only).
+     * Implemented here next to {@link #getReport} so the route is always registered with interview marking APIs.
+     * POST (in addition to legacy PUT on {@link InterviewController}) avoids some proxies blocking PUT.
+     */
+    @PostMapping("/{interviewId}/report/release")
+    public ResponseEntity<InterviewResponse> releaseReportToHodPost(
+            @PathVariable UUID interviewId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        User caller = getUser(userDetails);
+        try {
+            return ResponseEntity.ok(interviewService.releaseInterviewReportToHod(interviewId, caller.getId()));
+        } catch (RuntimeException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+        }
     }
 
     private User getUser(UserDetails userDetails) {

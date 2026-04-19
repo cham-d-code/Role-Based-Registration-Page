@@ -70,7 +70,7 @@ public class InterviewSessionController {
         return ResponseEntity.ok().build();
     }
 
-    /** Caller voluntarily leaves the session (marks excluded from report average) */
+    /** Step off the active panel into waiting (marks excluded from averages until readmitted active) */
     @PutMapping("/{interviewId}/session/leave")
     public ResponseEntity<Void> leaveSession(
             @PathVariable UUID interviewId,

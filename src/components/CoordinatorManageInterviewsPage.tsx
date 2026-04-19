@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Calendar as CalendarIcon, Users, Mail, Phone, FileText, Edit, Plus, ArrowLeft, Check, X,
-  Loader2, Upload, Play, Square, UserCheck, UserX, Wifi, BarChart2, Send
+  Loader2, Upload, Play, Square, UserCheck, UserX, Wifi, ExternalLink,
 } from 'lucide-react';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -13,8 +13,8 @@ import {
   getInterviews, getInterviewCandidates, createInterview, updateInterviewDate,
   startInterviewSession, endInterviewSession, getInterviewSession, getActiveSession,
   approveParticipant, removeParticipant, leaveSession, getMarkingScheme,
-  getInterviewReport, releaseInterviewReportToHod,
-  InterviewData, CandidateData, SessionState, MarkingSchemeData, InterviewReport,
+  getCurrentUser,
+  InterviewData, CandidateData, SessionState, MarkingSchemeData,
 } from '../services/api';
 import InterviewMarkingPage from './InterviewMarkingPage';
 
@@ -59,12 +59,10 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
   const candidatesMapRef = useRef(candidatesMap);
   candidatesMapRef.current = candidatesMap;
 
-  // ── Ended interview report (coordinator review → send to HOD) ─────────────
-  const [coordReportInterviewId, setCoordReportInterviewId] = useState<string | null>(null);
-  const [coordReportData, setCoordReportData] = useState<InterviewReport | null>(null);
-  const [coordReportLoading, setCoordReportLoading] = useState(false);
-  const [coordReportError, setCoordReportError] = useState('');
-  const [releasingReport, setReleasingReport] = useState(false);
+  const [leavingPanel, setLeavingPanel] = useState(false);
+  const [joiningPanel, setJoiningPanel] = useState(false);
+
+  const coordinatorUserId = getCurrentUser()?.id ?? null;
 
   // ── Load interviews on mount ───────────────────────────────────────────────
   useEffect(() => { fetchInterviews(); }, []);
@@ -197,57 +195,40 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
     }
   }
 
-  /** Optional: step away without ending the session; your marks are excluded from averages. You can return here anytime to admit panelists or stop the interview. */
-  async function handleLeaveSession() {
+  /** Step off the active marking panel without ending the session; averages use only active participants. */
+  async function handleLeavePanel() {
     if (!liveInterviewId) return;
-    if (!confirm('Leave the live controls? The interview stays live for others. Your marks will not be included in averages. You can come back to this page to manage the session or stop it.')) return;
-    try { await leaveSession(liveInterviewId); } catch { /* ignore */ }
-    setLiveInterviewId(null);
-    setSessionState(null);
-  }
-
-  async function toggleCoordReport(interviewId: string) {
-    if (coordReportInterviewId === interviewId) {
-      setCoordReportInterviewId(null);
-      setCoordReportData(null);
-      setCoordReportError('');
-      return;
-    }
-    setCoordReportInterviewId(interviewId);
-    setCoordReportData(null);
-    setCoordReportError('');
-    setCoordReportLoading(true);
+    if (!confirm('Leave the active marking panel? The interview stays live. Your marks are excluded from averages until you join the panel again. You can still manage waiting members and stop the interview.')) return;
+    setLeavingPanel(true);
     try {
-      const data = await getInterviewReport(interviewId);
-      setCoordReportData(data);
+      await leaveSession(liveInterviewId);
+      const state = await getInterviewSession(liveInterviewId);
+      setSessionState(state);
     } catch (e: any) {
-      setCoordReportError(e.message || 'Failed to load report.');
+      alert(e?.message || 'Failed to leave the panel.');
     } finally {
-      setCoordReportLoading(false);
+      setLeavingPanel(false);
     }
   }
 
-  async function handleSendReportToHod(interviewId: string) {
-    if (!confirm('Send averaged results to all HODs for review?')) return;
-    setReleasingReport(true);
+  /** Return to the active marking panel (same as approving yourself from waiting). */
+  async function handleJoinAgainPanel() {
+    if (!liveInterviewId || !coordinatorUserId) return;
+    setJoiningPanel(true);
     try {
-      await releaseInterviewReportToHod(interviewId);
-      await fetchInterviews();
-      if (coordReportInterviewId === interviewId) {
-        setCoordReportLoading(true);
-        try {
-          setCoordReportData(await getInterviewReport(interviewId));
-        } catch {
-          /* ignore */
-        } finally {
-          setCoordReportLoading(false);
-        }
-      }
+      await approveParticipant(liveInterviewId, coordinatorUserId);
+      const state = await getInterviewSession(liveInterviewId);
+      setSessionState(state);
     } catch (e: any) {
-      alert(e?.message || 'Failed to send report to HOD.');
+      alert(e?.message || 'Failed to rejoin the panel.');
     } finally {
-      setReleasingReport(false);
+      setJoiningPanel(false);
     }
+  }
+
+  function openAveragedReportInNewTab(interviewId: string) {
+    const url = `${window.location.origin}${window.location.pathname}#coord-interview-report=${encodeURIComponent(interviewId)}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
   }
 
   // ── Allow a waiting member ─────────────────────────────────────────────────
@@ -270,6 +251,13 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
     await loadCandidates(interview.id);
     const scheme = await getMarkingScheme(interview.id).catch(() => null);
     setMarkingSchemeForPage(scheme ?? undefined);
+    if (liveInterviewId === interview.id) {
+      try {
+        setSessionState(await getInterviewSession(interview.id));
+      } catch {
+        /* keep existing session snapshot */
+      }
+    }
     setMarkingInterview(interview);
   }
 
@@ -296,6 +284,16 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
   // Navigate to marking page
   if (markingInterview) {
     const candidates = candidatesMap[markingInterview.id] || [];
+    const onActiveMarkingPanel =
+      coordinatorUserId != null &&
+      sessionState != null &&
+      markingInterview.id === liveInterviewId &&
+      (sessionState.activeParticipants ?? []).some(p => p.userId === coordinatorUserId);
+    const marksEntryDisabled =
+      markingInterview.id === liveInterviewId &&
+      sessionState != null &&
+      coordinatorUserId != null &&
+      !onActiveMarkingPanel;
     return (
       <InterviewMarkingPage
         interview={{ id: markingInterview.id, interviewNumber: markingInterview.interviewNumber, date: markingInterview.date }}
@@ -308,6 +306,7 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
           cvUrl: c.cvUrl,
         }))}
         existingScheme={markingSchemeForPage}
+        marksEntryDisabled={marksEntryDisabled}
         onBack={() => {
           setMarkingInterview(null);
           setMarkingSchemeForPage(undefined);
@@ -450,6 +449,17 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
             const candidates = candidatesMap[interview.id] || [];
             const isLoadingCands = loadingCandidatesFor === interview.id;
             const isLive = liveInterviewId === interview.id;
+            const onActivePanel = !!(
+              coordinatorUserId &&
+              sessionState?.activeParticipants?.some(p => p.userId === coordinatorUserId)
+            );
+            const showJoinAgainPanel = !!(
+              coordinatorUserId &&
+              !onActivePanel &&
+              (sessionState?.waitingParticipants?.some(p => p.userId === coordinatorUserId) ||
+                sessionState?.myStatus === 'waiting' ||
+                sessionState?.myStatus === 'removed')
+            );
 
             return (
               <Card key={interview.id} className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
@@ -488,15 +498,35 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
                           </p>
                         </div>
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={handleLeaveSession}
-                          variant="outline"
-                          className="bg-transparent border-white text-white hover:bg-white/20 font-semibold"
-                        >
-                          <UserX className="h-4 w-4 mr-2" />
-                          Leave Session
-                        </Button>
+                      <div className="flex gap-2 flex-wrap justify-end">
+                        {onActivePanel && (
+                          <Button
+                            onClick={handleLeavePanel}
+                            variant="outline"
+                            disabled={leavingPanel || joiningPanel}
+                            className="bg-transparent border-white text-white hover:bg-white/20 font-semibold"
+                          >
+                            {leavingPanel ? (
+                              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Leaving…</>
+                            ) : (
+                              <><UserX className="h-4 w-4 mr-2" />Leave panel</>
+                            )}
+                          </Button>
+                        )}
+                        {showJoinAgainPanel && (
+                          <Button
+                            onClick={handleJoinAgainPanel}
+                            variant="outline"
+                            disabled={joiningPanel || leavingPanel}
+                            className="bg-white/95 border-white text-green-700 hover:bg-white font-semibold"
+                          >
+                            {joiningPanel ? (
+                              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Joining…</>
+                            ) : (
+                              <><UserCheck className="h-4 w-4 mr-2" />Join again</>
+                            )}
+                          </Button>
+                        )}
                         <Button
                           onClick={handleStopInterview}
                           className="bg-black hover:bg-gray-800 text-white font-semibold"
@@ -590,7 +620,7 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
                         onClick={() => handleOpenMarkingPanel(interview)}
                       >
                         <FileText className="h-4 w-4 mr-2" />
-                        Open Marking Panel
+                        {onActivePanel ? 'Open Marking Panel' : 'Edit marking scheme'}
                       </Button>
                     </div>
                   </div>
@@ -766,7 +796,7 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
                 Ended interviews — review & release to HOD
               </h3>
               <p className="text-[#555555] mb-4" style={{ fontSize: '13px' }}>
-                Shortlist is ordered by average total score. Per-criterion columns show the average of each marker who remained on the panel (removed members and those who left voluntarily are excluded). After you review, send the report to HODs.
+                Open the averaged report in a new tab to review scores and send them to HODs when ready.
               </p>
               <Separator className="mb-4" />
               <div className="space-y-3">
@@ -790,86 +820,14 @@ export default function CoordinatorManageInterviewsPage({ onBack }: CoordinatorM
                         <Button
                           variant="outline"
                           size="sm"
-                          className="border-[#4db4ac] text-[#4db4ac]"
-                          onClick={() => toggleCoordReport(interview.id)}
+                          className="border-[#4db4ac] text-[#4db4ac] bg-white hover:bg-[#e6f7f6]"
+                          onClick={() => openAveragedReportInNewTab(interview.id)}
                         >
-                          <BarChart2 className="h-4 w-4 mr-1" />
-                          {coordReportInterviewId === interview.id ? 'Hide results' : 'View averaged results'}
+                          <ExternalLink className="h-4 w-4 mr-1" />
+                          View averaged results
                         </Button>
-                        {!interview.reportSentToHodAt && (
-                          <Button
-                            size="sm"
-                            className="bg-[#222222] hover:bg-neutral-800 text-white"
-                            disabled={releasingReport}
-                            onClick={() => handleSendReportToHod(interview.id)}
-                          >
-                            {releasingReport ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
-                            Send to HOD
-                          </Button>
-                        )}
                       </div>
                     </div>
-                    {coordReportInterviewId === interview.id && (
-                      <div className="border-t border-[#e0e0e0] bg-white p-4">
-                        {coordReportLoading && (
-                          <div className="flex items-center gap-2 py-6 justify-center text-[#4db4ac]">
-                            <Loader2 className="h-5 w-5 animate-spin" />
-                            <span style={{ fontSize: '14px' }}>Loading report…</span>
-                          </div>
-                        )}
-                        {coordReportError && (
-                          <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-600 text-sm">{coordReportError}</div>
-                        )}
-                        {coordReportData && (
-                          <div className="space-y-3 overflow-x-auto">
-                            <p className="text-[#4db4ac] font-semibold text-sm">
-                              Criteria — max {coordReportData.totalMaxMarks} pts total
-                            </p>
-                            <div className="border border-[#e0e0e0] rounded-lg overflow-hidden min-w-[640px]">
-                              <Table>
-                                <TableHeader>
-                                  <TableRow className="bg-[#f9f9f9]">
-                                    <TableHead className="text-[#222222] font-semibold">#</TableHead>
-                                    <TableHead className="text-[#222222] font-semibold">Candidate ID</TableHead>
-                                    <TableHead className="text-[#222222] font-semibold">Name</TableHead>
-                                    {coordReportData.criteria.map(c => (
-                                      <TableHead key={c.id} className="text-center text-[#222222] font-semibold text-xs">
-                                        {c.name} <span className="text-[#4db4ac]">/{c.maxMarks}</span>
-                                        <div className="text-[#999] font-normal">avg</div>
-                                      </TableHead>
-                                    ))}
-                                    <TableHead className="text-center text-[#222222] font-semibold bg-[#e6f7f6]">
-                                      Avg total <span className="text-[#4db4ac]">/{coordReportData.totalMaxMarks}</span>
-                                    </TableHead>
-                                    <TableHead className="text-center text-xs text-[#555555]">Markers</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {coordReportData.candidates.map((cand, ci) => (
-                                    <TableRow key={cand.candidateId}>
-                                      <TableCell className="text-[#555555]">{ci + 1}</TableCell>
-                                      <TableCell className="font-medium">{cand.displayCandidateId || '—'}</TableCell>
-                                      <TableCell className="font-semibold text-[#222222]">{cand.candidateName}</TableCell>
-                                      {coordReportData.criteria.map(c => (
-                                        <TableCell key={c.id} className="text-center font-semibold">
-                                          {cand.averageMarksByCriterion?.[c.id] ?? '—'}
-                                        </TableCell>
-                                      ))}
-                                      <TableCell className="text-center font-bold text-[#4db4ac] bg-[#f6fffd]">
-                                        {cand.averageTotal}
-                                      </TableCell>
-                                      <TableCell className="text-center text-sm text-[#555555]">
-                                        {cand.markersIncludedCount ?? cand.markerResults.length}
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>

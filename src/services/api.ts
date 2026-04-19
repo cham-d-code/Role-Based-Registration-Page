@@ -157,12 +157,23 @@ export async function fetchWithAuth(url: string, options: RequestInit = {}) {
     }
 
     if (!response.ok) {
-        const errorData = await response.json().catch(() => ({})) as { message?: string; error?: string };
-        const msg = errorData.message || errorData.error || `Request failed (${response.status})`;
+        const errText = await response.text();
+        let msg = `Request failed (${response.status})`;
+        if (errText.trim()) {
+            try {
+                const errorData = JSON.parse(errText) as { message?: string; error?: string };
+                msg = errorData.message || errorData.error || msg;
+            } catch {
+                msg = errText.length < 300 ? errText : msg;
+            }
+        }
         throw new Error(msg);
     }
 
-    return response.json();
+    // Many Spring endpoints return 200 OK with no body (e.g. submit marks) — avoid response.json() on empty body.
+    const text = await response.text();
+    if (!text.trim()) return undefined;
+    return JSON.parse(text);
 }
 
 // ─── Research Opportunities APIs ───────────────────────────────────────────────
@@ -800,7 +811,7 @@ export async function removeParticipant(interviewId: string, userId: string): Pr
     return fetchWithAuth(`${API_BASE_URL}/interviews/${interviewId}/session/remove/${userId}`, { method: 'PUT' });
 }
 
-/** Coordinator/HOD voluntarily leaves the session (their marks excluded from report average) */
+/** Step off the active marking panel (waiting); marks excluded from averages until active again */
 export async function leaveSession(interviewId: string): Promise<void> {
     return fetchWithAuth(`${API_BASE_URL}/interviews/${interviewId}/session/leave`, { method: 'PUT' });
 }
@@ -897,7 +908,8 @@ export async function getInterviewReport(interviewId: string): Promise<Interview
 
 /** Coordinator sends averaged results to HOD after reviewing (ended interview only). */
 export async function releaseInterviewReportToHod(interviewId: string): Promise<InterviewData> {
-    return fetchWithAuth(`${API_BASE_URL}/interviews/${interviewId}/report/release`, { method: 'PUT' });
+    // POST avoids some reverse proxies / static hosts that do not forward PUT to Spring (404 "No static resource").
+    return fetchWithAuth(`${API_BASE_URL}/interviews/${interviewId}/report/release`, { method: 'POST' });
 }
 
 // ─── Salary Management ────────────────────────────────────────────────────────

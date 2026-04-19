@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { LayoutDashboard, Users, ClipboardCheck, FileText, BellRing, UserIcon, ChevronDown, Settings, LogOut, Mail, Phone, Calendar, CalendarCheck, Eye, Clock, Archive, Edit, DollarSign, CheckCircle, XCircle, BarChart2, Loader2, Plus, UserCheck, Trash2 } from 'lucide-react';
-import { approveLeave, createResearchOpportunity, deleteResearchOpportunity, getHodDashboardStats, getInterviewReport, getJobDescriptionForStaff, getMyMentees, getMyLeaveRequests, getMyNotifications, getMyResearchOpportunities, getPendingLeaveRequests, getUnreadNotificationCount, markAllNotificationsRead, markNotificationRead, rejectLeave, HodDashboardStats, InterviewReport, ResearchOpportunityDto, updateMyProfile, updateMySpecialization, updateResearchOpportunity, UserProfile, type LeaveRequestDto, type UserNotificationDto } from '../services/api';
+import { approveLeave, createResearchOpportunity, deleteResearchOpportunity, getHodDashboardStats, getInterviewReport, getInterviews, getJobDescriptionForStaff, getMyMentees, getMyLeaveRequests, getMyNotifications, getMyResearchOpportunities, getPendingLeaveRequests, getUnreadNotificationCount, markAllNotificationsRead, markNotificationRead, rejectLeave, HodDashboardStats, InterviewReport, InterviewData, ResearchOpportunityDto, updateMyProfile, updateMySpecialization, updateResearchOpportunity, UserProfile, type LeaveRequestDto, type UserNotificationDto } from '../services/api';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
@@ -96,6 +96,10 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
   const [reportInterviewId, setReportInterviewId] = useState<string | null>(null);
   const [loadingReport, setLoadingReport] = useState(false);
   const [reportError, setReportError] = useState('');
+
+  /** Real interviews for the Interview Reports tab (replaced mock data). */
+  const [hodInterviews, setHodInterviews] = useState<InterviewData[]>([]);
+  const [loadingHodInterviews, setLoadingHodInterviews] = useState(false);
 
   // Research + Mentees (backend)
   const [myResearch, setMyResearch] = useState<ResearchOpportunityDto[]>([]);
@@ -287,97 +291,30 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
     }
   };
 
-  // Interview data
-  const upcomingInterviews = [
-    {
-      id: 'int-1',
-      interviewNumber: 'Interview #3',
-      date: '2025-10-25',
-      status: 'upcoming' as const,
-      candidateCount: 18,
-      candidates: []
-    }
-  ];
+  useEffect(() => {
+    if (activeMenu !== 'interviews') return;
+    let mounted = true;
+    const load = async () => {
+      setLoadingHodInterviews(true);
+      try {
+        const data = await getInterviews();
+        if (mounted) setHodInterviews(data);
+      } catch {
+        if (mounted) setHodInterviews([]);
+      } finally {
+        if (mounted) setLoadingHodInterviews(false);
+      }
+    };
+    load();
+    const interval = setInterval(load, 15000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, [activeMenu]);
 
-  const endedInterviews = [
-    {
-      id: 'int-2',
-      interviewNumber: 'Interview #2',
-      date: '2025-10-15',
-      status: 'ended' as const,
-      candidateCount: 15,
-      averageMarks: 72.5,
-      passedCandidates: 8,
-      candidates: [
-        {
-          id: 'c1',
-          name: 'A.B. Perera',
-          email: 'ab.perera@gmail.com',
-          phone: '+94 77 123 4567',
-          marks: { part1: 28, part2: 35, part3: 30, total: 93 },
-          shortlisted: true
-        },
-        {
-          id: 'c2',
-          name: 'C.D. Silva',
-          email: 'cd.silva@gmail.com',
-          phone: '+94 76 234 5678',
-          marks: { part1: 25, part2: 32, part3: 28, total: 85 },
-          shortlisted: true
-        },
-        {
-          id: 'c3',
-          name: 'E.F. Fernando',
-          email: 'ef.fernando@gmail.com',
-          phone: '+94 75 345 6789',
-          marks: { part1: 24, part2: 30, part3: 27, total: 81 },
-          shortlisted: true
-        },
-        {
-          id: 'c4',
-          name: 'G.H. Jayawardena',
-          email: 'gh.jay@gmail.com',
-          phone: '+94 74 456 7890',
-          marks: { part1: 23, part2: 29, part3: 26, total: 78 },
-          shortlisted: true
-        },
-        {
-          id: 'c5',
-          name: 'I.J. Karunaratne',
-          email: 'ij.karu@gmail.com',
-          phone: '+94 73 567 8901',
-          marks: { part1: 22, part2: 28, part3: 25, total: 75 },
-          shortlisted: true
-        },
-        {
-          id: 'c6',
-          name: 'K.L. Wijesinghe',
-          email: 'kl.wije@gmail.com',
-          phone: '+94 72 678 9012',
-          marks: { part1: 20, part2: 26, part3: 23, total: 69 },
-          shortlisted: false
-        },
-        {
-          id: 'c7',
-          name: 'M.N. Bandara',
-          email: 'mn.banda@gmail.com',
-          phone: '+94 71 789 0123',
-          marks: { part1: 19, part2: 25, part3: 22, total: 66 },
-          shortlisted: false
-        }
-      ]
-    },
-    {
-      id: 'int-3',
-      interviewNumber: 'Interview #1',
-      date: '2025-09-30',
-      status: 'ended' as const,
-      candidateCount: 20,
-      averageMarks: 68.3,
-      passedCandidates: 10,
-      candidates: []
-    }
-  ];
+  const upcomingInterviews = hodInterviews.filter(i => i.status === 'upcoming');
+  const endedInterviews = hodInterviews.filter(i => i.status === 'ended');
 
   async function handleViewReport(interviewId: string) {
     if (reportInterviewId === interviewId) {
@@ -1654,6 +1591,17 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
           {/* Interview Reports View */}
           {activeMenu === 'interviews' && (
             <div className="space-y-6">
+              {loadingHodInterviews && hodInterviews.length === 0 && (
+                <div className="flex items-center justify-center gap-2 py-12 text-[#4db4ac]">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                  <span style={{ fontSize: '14px' }}>Loading interviews…</span>
+                </div>
+              )}
+              {!loadingHodInterviews && upcomingInterviews.length === 0 && endedInterviews.length === 0 && (
+                <Card className="bg-white rounded-xl shadow border-0 p-10 text-center text-[#777777]">
+                  No interviews are listed yet. When the coordinator schedules or ends a session, they will appear here.
+                </Card>
+              )}
               {/* Upcoming Interviews Section */}
               {upcomingInterviews.map((interview) => (
                 <Card key={interview.id} className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
@@ -1724,14 +1672,20 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
               {endedInterviews.map((interview) => (
                 <Card key={interview.id} className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
                   <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <FileText className="h-6 w-6 text-[#4db4ac]" />
                       <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
                         {interview.interviewNumber} - Ended Interview
                       </h3>
-                      <Badge className="bg-yellow-100 text-yellow-700 border-yellow-300 border" style={{ fontSize: '12px' }}>
-                        PENDING APPROVAL
-                      </Badge>
+                      {interview.reportSentToHodAt ? (
+                        <Badge className="bg-green-100 text-green-800 border-green-300 border" style={{ fontSize: '12px' }}>
+                          Report shared
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-neutral-100 text-neutral-700 border-neutral-300 border" style={{ fontSize: '12px' }}>
+                          Awaiting coordinator report
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   <Separator className="mb-4" />
@@ -1739,7 +1693,7 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                   <div className="space-y-4">
                     {/* Interview Summary Card */}
                     <Card className="border border-[#e0e0e0] rounded-lg p-4 bg-[#f9f9f9]">
-                      <div className="grid grid-cols-4 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
                           <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
                             Interview Date
@@ -1762,38 +1716,40 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                         </div>
                         <div>
                           <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
-                            Average Marks
+                            Averaged report to HOD
                           </p>
-                          <p className="text-[#222222]" style={{ fontSize: '18px', fontWeight: 700 }}>
-                            {interview.averageMarks?.toFixed(1)}
+                          <p className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
+                            {interview.reportSentToHodAt
+                              ? formatPostedDate(interview.reportSentToHodAt)
+                              : '—'}
                           </p>
-                        </div>
-                        <div>
-                          <p className="text-[#555555] mb-1" style={{ fontSize: '12px', fontWeight: 600 }}>
-                            Shortlisted
-                          </p>
-                          <p className="text-[#222222]" style={{ fontSize: '18px', fontWeight: 700 }}>
-                            {interview.passedCandidates}
-                          </p>
+                          {!interview.reportSentToHodAt && (
+                            <p className="text-[#999999] mt-1" style={{ fontSize: '12px' }}>
+                              The coordinator will share results after review.
+                            </p>
+                          )}
                         </div>
                       </div>
                     </Card>
 
                     {/* Actions row */}
-                    <div className="flex gap-3">
-                      <div className="flex-1 bg-[#fff8e1] border-2 border-[#ffd54f] rounded-lg p-4">
-                        <div className="flex items-center justify-between">
+                    <div className="flex gap-3 flex-wrap">
+                      <div className="flex-1 min-w-[240px] bg-[#fff8e1] border-2 border-[#ffd54f] rounded-lg p-4">
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
                           <div>
                             <p className="text-[#222222] mb-1" style={{ fontSize: '14px', fontWeight: 600 }}>
-                              Approval Required
+                              Shortlist approval
                             </p>
                             <p className="text-[#555555]" style={{ fontSize: '13px' }}>
-                              Review results and approve shortlisted candidates
+                              Review candidates and approve the shortlist when ready.
                             </p>
                           </div>
                           <Button
-                            onClick={() => { setSelectedInterview(interview); setCurrentPage('approvalPage'); }}
-                            className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white ml-4"
+                            onClick={() => {
+                              setSelectedInterview({ ...interview, candidates: [] });
+                              setCurrentPage('approvalPage');
+                            }}
+                            className="bg-[#4db4ac] hover:bg-[#3c9a93] text-white shrink-0"
                           >
                             <CheckCircle className="h-4 w-4 mr-2" />
                             Review & Approve
@@ -1804,10 +1760,12 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                       <Button
                         variant="outline"
                         onClick={() => handleViewReport(interview.id)}
-                        className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#e6f7f6] self-stretch px-5"
+                        disabled={!interview.reportSentToHodAt}
+                        title={!interview.reportSentToHodAt ? 'Available after the coordinator sends the report for HOD review.' : undefined}
+                        className="border-[#4db4ac] text-[#4db4ac] hover:bg-[#e6f7f6] self-stretch px-5 disabled:opacity-50"
                       >
                         <BarChart2 className="h-4 w-4 mr-2" />
-                        {reportInterviewId === interview.id ? 'Hide Report' : 'View Report'}
+                        {reportInterviewId === interview.id ? 'Hide Report' : 'View averaged report'}
                       </Button>
                     </div>
 

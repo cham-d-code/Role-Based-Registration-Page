@@ -146,12 +146,13 @@ public class InterviewSessionService {
         SessionParticipant p = participantRepo.findBySessionIdAndUserId(session.getId(), targetUserId)
                 .orElseThrow(() -> new RuntimeException("Participant not found"));
         p.setStatus("active");
+        p.setLeftSession(false);
         participantRepo.save(p);
     }
 
     /**
-     * Caller voluntarily leaves the session.
-     * Their marks will still be kept but excluded from average calculations.
+     * Step off the active marking panel (waiting room). Marks are excluded from averages until
+     * the participant is active again (e.g. coordinator uses Join again / Allow).
      */
     @Transactional
     public void leaveSession(UUID interviewId, UUID callerId) {
@@ -159,11 +160,16 @@ public class InterviewSessionService {
                 .orElseThrow(() -> new RuntimeException("No active session"));
         participantRepo.findBySessionIdAndUserId(session.getId(), callerId).ifPresent(p -> {
             p.setLeftSession(true);
+            p.setStatus("waiting");
             participantRepo.save(p);
         });
     }
 
-    /** Remove an active participant (coordinator only). */
+    /**
+     * Move an active participant off the marking panel into the waiting room (coordinator only).
+     * Same outcome as {@link #leaveSession} for the target user: they appear under waiting participants
+     * and can be admitted again; marks stay excluded from averages until active again.
+     */
     @Transactional
     public void removeParticipant(UUID interviewId, UUID targetUserId, UUID callerId) {
         User caller = userRepo.findById(callerId)
@@ -175,7 +181,8 @@ public class InterviewSessionService {
                 .orElseThrow(() -> new RuntimeException("No active session"));
         SessionParticipant p = participantRepo.findBySessionIdAndUserId(session.getId(), targetUserId)
                 .orElseThrow(() -> new RuntimeException("Participant not found"));
-        p.setStatus("removed");
+        p.setStatus("waiting");
+        p.setLeftSession(true);
         participantRepo.save(p);
     }
 

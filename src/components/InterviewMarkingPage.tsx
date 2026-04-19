@@ -36,13 +36,18 @@ interface InterviewMarkingPageProps {
   onBack: () => void;
   /** If provided (mentor/HOD joining), skip scheme creation and use this scheme */
   existingScheme?: MarkingSchemeData;
+  /**
+   * When true (e.g. coordinator stepped off the active panel), hide candidate marks entry;
+   * coordinator may still update the marking scheme below.
+   */
+  marksEntryDisabled?: boolean;
 }
 
 let _tempId = 1;
 function tempId() { return `tmp-${_tempId++}`; }
 
 export default function InterviewMarkingPage({
-  interview, candidates, onBack, existingScheme,
+  interview, candidates, onBack, existingScheme, marksEntryDisabled = false,
 }: InterviewMarkingPageProps) {
 
   // ── Scheme setup (coordinator only when no existingScheme) ─────────────────
@@ -103,6 +108,28 @@ export default function InterviewMarkingPage({
       setSchemeFinalized(true);
       setMarks({});
       setSelectedCandidateId('');
+    } catch (e: any) {
+      setSchemeError(e.message || 'Failed to save scheme.');
+    } finally {
+      setSavingScheme(false);
+    }
+  }
+
+  /** Save scheme changes while on marking view (coordinator, panel not active for marks). */
+  async function saveSchemeFromMarkingView() {
+    if (criteria.length === 0) { setSchemeError('Add at least one criterion.'); return; }
+    for (const c of criteria) {
+      if (!c.name.trim()) { setSchemeError('Every criterion must have a name.'); return; }
+      if (c.maxMarks <= 0) { setSchemeError(`"${c.name}" must have max marks > 0.`); return; }
+    }
+    setSavingScheme(true);
+    setSchemeError('');
+    try {
+      const saved = await saveMarkingScheme(
+        interview.id,
+        criteria.map(c => ({ name: c.name, maxMarks: c.maxMarks }))
+      );
+      setCriteria(saved.criteria.map(c => ({ id: c.id, name: c.name, maxMarks: c.maxMarks })));
     } catch (e: any) {
       setSchemeError(e.message || 'Failed to save scheme.');
     } finally {
@@ -272,11 +299,11 @@ export default function InterviewMarkingPage({
           </Button>
           <Separator orientation="vertical" className="h-8 bg-white/30" />
           <h1 className="text-white" style={{ fontWeight: 600, fontSize: '18px' }}>
-            {interview.interviewNumber} — Marking Assignment
+            {interview.interviewNumber} — {marksEntryDisabled ? 'Marking scheme' : 'Marking Assignment'}
           </h1>
         </div>
         <div className="flex items-center gap-3">
-          {!isReadonlyScheme && (
+          {!isReadonlyScheme && !marksEntryDisabled && (
             <Button
               size="sm" variant="ghost"
               className="text-white hover:bg-[#3c9a93] border border-white/40"
@@ -293,29 +320,107 @@ export default function InterviewMarkingPage({
 
       <div className="pt-24 pb-8 px-6 max-w-5xl mx-auto space-y-6">
 
-        {/* Scheme summary */}
-        <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <ClipboardList className="h-5 w-5 text-[#4db4ac]" />
-              <h2 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '17px' }}>Marking Scheme</h2>
-              {existingScheme && (
-                <span className="text-[#555555] text-xs">Created by {existingScheme.createdByName}</span>
-              )}
-            </div>
-            <Badge className="bg-[#4db4ac] text-white border-0">Total: {maxTotal} pts</Badge>
-          </div>
-          <Separator className="mb-3" />
-          <div className="flex flex-wrap gap-2">
-            {criteria.map((c, idx) => (
-              <div key={c.id} className="flex items-center gap-1 bg-[#f0faf9] border border-[#4db4ac] rounded-lg px-3 py-1">
-                <span className="text-[#4db4ac] font-semibold text-xs">{idx + 1}.</span>
-                <span className="text-[#222222] font-semibold text-sm">{c.name}</span>
-                <span className="text-[#555555] text-xs">({c.maxMarks} pts)</span>
+        {marksEntryDisabled && (
+          <Card className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+            <p className="text-amber-950" style={{ fontSize: '14px', fontWeight: 600 }}>
+              You are not on the active marking panel
+            </p>
+            <p className="text-amber-900 mt-1" style={{ fontSize: '13px' }}>
+              Join the live panel again from Manage Interviews to enter candidate marks. You can still update the marking scheme below.
+            </p>
+          </Card>
+        )}
+
+        {/* Scheme summary (read-only when entering marks) */}
+        {!marksEntryDisabled && (
+          <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="h-5 w-5 text-[#4db4ac]" />
+                <h2 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '17px' }}>Marking Scheme</h2>
+                {existingScheme && (
+                  <span className="text-[#555555] text-xs">Created by {existingScheme.createdByName}</span>
+                )}
               </div>
-            ))}
-          </div>
-        </Card>
+              <Badge className="bg-[#4db4ac] text-white border-0">Total: {maxTotal} pts</Badge>
+            </div>
+            <Separator className="mb-3" />
+            <div className="flex flex-wrap gap-2">
+              {criteria.map((c, idx) => (
+                <div key={c.id} className="flex items-center gap-1 bg-[#f0faf9] border border-[#4db4ac] rounded-lg px-3 py-1">
+                  <span className="text-[#4db4ac] font-semibold text-xs">{idx + 1}.</span>
+                  <span className="text-[#222222] font-semibold text-sm">{c.name}</span>
+                  <span className="text-[#555555] text-xs">({c.maxMarks} pts)</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
+        {/* Editable scheme (coordinator off active panel) */}
+        {marksEntryDisabled && (
+          <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-5">
+            <div className="flex items-center gap-2 mb-2">
+              <Edit className="h-5 w-5 text-[#4db4ac]" />
+              <h2 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '17px' }}>Edit marking scheme</h2>
+            </div>
+            <p className="text-[#555555] mb-4" style={{ fontSize: '13px' }}>
+              Changes apply to all panel markers. Total: <strong>{maxTotal}</strong> pts
+            </p>
+            <Separator className="mb-4" />
+            <div className="space-y-3 mb-5">
+              {criteria.map((criterion, idx) => (
+                <div key={criterion.id} className="flex items-center gap-3 bg-[#f9f9f9] border border-[#e0e0e0] rounded-lg px-4 py-3">
+                  <span className="h-6 w-6 rounded-full bg-[#4db4ac] text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                    {idx + 1}
+                  </span>
+                  <Label className="text-[#555555] flex-shrink-0" style={{ fontSize: '13px', fontWeight: 600 }}>Criteria</Label>
+                  <Input
+                    placeholder="Criterion name"
+                    value={criterion.name}
+                    onChange={e => updateCriterion(criterion.id, 'name', e.target.value)}
+                    className="flex-1 bg-white border-[#d0d0d0] rounded-lg focus:border-[#4db4ac]"
+                    style={{ minWidth: 0 }}
+                  />
+                  <Label className="text-[#555555] flex-shrink-0" style={{ fontSize: '13px', fontWeight: 600 }}>Max</Label>
+                  <div className="relative flex-shrink-0 w-24">
+                    <Input
+                      type="number" min="1"
+                      value={criterion.maxMarks || ''}
+                      onChange={e => updateCriterion(criterion.id, 'maxMarks', e.target.value)}
+                      className="bg-white border-[#d0d0d0] rounded-lg focus:border-[#4db4ac] text-center"
+                    />
+                  </div>
+                  <Button
+                    size="icon" variant="ghost"
+                    onClick={() => removeCriterion(criterion.id)}
+                    disabled={criteria.length === 1}
+                    className="text-red-400 hover:text-red-600 hover:bg-red-50 h-9 w-9 flex-shrink-0"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <Button
+              variant="outline" onClick={addCriterion}
+              className="w-full border-2 border-dashed border-[#2d8a82] text-[#1a5c57] bg-[#f0faf9] hover:bg-[#e6f7f6] mb-4 font-semibold"
+            >
+              <Plus className="h-4 w-4 mr-2" />Add criterion
+            </Button>
+            {schemeError && <p className="text-red-500 text-sm mb-3">{schemeError}</p>}
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                onClick={saveSchemeFromMarkingView}
+                disabled={savingScheme}
+                className="min-h-11 px-8 font-semibold bg-[#4db4ac] hover:bg-[#3c9a93] text-white"
+              >
+                {savingScheme ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving…</> : <><Save className="h-4 w-4 mr-2" />Save marking scheme</>}
+              </Button>
+            </div>
+          </Card>
+        )}
 
         {/* Interview info */}
         <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-5">
@@ -338,6 +443,8 @@ export default function InterviewMarkingPage({
           </div>
         </Card>
 
+        {!marksEntryDisabled && (
+        <>
         {/* Candidate selection */}
         <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-5">
           <div className="flex items-center gap-2 mb-3">
@@ -506,6 +613,8 @@ export default function InterviewMarkingPage({
               ))}
             </div>
           </Card>
+        )}
+        </>
         )}
       </div>
     </div>
