@@ -59,11 +59,16 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<AuthResponse> handleDataIntegrity(DataIntegrityViolationException ex) {
-        System.err.println("Data integrity: " + ex.getMostSpecificCause().getMessage());
+        Throwable cause = ex.getMostSpecificCause();
+        String detail = cause != null && cause.getMessage() != null ? cause.getMessage() : "";
+        System.err.println("Data integrity: " + detail);
+        String msg = detail.toLowerCase().contains("candidate_mark")
+                ? "Could not save marks due to a data conflict. Try again, or refresh the page if the marking scheme was recently updated."
+                : "Could not save due to a data conflict. If you were editing the marking scheme, try again or end the session and recreate the scheme.";
         return ResponseEntity.status(HttpStatus.CONFLICT).body(
                 AuthResponse.builder()
                         .success(false)
-                        .message("Could not save the marking scheme due to a data conflict. Try again, or end the session and recreate the scheme.")
+                        .message(msg)
                         .build());
     }
 

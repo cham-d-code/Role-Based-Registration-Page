@@ -123,7 +123,10 @@ public class MarkingService {
 
         // Replace existing marks from this marker for this candidate
         markRepo.deleteBySessionIdAndCandidateIdAndMarkerId(session.getId(), candidateId, markerId);
+        // Ensure deletes hit the DB before inserts (otherwise UNIQUE(session_id, candidate_id, marker_id, criterion_id) can fail).
+        markRepo.flush();
 
+        LinkedHashMap<UUID, SubmitMarksRequest.MarkEntry> latestByCriterion = new LinkedHashMap<>();
         for (SubmitMarksRequest.MarkEntry entry : req.getMarks()) {
             UUID criterionId;
             try {
@@ -131,8 +134,17 @@ public class MarkingService {
             } catch (IllegalArgumentException ex) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid criterion id.");
             }
+            latestByCriterion.put(criterionId, entry);
+        }
+
+        for (Map.Entry<UUID, SubmitMarksRequest.MarkEntry> e : latestByCriterion.entrySet()) {
+            UUID criterionId = e.getKey();
+            SubmitMarksRequest.MarkEntry entry = e.getValue();
             MarkingCriterion criterion = criterionMap.get(criterionId);
-            if (criterion == null) continue;
+            if (criterion == null) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Unknown criterion. The marking scheme may have been updated — refresh the interview page.");
+            }
 
             markRepo.save(CandidateMark.builder()
                     .session(session)
