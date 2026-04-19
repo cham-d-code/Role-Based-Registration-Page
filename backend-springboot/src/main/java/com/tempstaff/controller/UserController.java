@@ -61,7 +61,8 @@ public class UserController {
         // Best-effort enrichment for senior academic staff if specialization is missing.
         if ((user.getSpecialization() == null || user.getSpecialization().isBlank())
                 && user.getEmail() != null
-                && user.getEmail().toLowerCase().endsWith("@kln.ac.lk")
+                && (user.getEmail().toLowerCase().endsWith("@kln.ac.lk")
+                    || user.getEmail().toLowerCase().endsWith("@stu.kln.ac.lk"))
                 && user.getRole() != null
                 && user.getRole() != UserRole.staff) {
             String specialization = imStaffDirectoryService.lookupSpecializationByFullName(user.getFullName());

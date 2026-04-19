@@ -81,8 +81,9 @@ export default function SignUp({ onSwitchToSignIn }: SignUpProps) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) return 'Please enter a valid email address';
     const normalized = email.trim().toLowerCase();
-    if (!normalized.endsWith('@kln.ac.lk')) {
-      return 'Registration is only available for University of Kelaniya addresses ending in @kln.ac.lk';
+    const allowedDomain = normalized.endsWith('@kln.ac.lk') || normalized.endsWith('@stu.kln.ac.lk');
+    if (!allowedDomain) {
+      return 'Registration is only available for University of Kelaniya addresses (@kln.ac.lk or @stu.kln.ac.lk)';
     }
     return undefined;
   };
@@ -385,7 +386,7 @@ export default function SignUp({ onSwitchToSignIn }: SignUpProps) {
           {/* Academic Email */}
           <div className="space-y-2">
             <Label htmlFor="email" className="text-[#555555]">Academic Email</Label>
-            <p className="text-xs text-[#777777] -mt-1">Must be a University of Kelaniya address ending in @kln.ac.lk</p>
+            <p className="text-xs text-[#777777] -mt-1">Must be a University of Kelaniya address (@kln.ac.lk or @stu.kln.ac.lk)</p>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-[#999999]" />
               <Input

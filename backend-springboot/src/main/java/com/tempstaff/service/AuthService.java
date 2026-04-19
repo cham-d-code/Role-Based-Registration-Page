@@ -48,10 +48,11 @@ public class AuthService {
                     .message("Email is required")
                     .build();
         }
-        if (!email.endsWith("@kln.ac.lk")) {
+        boolean allowedDomain = email.endsWith("@kln.ac.lk") || email.endsWith("@stu.kln.ac.lk");
+        if (!allowedDomain) {
             return AuthResponse.builder()
                     .success(false)
-                    .message("Registration is only available for University of Kelaniya staff (@kln.ac.lk emails).")
+                    .message("Registration is only available for University of Kelaniya addresses (@kln.ac.lk or @stu.kln.ac.lk).")
                     .build();
         }
         if (userRepository.existsByEmail(email)) {
