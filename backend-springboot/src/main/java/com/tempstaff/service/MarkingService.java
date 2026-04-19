@@ -49,9 +49,9 @@ public class MarkingService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Interview not found"));
         User creator = userRepo.findById(creatorId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
-        if (creator.getRole() != UserRole.coordinator) {
+        if (creator.getRole() != UserRole.coordinator && creator.getRole() != UserRole.hod) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                    "Only the Temporary Staff Coordinator can create or update the marking scheme.");
+                    "Only the Temporary Staff Coordinator or Head of Department can create or update the marking scheme.");
         }
 
         // Replace scheme: delete marks that point at old criteria first (avoids FK / orphan issues), then remove scheme.

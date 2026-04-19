@@ -32,7 +32,7 @@ public class MarkingController {
     private final UserRepository userRepository;
     private final InterviewRepository interviewRepository;
 
-    /** Coordinator creates/replaces the marking scheme for an interview */
+    /** Coordinator or HOD creates/replaces the marking scheme for an interview */
     @PostMapping("/{interviewId}/marking-scheme")
     public ResponseEntity<MarkingSchemeResponse> saveScheme(
             @PathVariable UUID interviewId,
