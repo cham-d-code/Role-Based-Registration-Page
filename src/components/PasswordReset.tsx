@@ -24,6 +24,16 @@ export default function PasswordReset({ onBackToSignIn }: PasswordResetProps) {
     confirmPassword: '',
   });
 
+  const validateStrongPassword = (password: string): string | undefined => {
+    if (!password) return 'Please enter a new password.';
+    if (password.length < 8) return 'Password must be at least 8 characters';
+    if (!/[A-Z]/.test(password)) return 'Password must include an uppercase letter';
+    if (!/[a-z]/.test(password)) return 'Password must include a lowercase letter';
+    if (!/[0-9]/.test(password)) return 'Password must include a number';
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) return 'Password must include a special character';
+    return undefined;
+  };
+
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -40,7 +50,7 @@ export default function PasswordReset({ onBackToSignIn }: PasswordResetProps) {
       const result = await forgotPassword(formData.email, formData.role);
 
       if (result.success) {
-        setFormData(prev => ({ ...prev, otp: result.resetToken || prev.otp }));
+        setFormData(prev => ({ ...prev, otp: '' }));
         setStep('verify');
       } else {
         setError(result.message || 'Failed to send OTP. Please try again.');
@@ -61,12 +71,9 @@ export default function PasswordReset({ onBackToSignIn }: PasswordResetProps) {
       setError('Please enter the OTP sent to your email.');
       return;
     }
-    if (!formData.newPassword) {
-      setError('Please enter a new password.');
-      return;
-    }
-    if (formData.newPassword.length < 6) {
-      setError('Password must be at least 6 characters.');
+    const pwdError = validateStrongPassword(formData.newPassword);
+    if (pwdError) {
+      setError(pwdError);
       return;
     }
     if (formData.newPassword !== formData.confirmPassword) {
@@ -302,7 +309,7 @@ export default function PasswordReset({ onBackToSignIn }: PasswordResetProps) {
                       try {
                         const result = await forgotPassword(formData.email, formData.role);
                         if (result.success) {
-                          setFormData(prev => ({ ...prev, otp: result.resetToken || '' }));
+                          setFormData(prev => ({ ...prev, otp: '' }));
                         } else {
                           setError(result.message || 'Failed to resend OTP.');
                         }
