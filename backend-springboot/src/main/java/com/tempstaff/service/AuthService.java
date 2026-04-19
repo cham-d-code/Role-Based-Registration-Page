@@ -8,13 +8,13 @@ import com.tempstaff.repository.*;
 import com.tempstaff.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
-import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -31,6 +31,7 @@ public class AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final ImStaffDirectoryService imStaffDirectoryService;
     private final NotificationService notificationService;
+    private final EmailService emailService;
 
     @Value("${spring.profiles.active:development}")
     private String activeProfile;
@@ -259,7 +260,8 @@ public class AuthService {
         String genericMessage = "If email exists, reset instructions will be sent.";
 
         // Find user
-        Optional<User> userOpt = userRepository.findByEmail(request.getEmail());
+        String email = request.getEmail() == null ? "" : request.getEmail().trim().toLowerCase(Locale.ROOT);
+        Optional<User> userOpt = userRepository.findByEmail(email);
 
         if (userOpt.isEmpty()) {
             return AuthResponse.builder()
@@ -288,20 +290,32 @@ public class AuthService {
             }
         }
 
-        // Generate reset token
-        String resetToken = generateResetToken();
-        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(30);
+        // Generate OTP (stored in token column)
+        final int expiresMinutes = 10;
+        String resetToken = generateNumericOtp();
+        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(expiresMinutes);
 
-        PasswordResetToken tokenEntity = PasswordResetToken.builder()
-                .userId(user.getId())
-                .token(resetToken)
-                .expiresAt(expiresAt)
-                .build();
+        // Token column is unique, so retry on rare collisions.
+        for (int attempt = 0; attempt < 5; attempt++) {
+            try {
+                PasswordResetToken tokenEntity = PasswordResetToken.builder()
+                        .userId(user.getId())
+                        .token(resetToken)
+                        .expiresAt(expiresAt)
+                        .build();
+                passwordResetTokenRepository.save(tokenEntity);
+                break;
+            } catch (DataIntegrityViolationException ex) {
+                resetToken = generateNumericOtp();
+            }
+        }
 
-        passwordResetTokenRepository.save(tokenEntity);
-
-        // In development, include the token in response
-        System.out.println("Password reset token for " + request.getEmail() + ": " + resetToken);
+        // Send email (best-effort). If SMTP isn't configured, don't leak user existence.
+        try {
+            emailService.sendPasswordResetOtp(email, resetToken, expiresMinutes);
+        } catch (Exception e) {
+            System.out.println("Could not send password reset email to " + email + " (check SMTP config). OTP: " + resetToken);
+        }
 
         AuthResponse.AuthResponseBuilder responseBuilder = AuthResponse.builder()
                 .success(true)
@@ -346,10 +360,9 @@ public class AuthService {
                 .build();
     }
 
-    private String generateResetToken() {
+    private String generateNumericOtp() {
         SecureRandom random = new SecureRandom();
-        byte[] bytes = new byte[32];
-        random.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        int otp = random.nextInt(1_000_000);
+        return String.format("%06d", otp);
     }
 }

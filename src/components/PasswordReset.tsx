@@ -6,22 +6,25 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import Logo from './Logo';
-import { forgotPassword } from '../services/api';
+import { forgotPassword, resetPassword } from '../services/api';
 
 interface PasswordResetProps {
   onBackToSignIn: () => void;
 }
 
 export default function PasswordReset({ onBackToSignIn }: PasswordResetProps) {
-  const [step, setStep] = useState<'request' | 'success'>('request');
+  const [step, setStep] = useState<'request' | 'verify' | 'success'>('request');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     email: '',
-    role: ''
+    role: '',
+    otp: '',
+    newPassword: '',
+    confirmPassword: '',
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -37,13 +40,51 @@ export default function PasswordReset({ onBackToSignIn }: PasswordResetProps) {
       const result = await forgotPassword(formData.email, formData.role);
 
       if (result.success) {
-        setStep('success');
+        setFormData(prev => ({ ...prev, otp: result.resetToken || prev.otp }));
+        setStep('verify');
       } else {
-        setError(result.message || 'Failed to send reset link. Please try again.');
+        setError(result.message || 'Failed to send OTP. Please try again.');
       }
     } catch (err) {
       setError('Unable to connect to server. Please try again.');
       console.error('Forgot password error:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (!formData.otp.trim()) {
+      setError('Please enter the OTP sent to your email.');
+      return;
+    }
+    if (!formData.newPassword) {
+      setError('Please enter a new password.');
+      return;
+    }
+    if (formData.newPassword.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
+    if (formData.newPassword !== formData.confirmPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const result = await resetPassword(formData.otp.trim(), formData.newPassword);
+      if (result.success) {
+        setStep('success');
+      } else {
+        setError(result.message || 'Failed to reset password. Please try again.');
+      }
+    } catch (err) {
+      setError('Unable to connect to server. Please try again.');
+      console.error('Reset password error:', err);
     } finally {
       setIsLoading(false);
     }
@@ -92,7 +133,7 @@ export default function PasswordReset({ onBackToSignIn }: PasswordResetProps) {
               </div>
 
               {/* Form */}
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleRequestOtp} className="space-y-4">
                 {/* Error Message */}
                 {error && (
                   <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
@@ -141,8 +182,16 @@ export default function PasswordReset({ onBackToSignIn }: PasswordResetProps) {
                   type="submit"
                   className="w-full h-12 bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg transition-colors"
                   style={{ fontSize: '15px', fontWeight: 600 }}
+                  disabled={isLoading}
                 >
-                  Send Reset Link
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending OTP...
+                    </>
+                  ) : (
+                    'Send OTP'
+                  )}
                 </Button>
 
                 {/* Back to Sign In */}
@@ -150,6 +199,130 @@ export default function PasswordReset({ onBackToSignIn }: PasswordResetProps) {
                   type="button"
                   onClick={onBackToSignIn}
                   className="w-full flex items-center justify-center gap-2 text-[#4db4ac] hover:text-[#3c9a93] transition-colors mt-4"
+                  style={{ fontSize: '14px', fontWeight: 500 }}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                  Back to Sign In
+                </button>
+              </form>
+            </>
+          ) : step === 'verify' ? (
+            <>
+              <div className="text-center mb-6">
+                <h1 className="text-[#222222] mb-2" style={{ fontWeight: 700, fontSize: '28px' }}>
+                  Enter OTP
+                </h1>
+                <p className="text-[#555555]" style={{ fontSize: '14px' }}>
+                  We sent a 6-digit OTP to <span className="text-[#4db4ac]" style={{ fontWeight: 600 }}>{formData.email}</span>
+                </p>
+              </div>
+
+              <form onSubmit={handleResetPassword} className="space-y-4">
+                {error && (
+                  <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+                    {error}
+                  </div>
+                )}
+
+                <div>
+                  <Label htmlFor="otp" className="text-[#555555] mb-2 block" style={{ fontSize: '14px', fontWeight: 500 }}>
+                    OTP
+                  </Label>
+                  <Input
+                    id="otp"
+                    inputMode="numeric"
+                    placeholder="Enter 6-digit OTP"
+                    value={formData.otp}
+                    onChange={(e) => handleChange('otp', e.target.value)}
+                    className="h-12 border-[#d0d0d0] rounded-lg focus:border-[#4db4ac] focus:ring-[#4db4ac] hover:border-[#4db4ac] transition-colors"
+                    style={{ fontSize: '14px', letterSpacing: '0.15em' }}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="newPassword" className="text-[#555555] mb-2 block" style={{ fontSize: '14px', fontWeight: 500 }}>
+                    New Password
+                  </Label>
+                  <Input
+                    id="newPassword"
+                    type="password"
+                    placeholder="Enter new password"
+                    value={formData.newPassword}
+                    onChange={(e) => handleChange('newPassword', e.target.value)}
+                    className="h-12 border-[#d0d0d0] rounded-lg focus:border-[#4db4ac] focus:ring-[#4db4ac] hover:border-[#4db4ac] transition-colors"
+                    style={{ fontSize: '14px' }}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="confirmPassword" className="text-[#555555] mb-2 block" style={{ fontSize: '14px', fontWeight: 500 }}>
+                    Confirm Password
+                  </Label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    placeholder="Confirm new password"
+                    value={formData.confirmPassword}
+                    onChange={(e) => handleChange('confirmPassword', e.target.value)}
+                    className="h-12 border-[#d0d0d0] rounded-lg focus:border-[#4db4ac] focus:ring-[#4db4ac] hover:border-[#4db4ac] transition-colors"
+                    style={{ fontSize: '14px' }}
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full h-12 bg-[#4db4ac] hover:bg-[#3c9a93] text-white rounded-lg transition-colors"
+                  style={{ fontSize: '15px', fontWeight: 600 }}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Resetting...
+                    </>
+                  ) : (
+                    'Reset Password'
+                  )}
+                </Button>
+
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setStep('request')}
+                    className="text-[#555555] hover:underline"
+                    style={{ fontSize: '13px', fontWeight: 500 }}
+                  >
+                    Change email/role
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setError('');
+                      setIsLoading(true);
+                      try {
+                        const result = await forgotPassword(formData.email, formData.role);
+                        if (result.success) {
+                          setFormData(prev => ({ ...prev, otp: result.resetToken || '' }));
+                        } else {
+                          setError(result.message || 'Failed to resend OTP.');
+                        }
+                      } catch {
+                        setError('Unable to connect to server. Please try again.');
+                      } finally {
+                        setIsLoading(false);
+                      }
+                    }}
+                    className="text-[#4db4ac] hover:underline"
+                    style={{ fontSize: '13px', fontWeight: 600 }}
+                  >
+                    Resend OTP
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={onBackToSignIn}
+                  className="w-full flex items-center justify-center gap-2 text-[#4db4ac] hover:text-[#3c9a93] transition-colors mt-2"
                   style={{ fontSize: '14px', fontWeight: 500 }}
                 >
                   <ArrowLeft className="h-4 w-4" />
@@ -168,16 +341,15 @@ export default function PasswordReset({ onBackToSignIn }: PasswordResetProps) {
                 </div>
 
                 <h2 className="text-[#222222] mb-3" style={{ fontWeight: 700, fontSize: '24px' }}>
-                  Check Your Email
+                  Password updated
                 </h2>
                 <p className="text-[#555555] mb-6" style={{ fontSize: '14px', lineHeight: '1.6' }}>
-                  We've sent password reset instructions to<br />
-                  <span className="text-[#4db4ac]" style={{ fontWeight: 600 }}>{formData.email}</span>
+                  Your password has been reset successfully. You can now sign in with your new password.
                 </p>
 
                 <div className="bg-[#f9f9f9] border border-[#e0e0e0] rounded-lg p-4 mb-6 text-left">
                   <p className="text-[#555555]" style={{ fontSize: '13px', lineHeight: '1.6' }}>
-                    <strong className="text-[#222222]">Security Note:</strong> The reset link will expire in 30 minutes. If you don't receive the email, check your spam folder or contact the system administrator.
+                    <strong className="text-[#222222]">Security Note:</strong> If you didn’t request this reset, contact the system administrator immediately.
                   </p>
                 </div>
 
