@@ -8,7 +8,7 @@ import TempStaffProfile from './components/TempStaffProfile';
 import MentorProfile from './components/MentorProfile';
 import ErrorBoundary from './components/ErrorBoundary';
 import CoordinatorInterviewReportPage from './components/CoordinatorInterviewReportPage';
-import { getAuthToken, getCurrentUser, getDashboardRole } from './services/api';
+import { getAuthToken, getCurrentUser, getDashboardRole, logout } from './services/api';
 
 type UserRole = 'hod' | 'coordinator' | 'mentor' | 'staff';
 
@@ -19,17 +19,28 @@ function parseUserRole(value: string | null | undefined): UserRole | null {
   return null;
 }
 
-function initialDashboardRole(): UserRole {
+/** Role for dashboard: sign-in role picker first, else stored user role. */
+function resolveSessionRole(): UserRole | null {
   const fromSession = parseUserRole(getDashboardRole());
   if (fromSession) return fromSession;
   const u = getCurrentUser();
-  const fromUser = parseUserRole(u?.role);
-  if (fromUser) return fromUser;
-  return 'hod';
+  return parseUserRole(u?.role);
 }
 
-function initialPage(): 'signin' | 'signup' | 'passwordreset' | 'dashboard' {
-  return getAuthToken() ? 'dashboard' : 'signin';
+function readInitialApp(): {
+  page: 'signin' | 'signup' | 'passwordreset' | 'dashboard';
+  role: UserRole | null;
+} {
+  if (!getAuthToken()) {
+    return { page: 'signin', role: null };
+  }
+  const role = resolveSessionRole();
+  if (role) {
+    return { page: 'dashboard', role };
+  }
+  // Token without usable role/user payload — treat as logged out
+  logout();
+  return { page: 'signin', role: null };
 }
 
 const COORD_REPORT_HASH_PREFIX = '#coord-interview-report=';
@@ -69,10 +80,13 @@ export default function App() {
     }, 0);
   };
 
-  const [currentPage, setCurrentPage] = useState<'signin' | 'signup' | 'passwordreset' | 'dashboard'>(initialPage);
-  const [userRole, setUserRole] = useState<UserRole>(initialDashboardRole);
+  const initialApp = readInitialApp();
+  const [currentPage, setCurrentPage] = useState<'signin' | 'signup' | 'passwordreset' | 'dashboard'>(initialApp.page);
+  const [userRole, setUserRole] = useState<UserRole | null>(initialApp.role);
 
   const handleLogout = () => {
+    logout();
+    setUserRole(null);
     setCurrentPage('signin');
   };
 
@@ -82,7 +96,10 @@ export default function App() {
   };
 
   const renderDashboard = () => {
-    switch(userRole) {
+    if (!userRole) {
+      return null;
+    }
+    switch (userRole) {
       case 'hod':
         return <HodProfile onLogout={handleLogout} />;
       case 'coordinator':
@@ -92,7 +109,7 @@ export default function App() {
       case 'staff':
         return <TempStaffProfile onLogout={handleLogout} />;
       default:
-        return <CoordinatorProfile onLogout={handleLogout} />;
+        return null;
     }
   };
 
@@ -123,10 +140,16 @@ export default function App() {
         <PasswordReset 
           onBackToSignIn={() => setCurrentPage('signin')}
         />
-      ) : (
+      ) : userRole ? (
         <ErrorBoundary>
           {renderDashboard()}
         </ErrorBoundary>
+      ) : (
+        <SignIn 
+          onSwitchToSignUp={() => setCurrentPage('signup')}
+          onSignIn={handleSignIn}
+          onForgotPassword={() => setCurrentPage('passwordreset')}
+        />
       )}
     </div>
   );
