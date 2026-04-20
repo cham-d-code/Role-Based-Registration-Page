@@ -205,6 +205,8 @@ public final class InterviewReportExcelExporter {
         header.getCell(1).setCellStyle(headerStyle);
         header.createCell(col++).setCellValue("Role");
         header.getCell(2).setCellStyle(headerStyle);
+        header.createCell(col++).setCellValue("In panel average");
+        header.getCell(3).setCellStyle(headerStyle);
         for (MarkingSchemeResponse.CriterionResponse cr : criteria) {
             Cell c = header.createCell(col++);
             c.setCellValue(safe(cr.getName()));
@@ -229,6 +231,7 @@ public final class InterviewReportExcelExporter {
                 row.createCell(col++).setCellValue(cname);
                 row.createCell(col++).setCellValue(safe(mr.getMarkerName()));
                 row.createCell(col++).setCellValue(safe(mr.getMarkerRole()));
+                row.createCell(col++).setCellValue(mr.isIncludedInAverage() ? "Yes" : "No");
                 Map<String, Integer> marks = mr.getMarksByCriterion() == null ? Map.of() : mr.getMarksByCriterion();
                 for (MarkingSchemeResponse.CriterionResponse cr : criteria) {
                     Integer v = marks.get(cr.getId());

@@ -1851,10 +1851,13 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                                       </thead>
                                       <tbody>
                                         {cand.markerResults.map(mr => (
-                                          <tr key={mr.markerId} className="hover:bg-[#f9f9f9]">
+                                          <tr key={mr.markerId} className={`hover:bg-[#f9f9f9] ${mr.includedInAverage === false ? 'bg-amber-50' : ''}`}>
                                             <td className="p-2 border border-[#e0e0e0]">
                                               <p className="font-semibold text-[#222222]" style={{ fontSize: '13px' }}>{mr.markerName}</p>
                                               <p className="text-[#999]" style={{ fontSize: '11px' }}>{mr.markerRole}</p>
+                                              {mr.includedInAverage === false && (
+                                                <p className="text-amber-900 font-semibold mt-1" style={{ fontSize: '10px' }}>Not counted in average</p>
+                                              )}
                                             </td>
                                             {reportData.criteria.map(c => (
                                               <td key={c.id} className="p-2 text-center border border-[#e0e0e0] text-[#222222] font-semibold">
@@ -1871,17 +1874,13 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
                                           <td className="p-2 border border-[#3c9a93] font-bold" style={{ fontSize: '13px' }}>
                                             Average
                                           </td>
-                                          {reportData.criteria.map(c => {
-                                            const vals = cand.markerResults
-                                              .map(mr => mr.marksByCriterion[c.id])
-                                              .filter((v): v is number => v !== undefined);
-                                            const avg = vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
-                                            return (
-                                              <td key={c.id} className="p-2 text-center border border-[#3c9a93] font-semibold">
-                                                {avg.toFixed(1)}
-                                              </td>
-                                            );
-                                          })}
+                                          {reportData.criteria.map(c => (
+                                            <td key={c.id} className="p-2 text-center border border-[#3c9a93] font-semibold">
+                                              {cand.averageMarksByCriterion?.[c.id] != null
+                                                ? Number(cand.averageMarksByCriterion[c.id]).toFixed(1)
+                                                : '0.0'}
+                                            </td>
+                                          ))}
                                           <td className="p-2 text-center border border-[#3c9a93] font-bold text-lg">
                                             {cand.averageTotal}
                                           </td>

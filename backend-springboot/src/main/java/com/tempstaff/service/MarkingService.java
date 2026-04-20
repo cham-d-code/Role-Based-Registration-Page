@@ -210,13 +210,14 @@ public class MarkingService {
         for (Candidate cand : candidates) {
             List<CandidateMark> candMarks = byCand.getOrDefault(cand.getId(), Collections.emptyList());
 
+            // Show every marker who submitted marks in the breakdown, even if they later left or were removed.
             Map<UUID, List<CandidateMark>> byMarker = candMarks.stream()
-                    .filter(m -> !excludedMarkers.contains(m.getMarker().getId()))
                     .collect(Collectors.groupingBy(m -> m.getMarker().getId()));
 
             List<InterviewReportResponse.MarkerResult> markerResults = new ArrayList<>();
             for (Map.Entry<UUID, List<CandidateMark>> entry : byMarker.entrySet()) {
                 User marker = entry.getValue().get(0).getMarker();
+                boolean includedInAverage = !excludedMarkers.contains(marker.getId());
                 Map<String, Integer> marksByCriterion = entry.getValue().stream()
                         .collect(Collectors.toMap(
                                 m -> m.getCriterion().getId().toString(),
@@ -236,17 +237,27 @@ public class MarkingService {
                         .marksByCriterion(marksByCriterion)
                         .total(total)
                         .comments(comments)
+                        .includedInAverage(includedInAverage)
                         .build());
             }
 
-            int markerCount = markerResults.size();
-            double avgTotal = markerResults.stream()
+            markerResults.sort(Comparator
+                    .comparing((InterviewReportResponse.MarkerResult mr) -> !mr.isIncludedInAverage())
+                    .thenComparing(mr -> mr.getMarkerName() == null ? "" : mr.getMarkerName(),
+                            String.CASE_INSENSITIVE_ORDER));
+
+            List<InterviewReportResponse.MarkerResult> averagedRows = markerResults.stream()
+                    .filter(InterviewReportResponse.MarkerResult::isIncludedInAverage)
+                    .collect(Collectors.toList());
+
+            int markerCount = averagedRows.size();
+            double avgTotal = averagedRows.stream()
                     .mapToInt(InterviewReportResponse.MarkerResult::getTotal)
                     .average().orElse(0.0);
 
             Map<String, Double> avgByCriterion = new LinkedHashMap<>();
             for (MarkingSchemeResponse.CriterionResponse crit : criteriaList) {
-                List<Integer> vals = markerResults.stream()
+                List<Integer> vals = averagedRows.stream()
                         .map(mr -> mr.getMarksByCriterion().get(crit.getId()))
                         .filter(Objects::nonNull)
                         .collect(Collectors.toList());

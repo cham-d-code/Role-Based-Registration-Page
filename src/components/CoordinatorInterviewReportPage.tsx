@@ -69,8 +69,12 @@ export default function CoordinatorInterviewReportPage({ interviewId, onClose }:
     }
   }
 
-  function markerCountForRow(cand: CandidateReport): number {
-    return Math.max(cand.markerResults?.length ?? 0, cand.markersIncludedCount ?? 0);
+  function markerCountForRow(cand: CandidateReport): string {
+    const submitted = cand.markerResults?.length ?? 0;
+    const inAvg = cand.markersIncludedCount ?? 0;
+    if (submitted === 0) return '0';
+    if (submitted === inAvg) return String(submitted);
+    return `${submitted} (${inAvg} in avg)`;
   }
 
   function formatAvgCell(value: number | undefined | null): string {
@@ -175,7 +179,10 @@ export default function CoordinatorInterviewReportPage({ interviewId, onClose }:
                     <TableHead className="text-center text-[#222222] font-semibold bg-[#e6f7f6]">
                       Avg total <span className="text-[#4db4ac]">/{report.totalMaxMarks}</span>
                     </TableHead>
-                    <TableHead className="text-center text-xs text-[#555555]">Markers</TableHead>
+                    <TableHead className="text-center text-xs text-[#555555] max-w-[100px]">
+                      Markers
+                      <div className="text-[#999] font-normal normal-case">submitted / avg</div>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -222,8 +229,11 @@ export default function CoordinatorInterviewReportPage({ interviewId, onClose }:
                       {detailCandidateId === cand.candidateId && (
                         <TableRow className="bg-[#fafafa]">
                           <TableCell colSpan={7 + report.criteria.length} className="p-4 border-t border-[#e8e8e8]">
-                            <p className="text-xs font-semibold text-[#555] mb-2 uppercase tracking-wide">
+                            <p className="text-xs font-semibold text-[#555] mb-1 uppercase tracking-wide">
                               Marker breakdown
+                            </p>
+                            <p className="text-xs text-[#888] mb-2">
+                              All markers who saved scores are listed. Row label “Not in average” means they left the panel or were removed before the session ended — their scores are visible but not included in the averages above.
                             </p>
                             {(!cand.markerResults || cand.markerResults.length === 0) ? (
                               <p className="text-sm text-[#999]">No per-marker rows for this candidate.</p>
@@ -240,13 +250,19 @@ export default function CoordinatorInterviewReportPage({ interviewId, onClose }:
                                         </TableHead>
                                       ))}
                                       <TableHead className="text-center text-xs">Total</TableHead>
+                                      <TableHead className="text-xs">Avg</TableHead>
                                       <TableHead className="text-xs min-w-[160px]">Comments</TableHead>
                                     </TableRow>
                                   </TableHeader>
                                   <TableBody>
                                     {cand.markerResults.map(m => (
-                                      <TableRow key={m.markerId}>
-                                        <TableCell className="text-sm font-medium">{m.markerName}</TableCell>
+                                      <TableRow key={m.markerId} className={m.includedInAverage === false ? 'bg-amber-50/80' : ''}>
+                                        <TableCell className="text-sm font-medium">
+                                          {m.markerName}
+                                          {m.includedInAverage === false && (
+                                            <span className="ml-2 text-[10px] font-semibold uppercase text-amber-800">Not in average</span>
+                                          )}
+                                        </TableCell>
                                         <TableCell className="text-xs text-[#666]">{m.markerRole}</TableCell>
                                         {report.criteria.map(c => (
                                           <TableCell key={c.id} className="text-center text-sm">
@@ -254,6 +270,9 @@ export default function CoordinatorInterviewReportPage({ interviewId, onClose }:
                                           </TableCell>
                                         ))}
                                         <TableCell className="text-center text-sm font-semibold">{m.total}</TableCell>
+                                        <TableCell className="text-center text-xs">
+                                          {m.includedInAverage === false ? 'No' : 'Yes'}
+                                        </TableCell>
                                         <TableCell className="text-xs text-[#555] max-w-[240px]">
                                           {m.comments || '—'}
                                         </TableCell>

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { downloadInterviewReportExcel } from '../services/api';
+import { useEffect, useMemo, useState } from 'react';
+import { downloadInterviewReportExcel, getInterviewReport, type InterviewReport } from '../services/api';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
@@ -16,21 +16,6 @@ import {
   TrendingUp
 } from 'lucide-react';
 
-interface Candidate {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  cvUrl?: string;
-  marks: {
-    part1: number;
-    part2: number;
-    part3: number;
-    total: number;
-  };
-  shortlisted: boolean;
-}
-
 interface Interview {
   id: string;
   interviewNumber: string;
@@ -38,7 +23,6 @@ interface Interview {
   candidateCount: number;
   averageMarks?: number;
   passedCandidates?: number;
-  candidates?: Candidate[];
 }
 
 interface HodEndedInterviewApprovalPageProps {
@@ -48,10 +32,41 @@ interface HodEndedInterviewApprovalPageProps {
 
 export default function HodEndedInterviewApprovalPage({ interview, onBack }: HodEndedInterviewApprovalPageProps) {
   const [downloading, setDownloading] = useState(false);
-  
-  const candidates = interview.candidates || [];
-  const sortedCandidates = [...candidates].sort((a, b) => b.marks.total - a.marks.total);
-  const shortlistedCandidates = sortedCandidates.filter(c => c.shortlisted);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [report, setReport] = useState<InterviewReport | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const rep = await getInterviewReport(interview.id);
+        if (!cancelled) setReport(rep);
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message || 'Failed to load report.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [interview.id]);
+
+  const sortedCandidates = useMemo(() => {
+    const rows = report?.candidates ?? [];
+    return [...rows].sort((a, b) => (b.averageTotal ?? 0) - (a.averageTotal ?? 0));
+  }, [report]);
+
+  // "Shortlist" preview: top 3 by average total.
+  const shortlistedCandidates = useMemo(() => sortedCandidates.slice(0, 3), [sortedCandidates]);
+  const overallAverage = useMemo(() => {
+    if (!sortedCandidates.length) return null;
+    const avg = sortedCandidates.reduce((sum, c) => sum + (c.averageTotal ?? 0), 0) / sortedCandidates.length;
+    return Math.round(avg * 10) / 10;
+  }, [sortedCandidates]);
 
   return (
     <div className="min-h-screen bg-white">
@@ -135,7 +150,7 @@ export default function HodEndedInterviewApprovalPage({ interview, onBack }: Hod
                 </p>
               </div>
               <p className="text-[#222222]" style={{ fontSize: '20px', fontWeight: 700 }}>
-                {candidates.length}
+                {sortedCandidates.length}
               </p>
             </div>
 
@@ -147,7 +162,7 @@ export default function HodEndedInterviewApprovalPage({ interview, onBack }: Hod
                 </p>
               </div>
               <p className="text-[#222222]" style={{ fontSize: '20px', fontWeight: 700 }}>
-                {interview.averageMarks?.toFixed(1) || 'N/A'}
+                {overallAverage != null ? overallAverage.toFixed(1) : 'N/A'}
               </p>
             </div>
 
@@ -179,6 +194,17 @@ export default function HodEndedInterviewApprovalPage({ interview, onBack }: Hod
           
           <Separator className="mb-4" />
 
+          {loading && (
+            <div className="py-10 text-center text-[#4db4ac]" style={{ fontSize: '14px', fontWeight: 600 }}>
+              Loading report…
+            </div>
+          )}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-lg text-sm">
+              {error}
+            </div>
+          )}
+          {!loading && !error && report && (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -192,52 +218,38 @@ export default function HodEndedInterviewApprovalPage({ interview, onBack }: Hod
                   <TableHead className="text-[#555555]" style={{ fontSize: '13px', fontWeight: 600 }}>
                     Email
                   </TableHead>
-                  <TableHead className="text-[#555555]" style={{ fontSize: '13px', fontWeight: 600 }}>
-                    Phone
-                  </TableHead>
+                  {report.criteria.map(c => (
+                    <TableHead key={c.id} className="text-[#555555] text-center" style={{ fontSize: '13px', fontWeight: 600 }}>
+                      {c.name} <span className="text-[#4db4ac]">/{c.maxMarks}</span>
+                    </TableHead>
+                  ))}
                   <TableHead className="text-[#555555] text-center" style={{ fontSize: '13px', fontWeight: 600 }}>
-                    Part 1
-                  </TableHead>
-                  <TableHead className="text-[#555555] text-center" style={{ fontSize: '13px', fontWeight: 600 }}>
-                    Part 2
-                  </TableHead>
-                  <TableHead className="text-[#555555] text-center" style={{ fontSize: '13px', fontWeight: 600 }}>
-                    Part 3
-                  </TableHead>
-                  <TableHead className="text-[#555555] text-center" style={{ fontSize: '13px', fontWeight: 600 }}>
-                    Total
+                    Avg total
                   </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {shortlistedCandidates.map((candidate, index) => (
-                  <TableRow key={candidate.id} className="hover:bg-[#f9f9f9]">
+                  <TableRow key={candidate.candidateId} className="hover:bg-[#f9f9f9]">
                     <TableCell>
                       <Badge className="bg-[#4db4ac] text-white">
                         #{index + 1}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
-                      {candidate.name}
+                      {candidate.candidateName}
                     </TableCell>
                     <TableCell className="text-[#555555]" style={{ fontSize: '13px' }}>
-                      {candidate.email}
+                      {candidate.candidateEmail}
                     </TableCell>
-                    <TableCell className="text-[#555555]" style={{ fontSize: '13px' }}>
-                      {candidate.phone}
-                    </TableCell>
-                    <TableCell className="text-center text-[#555555]" style={{ fontSize: '14px' }}>
-                      {candidate.marks.part1}
-                    </TableCell>
-                    <TableCell className="text-center text-[#555555]" style={{ fontSize: '14px' }}>
-                      {candidate.marks.part2}
-                    </TableCell>
-                    <TableCell className="text-center text-[#555555]" style={{ fontSize: '14px' }}>
-                      {candidate.marks.part3}
-                    </TableCell>
+                    {report.criteria.map(c => (
+                      <TableCell key={c.id} className="text-center text-[#555555]" style={{ fontSize: '14px', fontWeight: 600 }}>
+                        {candidate.averageMarksByCriterion?.[c.id] ?? '—'}
+                      </TableCell>
+                    ))}
                     <TableCell className="text-center">
                       <Badge className="bg-green-100 text-green-700 border-green-300 border" style={{ fontSize: '13px', fontWeight: 700 }}>
-                        {candidate.marks.total}
+                        {candidate.averageTotal}
                       </Badge>
                     </TableCell>
                   </TableRow>
@@ -245,6 +257,7 @@ export default function HodEndedInterviewApprovalPage({ interview, onBack }: Hod
               </TableBody>
             </Table>
           </div>
+          )}
         </Card>
 
         {/* All Candidates Performance */}
@@ -252,7 +265,7 @@ export default function HodEndedInterviewApprovalPage({ interview, onBack }: Hod
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp className="h-5 w-5 text-[#4db4ac]" />
             <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '18px' }}>
-              Complete Candidate Ranking ({candidates.length})
+              Complete Candidate Ranking ({sortedCandidates.length})
             </h3>
           </div>
           
@@ -271,20 +284,13 @@ export default function HodEndedInterviewApprovalPage({ interview, onBack }: Hod
                   <TableHead className="text-[#555555]" style={{ fontSize: '13px', fontWeight: 600 }}>
                     Email
                   </TableHead>
-                  <TableHead className="text-[#555555]" style={{ fontSize: '13px', fontWeight: 600 }}>
-                    Phone
-                  </TableHead>
+                  {report?.criteria?.map(c => (
+                    <TableHead key={c.id} className="text-[#555555] text-center" style={{ fontSize: '13px', fontWeight: 600 }}>
+                      {c.name} <span className="text-[#4db4ac]">/{c.maxMarks}</span>
+                    </TableHead>
+                  ))}
                   <TableHead className="text-[#555555] text-center" style={{ fontSize: '13px', fontWeight: 600 }}>
-                    Part 1
-                  </TableHead>
-                  <TableHead className="text-[#555555] text-center" style={{ fontSize: '13px', fontWeight: 600 }}>
-                    Part 2
-                  </TableHead>
-                  <TableHead className="text-[#555555] text-center" style={{ fontSize: '13px', fontWeight: 600 }}>
-                    Part 3
-                  </TableHead>
-                  <TableHead className="text-[#555555] text-center" style={{ fontSize: '13px', fontWeight: 600 }}>
-                    Total
+                    Avg total
                   </TableHead>
                   <TableHead className="text-[#555555] text-center" style={{ fontSize: '13px', fontWeight: 600 }}>
                     Status
@@ -293,41 +299,34 @@ export default function HodEndedInterviewApprovalPage({ interview, onBack }: Hod
               </TableHeader>
               <TableBody>
                 {sortedCandidates.map((candidate, index) => (
-                  <TableRow key={candidate.id} className={`hover:bg-[#f9f9f9] ${candidate.shortlisted ? 'bg-green-50/50' : ''}`}>
+                  <TableRow key={candidate.candidateId} className={`hover:bg-[#f9f9f9] ${index < 3 ? 'bg-green-50/50' : ''}`}>
                     <TableCell>
                       <div className="text-[#555555]" style={{ fontSize: '14px', fontWeight: 600 }}>
                         #{index + 1}
                       </div>
                     </TableCell>
                     <TableCell className="text-[#222222]" style={{ fontSize: '14px', fontWeight: 600 }}>
-                      {candidate.name}
+                      {candidate.candidateName}
                     </TableCell>
                     <TableCell className="text-[#555555]" style={{ fontSize: '13px' }}>
-                      {candidate.email}
+                      {candidate.candidateEmail}
                     </TableCell>
-                    <TableCell className="text-[#555555]" style={{ fontSize: '13px' }}>
-                      {candidate.phone}
-                    </TableCell>
-                    <TableCell className="text-center text-[#555555]" style={{ fontSize: '14px' }}>
-                      {candidate.marks.part1}
-                    </TableCell>
-                    <TableCell className="text-center text-[#555555]" style={{ fontSize: '14px' }}>
-                      {candidate.marks.part2}
-                    </TableCell>
-                    <TableCell className="text-center text-[#555555]" style={{ fontSize: '14px' }}>
-                      {candidate.marks.part3}
-                    </TableCell>
+                    {report?.criteria?.map(c => (
+                      <TableCell key={c.id} className="text-center text-[#555555]" style={{ fontSize: '14px', fontWeight: 600 }}>
+                        {candidate.averageMarksByCriterion?.[c.id] ?? '—'}
+                      </TableCell>
+                    ))}
                     <TableCell className="text-center text-[#555555]" style={{ fontSize: '14px', fontWeight: 600 }}>
-                      {candidate.marks.total}
+                      {candidate.averageTotal}
                     </TableCell>
                     <TableCell className="text-center">
-                      {candidate.shortlisted ? (
+                      {index < 3 ? (
                         <Badge className="bg-green-100 text-green-700 border-green-300 border">
-                          Shortlisted
+                          Recommended
                         </Badge>
                       ) : (
                         <Badge className="bg-gray-100 text-gray-600 border-gray-300 border">
-                          Not Selected
+                          Not recommended
                         </Badge>
                       )}
                     </TableCell>

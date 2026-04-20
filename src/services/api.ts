@@ -895,6 +895,8 @@ export interface MarkerResult {
     marksByCriterion: Record<string, number>;
     total: number;
     comments?: string;
+    /** False if marker left or was removed — still listed, but not counted in averages */
+    includedInAverage?: boolean;
 }
 
 export interface CandidateReport {

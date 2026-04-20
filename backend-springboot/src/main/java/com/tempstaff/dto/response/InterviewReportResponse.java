@@ -54,5 +54,12 @@ public class InterviewReportResponse {
         private Map<String, Integer> marksByCriterion;
         private int total;
         private String comments;
+
+        /**
+         * False if this marker left the panel or was removed — scores still shown in the breakdown
+         * but excluded from {@link CandidateReport#getAverageTotal()} / {@link CandidateReport#getAverageMarksByCriterion()}.
+         */
+        @Builder.Default
+        private boolean includedInAverage = true;
     }
 }
