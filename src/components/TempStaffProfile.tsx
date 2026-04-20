@@ -7,7 +7,6 @@ import {
   Award,
   BellRing, 
   User as UserIcon, 
-  Settings, 
   LogOut,
   Mail,
   Phone,
@@ -698,22 +697,13 @@ export default function TempStaffProfile({ onLogout }: TempStaffProfileProps = {
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-2 text-white hover:bg-[#3c9a93] px-3 py-2 rounded-lg transition-colors">
                 <Avatar className="h-8 w-8 border-2 border-white">
-                  <AvatarImage src="" alt="User" />
-                  <AvatarFallback className="bg-white text-[#4db4ac]">SP</AvatarFallback>
+                  <AvatarImage src={profileData.avatarUrl || undefined} alt={profileData.name} />
+                  <AvatarFallback className="bg-white text-[#4db4ac]">{profileData.initials}</AvatarFallback>
                 </Avatar>
                 <ChevronDown className="h-4 w-4" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48 bg-white">
-              <DropdownMenuItem className="cursor-pointer">
-                <UserIcon className="h-4 w-4 mr-2" />
-                Profile
-              </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer">
-                <Settings className="h-4 w-4 mr-2" />
-                Settings
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="cursor-pointer text-red-600 focus:text-red-600"
                 onClick={() => setDeleteAccountDialogOpen(true)}

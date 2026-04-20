@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { LayoutDashboard, Users, ClipboardCheck, FileText, BellRing, UserIcon, ChevronDown, Settings, LogOut, Mail, Phone, Calendar, CalendarCheck, Eye, Clock, Archive, Edit, DollarSign, CheckCircle, XCircle, BarChart2, Loader2, Plus, UserCheck, Trash2 } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardCheck, FileText, BellRing, UserIcon, ChevronDown, LogOut, Mail, Phone, Calendar, CalendarCheck, Eye, Clock, Archive, Edit, DollarSign, CheckCircle, XCircle, BarChart2, Loader2, Plus, UserCheck, Trash2 } from 'lucide-react';
 import { approveLeave, createResearchOpportunity, deleteResearchOpportunity, getHodDashboardStats, getInterviewReport, getInterviews, getJobDescriptionForStaff, getMyMentees, getMyLeaveRequests, getMyNotifications, getMyResearchOpportunities, getPendingLeaveRequests, getUnreadNotificationCount, markAllNotificationsRead, markNotificationRead, rejectLeave, HodDashboardStats, InterviewReport, InterviewData, ResearchOpportunityDto, updateMyProfile, updateMySpecialization, updateResearchOpportunity, UserProfile, type LeaveRequestDto, type UserNotificationDto } from '../services/api';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Button } from './ui/button';
@@ -658,22 +658,13 @@ export default function HodProfile({ onLogout }: HodProfileProps) {
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-2 text-white hover:bg-[#3c9a93] px-3 py-2 rounded-lg transition-colors">
               <Avatar className="h-8 w-8 border-2 border-white">
-                <AvatarImage src="" alt="User" />
-                <AvatarFallback className="bg-white text-[#4db4ac]">DW</AvatarFallback>
+                <AvatarImage src={profileData.avatarUrl || undefined} alt={profileData.name} />
+                <AvatarFallback className="bg-white text-[#4db4ac]">{profileData.initials}</AvatarFallback>
               </Avatar>
               <ChevronDown className="h-4 w-4" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
-            <DropdownMenuItem>
-              <UserIcon className="mr-2 h-4 w-4" />
-              Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Settings className="mr-2 h-4 w-4" />
-              Settings
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
             <DropdownMenuItem
               className="text-red-600 focus:text-red-600"
               onClick={() => setDeleteAccountDialogOpen(true)}

@@ -6,7 +6,6 @@ import {
   FlaskConical,
   BellRing,
   User as UserIcon,
-  Settings,
   LogOut,
   Mail,
   Phone,
@@ -550,21 +549,14 @@ export default function MentorProfile({ onLogout }: MentorProfileProps = {}) {
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-2 cursor-pointer hover:opacity-90 transition-opacity">
             <Avatar className="h-10 w-10 border-2 border-white">
-              <AvatarImage src="" alt="Dr. T. Mahanama" />
-              <AvatarFallback className="bg-white text-[#4db4ac]" style={{ fontWeight: 600 }}>TM</AvatarFallback>
+              <AvatarImage src={profileData.avatarUrl || undefined} alt={profileData.name} />
+              <AvatarFallback className="bg-white text-[#4db4ac]" style={{ fontWeight: 600 }}>
+                {profileData.initials}
+              </AvatarFallback>
             </Avatar>
             <ChevronDown className="h-5 w-5" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48 bg-white shadow-lg rounded-lg border-0">
-            <DropdownMenuItem className="cursor-pointer hover:bg-[#f9f9f9] py-2">
-              <UserIcon className="mr-2 h-4 w-4 text-[#4db4ac]" />
-              <span className="text-[#222222]">Profile</span>
-            </DropdownMenuItem>
-            <DropdownMenuItem className="cursor-pointer hover:bg-[#f9f9f9] py-2">
-              <Settings className="mr-2 h-4 w-4 text-[#4db4ac]" />
-              <span className="text-[#222222]">Settings</span>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
             <DropdownMenuItem
               className="cursor-pointer hover:bg-[#f9f9f9] py-2 text-red-600 focus:text-red-600"
               onClick={() => setDeleteAccountDialogOpen(true)}
