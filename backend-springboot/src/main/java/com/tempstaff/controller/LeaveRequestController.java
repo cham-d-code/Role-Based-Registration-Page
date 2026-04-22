@@ -140,6 +140,15 @@ public class LeaveRequestController {
                 .toList();
     }
 
+    @GetMapping("/history")
+    @PreAuthorize("hasAnyRole('HOD', 'COORDINATOR')")
+    public List<LeaveRequestResponse> history() {
+        return leaveRequestRepository.findAllByOrderByCreatedAtDesc()
+                .stream()
+                .map(this::toResponse)
+                .toList();
+    }
+
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasAnyRole('HOD', 'COORDINATOR')")
     public LeaveRequestResponse approve(

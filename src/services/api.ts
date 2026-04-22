@@ -689,6 +689,10 @@ export async function getPendingLeaveRequests(): Promise<LeaveRequestDto[]> {
     return fetchWithAuth(`${API_BASE_URL}/leaves/pending`);
 }
 
+export async function getAllLeaveRequestsForManagement(): Promise<LeaveRequestDto[]> {
+    return fetchWithAuth(`${API_BASE_URL}/leaves/history`);
+}
+
 export async function approveLeave(leaveRequestId: string): Promise<LeaveRequestDto> {
     return fetchWithAuth(`${API_BASE_URL}/leaves/${leaveRequestId}/approve`, { method: 'POST' });
 }

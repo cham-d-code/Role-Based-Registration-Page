@@ -26,5 +26,7 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, UUID
     );
 
     boolean existsBySubstitute_IdAndStartDateAndStatusIn(UUID substituteId, LocalDate startDate, Collection<RequestStatus> statuses);
+
+    List<LeaveRequest> findAllByOrderByCreatedAtDesc();
 }
 

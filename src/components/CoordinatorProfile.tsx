@@ -72,6 +72,7 @@ import {
   getMyNotifications,
   getMyMentees,
   getMyLeaveRequests,
+  getAllLeaveRequestsForManagement,
   getPendingLeaveRequests,
   getMyResearchOpportunities,
   getUnreadNotificationCount,
@@ -390,17 +391,16 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
   const [loadingLeaveApprovals, setLoadingLeaveApprovals] = useState(false);
   const [pendingLeaveCount, setPendingLeaveCount] = useState(0);
 
-  // Fetch pending leave requests for approvals
+  // Fetch leave request history for approvals
   useEffect(() => {
     if (activeMenu !== 'leave') return;
     setLoadingLeaveApprovals(true);
-    getPendingLeaveRequests()
+    getAllLeaveRequestsForManagement()
       .then((items) => {
         setLeaveRequests(items);
-        setPendingLeaveCount(items.length);
       })
       .catch((e) => {
-        console.error('Failed to load pending leave requests', e);
+        console.error('Failed to load leave history', e);
         setLeaveRequests([]);
       })
       .finally(() => setLoadingLeaveApprovals(false));
@@ -564,8 +564,11 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
     try {
       setLoadingLeaveApprovals(true);
       await approveLeave(id);
-      const pending = await getPendingLeaveRequests();
-      setLeaveRequests(pending);
+      const [history, pending] = await Promise.all([
+        getAllLeaveRequestsForManagement(),
+        getPendingLeaveRequests(),
+      ]);
+      setLeaveRequests(history);
       setPendingLeaveCount(pending.length);
       alert('Leave request approved successfully!');
     } catch (e: any) {
@@ -580,8 +583,11 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
     try {
       setLoadingLeaveApprovals(true);
       await rejectLeave(id);
-      const pending = await getPendingLeaveRequests();
-      setLeaveRequests(pending);
+      const [history, pending] = await Promise.all([
+        getAllLeaveRequestsForManagement(),
+        getPendingLeaveRequests(),
+      ]);
+      setLeaveRequests(history);
       setPendingLeaveCount(pending.length);
       alert('Leave request rejected.');
     } catch (e: any) {
@@ -2381,9 +2387,11 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
             <Card className="bg-white rounded-xl shadow-[0px_4px_12px_rgba(0,0,0,0.1)] border-0 p-6">
               <div className="flex items-center gap-2 mb-4">
                 <h3 className="text-[#222222]" style={{ fontWeight: 700, fontSize: '20px' }}>
-                  Leave Request Approvals
+                  Leave Requests
                 </h3>
-
+                <Badge className="bg-[#4db4ac] text-white ml-auto" style={{ fontSize: '12px' }}>
+                  {leaveRequests.length} total
+                </Badge>
               </div>
               <Separator className="mb-4" />
 
@@ -2461,6 +2469,31 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
                             ? new Date(request.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                             : '—'}
                         </p>
+
+                        {request.status !== 'pending' && (
+                          <div className="mt-3 pt-3 border-t border-[#e0e0e0] space-y-1">
+                            {request.approvedByName && (
+                              <p className="text-[#555555]" style={{ fontSize: '12px' }}>
+                                <span style={{ fontWeight: 600 }}>
+                                  {request.status === 'approved' ? 'Approved' : 'Rejected'} by:
+                                </span>{' '}
+                                {request.approvedByName}
+                              </p>
+                            )}
+                            {request.approvedAt && (
+                              <p className="text-[#555555]" style={{ fontSize: '12px' }}>
+                                <span style={{ fontWeight: 600 }}>Decision date:</span>{' '}
+                                {new Date(request.approvedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              </p>
+                            )}
+                            {request.status === 'rejected' && request.rejectionReason && (
+                              <p className="text-red-600" style={{ fontSize: '12px' }}>
+                                <span style={{ fontWeight: 600 }}>Rejection reason:</span>{' '}
+                                {request.rejectionReason}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {request.status === 'pending' && (
@@ -2488,7 +2521,7 @@ export default function CoordinatorProfile({ onLogout }: CoordinatorProfileProps
 
                 {leaveRequests.length === 0 && (
                   <div className="text-center py-12 text-[#999999]">
-                    <p style={{ fontSize: '14px' }}>No pending leave requests</p>
+                    <p style={{ fontSize: '14px' }}>No leave requests found</p>
                   </div>
                 )}
               </div>
